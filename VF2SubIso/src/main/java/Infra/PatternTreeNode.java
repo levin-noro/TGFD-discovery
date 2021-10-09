@@ -15,9 +15,9 @@ public class PatternTreeNode {
     private PatternTreeNode centerVertexParent = null;
     private final String edgeString;
     private boolean isPruned = false;
-    private ArrayList<ArrayList<ConstantLiteral>> zeroEntityDependencies = new ArrayList<>();
-    private ArrayList<ArrayList<ConstantLiteral>> minimalDependencies = new ArrayList<>();
-    private HashMap<ArrayList<ConstantLiteral>, ArrayList<TgfdDiscovery.Pair>> lowSupportGeneralTgfdList = new HashMap<>();
+    private ArrayList<AttributeDependency> zeroEntityDependencies = new ArrayList<>();
+    private ArrayList<AttributeDependency> minimalDependencies = new ArrayList<>();
+    private HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> lowSupportGeneralTgfdList = new HashMap<>();
     private ArrayList<ArrayList<DataVertex>> matchesOfCenterVertices = null;
 
     public PatternTreeNode(VF2PatternGraph pattern, PatternTreeNode parentNode, String edgeString) {
@@ -69,46 +69,46 @@ public class PatternTreeNode {
                 '}';
     }
 
-    public void addZeroEntityDependency(ArrayList<ConstantLiteral> dependency) {
+    public void addZeroEntityDependency(AttributeDependency dependency) {
         this.zeroEntityDependencies.add(dependency);
     }
 
-    public ArrayList<ArrayList<ConstantLiteral>> getZeroEntityDependencies() {
+    public ArrayList<AttributeDependency> getZeroEntityDependencies() {
         return this.zeroEntityDependencies;
     }
 
-    public ArrayList<ArrayList<ConstantLiteral>> getAllZeroEntityDependenciesOnThisPath() {
+    public ArrayList<AttributeDependency> getAllZeroEntityDependenciesOnThisPath() {
         PatternTreeNode currPatternTreeNode = this;
-        ArrayList<ArrayList<ConstantLiteral>> zeroEntityPaths = new ArrayList<>(currPatternTreeNode.getZeroEntityDependencies());
+        ArrayList<AttributeDependency> zeroEntityPaths = new ArrayList<>(currPatternTreeNode.getZeroEntityDependencies());
         for (PatternTreeNode parentNode: subgraphParents) {
             zeroEntityPaths.addAll(parentNode.getAllZeroEntityDependenciesOnThisPath());
         }
         return zeroEntityPaths;
     }
 
-    public void addMinimalDependency(ArrayList<ConstantLiteral> dependency) {
+    public void addMinimalDependency(AttributeDependency dependency) {
         this.minimalDependencies.add(dependency);
     }
 
-    public ArrayList<ArrayList<ConstantLiteral>> getMinimalDependencies() {
+    public ArrayList<AttributeDependency> getMinimalDependencies() {
         return this.minimalDependencies;
     }
 
-    public ArrayList<ArrayList<ConstantLiteral>> getAllMinimalDependenciesOnThisPath() {
+    public ArrayList<AttributeDependency> getAllMinimalDependenciesOnThisPath() {
         PatternTreeNode currPatternTreeNode = this;
-        ArrayList<ArrayList<ConstantLiteral>> minimalPaths = new ArrayList<>(currPatternTreeNode.getMinimalDependencies());
+        ArrayList<AttributeDependency> minimalPaths = new ArrayList<>(currPatternTreeNode.getMinimalDependencies());
         for (PatternTreeNode parentNode: subgraphParents) {
             minimalPaths.addAll(parentNode.getAllMinimalDependenciesOnThisPath());
         }
         return minimalPaths;
     }
 
-    public void addToLowSupportGeneralTgfdList(ArrayList<ConstantLiteral> dependencyPath, TgfdDiscovery.Pair deltaPair) {
+    public void addToLowSupportGeneralTgfdList(AttributeDependency dependencyPath, TgfdDiscovery.Pair deltaPair) {
         this.lowSupportGeneralTgfdList.putIfAbsent(dependencyPath, new ArrayList<>());
         this.lowSupportGeneralTgfdList.get(dependencyPath).add(deltaPair);
     }
 
-    public HashMap<ArrayList<ConstantLiteral>, ArrayList<TgfdDiscovery.Pair>> getLowSupportGeneralTgfdList() {
+    public HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> getLowSupportGeneralTgfdList() {
         return this.lowSupportGeneralTgfdList;
     }
 
@@ -116,10 +116,10 @@ public class PatternTreeNode {
         return this.parentNode;
     }
 
-    public HashMap<ArrayList<ConstantLiteral>, ArrayList<TgfdDiscovery.Pair>> getAllLowSupportGeneralTgfds() {
-        HashMap<ArrayList<ConstantLiteral>, ArrayList<TgfdDiscovery.Pair>> allTGFDs = new HashMap<>(this.getLowSupportGeneralTgfdList());
+    public HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> getAllLowSupportGeneralTgfds() {
+        HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> allTGFDs = new HashMap<>(this.getLowSupportGeneralTgfdList());
         for (PatternTreeNode parentNode: subgraphParents) {
-            for (Map.Entry<ArrayList<ConstantLiteral>, ArrayList<TgfdDiscovery.Pair>> tgfdEntry : parentNode.getAllLowSupportGeneralTgfds().entrySet()) {
+            for (Map.Entry<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> tgfdEntry : parentNode.getAllLowSupportGeneralTgfds().entrySet()) {
                 allTGFDs.putIfAbsent(tgfdEntry.getKey(), new ArrayList<>());
                 allTGFDs.get(tgfdEntry.getKey()).addAll(tgfdEntry.getValue());
             }

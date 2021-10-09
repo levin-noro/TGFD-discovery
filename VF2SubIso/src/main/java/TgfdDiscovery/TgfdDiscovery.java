@@ -750,10 +750,10 @@ public class TgfdDiscovery {
 		System.out.println();
 	}
 
-	public static Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> findEntities(List<ConstantLiteral> attributes, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
-		String yVertexType = attributes.get(attributes.size()-1).getVertexType();
-		String yAttrName = attributes.get(attributes.size()-1).getAttrName();
-		List<ConstantLiteral> xAttributes = attributes.subList(0,attributes.size()-1);
+	public static Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> findEntities(AttributeDependency attributes, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+		String yVertexType = attributes.getRhs().getVertexType();
+		String yAttrName = attributes.getRhs().getAttrName();
+		Set<ConstantLiteral> xAttributes = attributes.getLhs();
 		Map<Set<ConstantLiteral>, Map<ConstantLiteral, List<Integer>>> entitiesWithRHSvalues = new HashMap<>();
 		int t = 2015;
 		for (ArrayList<HashSet<ConstantLiteral>> matchesInOneTimeStamp : matchesPerTimestamps) {
@@ -832,12 +832,12 @@ public class TgfdDiscovery {
 		return literals;
 	}
 
-	public boolean isPathVisited(ArrayList<ConstantLiteral> path, ArrayList<ArrayList<ConstantLiteral>> visitedPaths) {
+	public boolean isPathVisited(AttributeDependency path, ArrayList<AttributeDependency> visitedPaths) {
 		long visitedPathCheckingTime = System.currentTimeMillis();
-		for (ArrayList<ConstantLiteral> visitedPath : visitedPaths) {
+		for (AttributeDependency visitedPath : visitedPaths) {
 			if (visitedPath.size() == path.size()
-					&& visitedPath.subList(0,visitedPath.size()-1).containsAll(path.subList(0, path.size()-1))
-					&& visitedPath.get(visitedPath.size()-1).equals(path.get(path.size()-1))) {
+					&& visitedPath.getLhs().containsAll(path.getLhs())
+					&& visitedPath.getRhs().equals(path.getRhs())) {
 				System.out.println("This literal path was already visited.");
 				return true;
 			}
@@ -848,11 +848,11 @@ public class TgfdDiscovery {
 		return false;
 	}
 
-	public boolean isSupersetPath(ArrayList<ConstantLiteral> path, ArrayList<ArrayList<ConstantLiteral>> prunedPaths) {
+	public boolean isSupersetPath(AttributeDependency path, ArrayList<AttributeDependency> prunedPaths) {
 		long supersetPathCheckingTime = System.currentTimeMillis();
 		boolean isPruned = false;
-		for (ArrayList<ConstantLiteral> prunedPath : prunedPaths) {
-			if (path.get(path.size()-1).equals(prunedPath.get(prunedPath.size()-1)) && path.subList(0, path.size()-1).containsAll(prunedPath.subList(0,prunedPath.size()-1))) {
+		for (AttributeDependency prunedPath : prunedPaths) {
+			if (path.getRhs().equals(prunedPath.getRhs()) && path.getLhs().containsAll(prunedPath.getLhs())) {
 				System.out.println("Candidate path " + path + " is a superset of pruned path " + prunedPath);
 				isPruned = true;
 			}
@@ -863,13 +863,15 @@ public class TgfdDiscovery {
 		return isPruned;
 	}
 
-	public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, ArrayList<ConstantLiteral> literalPath, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
 		// Add dependency attributes to pattern
 		// TO-DO: Fix - when multiple vertices in a pattern have the same type, attribute values get overwritten
 		VF2PatternGraph patternForDependency = patternNode.getPattern().copy();
-		Set<ConstantLiteral> attributesSetForDependency = new HashSet<>(literalPath);
+		Set<ConstantLiteral> attributesSetForDependency = new HashSet<>();
+		attributesSetForDependency.addAll(literalPath.getLhs());
+		attributesSetForDependency.add(literalPath.getRhs());
 		for (Vertex v : patternForDependency.getPattern().vertexSet()) {
 			String vType = new ArrayList<>(v.getTypes()).get(0);
 			for (ConstantLiteral attribute : attributesSetForDependency) {
@@ -880,7 +882,7 @@ public class TgfdDiscovery {
 		}
 
 		System.out.println("Pattern: " + patternForDependency);
-		System.out.println("Dependency: " + "\n\tY=" + literalPath.get(literalPath.size()-1) + ",\n\tX=" + literalPath.subList(0,literalPath.size()-1) + "\n\t}");
+		System.out.println("Dependency: " + "\n\tY=" + literalPath.getRhs() + ",\n\tX={" + literalPath.getLhs() + "\n\t}");
 
 		System.out.println("Performing Entity Discovery");
 
@@ -905,7 +907,7 @@ public class TgfdDiscovery {
 		ArrayList<Pair> constantXdeltas = new ArrayList<>();
 		ArrayList<TreeSet<Pair>> satisfyingAttrValues = new ArrayList<>();
 		long discoverConstantTGFDsTime = System.currentTimeMillis();
-		ArrayList<TGFD> constantTGFDs = discoverConstantTGFDs(patternNode, literalPath.get(literalPath.size()-1), entities, constantXdeltas, satisfyingAttrValues);
+		ArrayList<TGFD> constantTGFDs = discoverConstantTGFDs(patternNode, literalPath.getRhs(), entities, constantXdeltas, satisfyingAttrValues);
 		discoverConstantTGFDsTime = System.currentTimeMillis() - discoverConstantTGFDsTime;
 		printWithTime("discoverConstantTGFDsTime", discoverConstantTGFDsTime);
 		totalDiscoverConstantTGFDsTime += discoverConstantTGFDsTime;
@@ -933,7 +935,7 @@ public class TgfdDiscovery {
 		return tgfds;
 	}
 
-	private ArrayList<TGFD> discoverGeneralTGFD(PatternTreeNode patternTreeNode, double patternSupport, ArrayList<ConstantLiteral> literalPath, int entitiesSize, ArrayList<Pair> constantXdeltas, ArrayList<TreeSet<Pair>> satisfyingAttrValues) {
+	private ArrayList<TGFD> discoverGeneralTGFD(PatternTreeNode patternTreeNode, double patternSupport, AttributeDependency literalPath, int entitiesSize, ArrayList<Pair> constantXdeltas, ArrayList<TreeSet<Pair>> satisfyingAttrValues) {
 
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
@@ -1029,11 +1031,11 @@ public class TgfdDiscovery {
 			Delta delta = new Delta(Period.ofDays(generalMin * 183), Period.ofDays(generalMax * 183 + 1), Duration.ofDays(183));
 
 			Dependency generalDependency = new Dependency();
-			String yVertexType = literalPath.get(literalPath.size()-1).getVertexType();
-			String yAttrName = literalPath.get(literalPath.size()-1).getAttrName();
+			String yVertexType = literalPath.getRhs().getVertexType();
+			String yAttrName = literalPath.getRhs().getAttrName();
 			VariableLiteral y = new VariableLiteral(yVertexType, yAttrName, yVertexType, yAttrName);
 			generalDependency.addLiteralToY(y);
-			for (ConstantLiteral x : literalPath.subList(0, literalPath.size()-1)) {
+			for (ConstantLiteral x : literalPath.getLhs()) {
 				String xVertexType = x.getVertexType();
 				String xAttrName = x.getAttrName();
 				VariableLiteral varX = new VariableLiteral(xVertexType, xAttrName, xVertexType, xAttrName);
@@ -1048,12 +1050,12 @@ public class TgfdDiscovery {
 		return tgfds;
 	}
 
-	private boolean isSupersetPath(ArrayList<ConstantLiteral> literalPath, TgfdDiscovery.Pair candidateDelta, HashMap<ArrayList<ConstantLiteral>, ArrayList<TgfdDiscovery.Pair>> lowSupportGeneralTgfdList) {
-		for (Map.Entry<ArrayList<ConstantLiteral>, ArrayList<Pair>> lowSupportGeneralTgfdEntry: lowSupportGeneralTgfdList.entrySet()) {
-			ArrayList<ConstantLiteral> lowSupportGeneralTgfdDependencyPath = lowSupportGeneralTgfdEntry.getKey();
+	private boolean isSupersetPath(AttributeDependency literalPath, Pair candidateDelta, HashMap<AttributeDependency, ArrayList<Pair>> lowSupportGeneralTgfdList) {
+		for (Map.Entry<AttributeDependency, ArrayList<Pair>> lowSupportGeneralTgfdEntry: lowSupportGeneralTgfdList.entrySet()) {
+			AttributeDependency lowSupportGeneralTgfdDependencyPath = lowSupportGeneralTgfdEntry.getKey();
 			ArrayList<Pair> lowSupportGeneralTgfdDeltaPairList = lowSupportGeneralTgfdEntry.getValue();
 			for (Pair lowSupportGeneralTgfdDeltaPair : lowSupportGeneralTgfdDeltaPairList) {
-				if (literalPath.get(literalPath.size() - 1).equals(lowSupportGeneralTgfdDependencyPath.get(lowSupportGeneralTgfdDependencyPath.size() - 1)) && literalPath.subList(0, literalPath.size() - 1).containsAll(lowSupportGeneralTgfdDependencyPath.subList(0, lowSupportGeneralTgfdDependencyPath.size() - 1))) {
+				if (literalPath.getRhs().equals(lowSupportGeneralTgfdDependencyPath.getRhs()) && literalPath.getLhs().containsAll(lowSupportGeneralTgfdDependencyPath.getLhs())) {
 					System.out.println("Candidate path " + literalPath + " is a superset of pruned path " + lowSupportGeneralTgfdDependencyPath);
 					if (candidateDelta.min() >= lowSupportGeneralTgfdDeltaPair.min() &&  candidateDelta.max() <= lowSupportGeneralTgfdDeltaPair.max()) {
 						System.out.println("The candidate general dependency " + literalPath
@@ -1076,7 +1078,7 @@ public class TgfdDiscovery {
 		for (Entry<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> entityEntry : entities.entrySet()) {
 			VF2PatternGraph newPattern = patternNode.getPattern().copy();
 			Dependency newDependency = new Dependency();
-			ArrayList<ConstantLiteral> constantPath = new ArrayList<>();
+			AttributeDependency constantPath = new AttributeDependency();
 			for (Vertex v : newPattern.getPattern().vertexSet()) {
 				String vType = new ArrayList<>(v.getTypes()).get(0);
 				if (vType.equalsIgnoreCase(yVertexType)) { // TO-DO: What if our pattern has duplicate vertex types?
@@ -1091,11 +1093,11 @@ public class TgfdDiscovery {
 						v.addAttribute(new Attribute(xLiteral.getAttrName(), xLiteral.getAttrValue()));
 						ConstantLiteral newXLiteral = new ConstantLiteral(vType, xLiteral.getAttrName(), xLiteral.getAttrValue());
 						newDependency.addLiteralToX(newXLiteral);
-						constantPath.add(newXLiteral);
+						constantPath.addToLhs(newXLiteral);
 					}
 				}
 			}
-			constantPath.add(new ConstantLiteral(yVertexType, yAttrName, null));
+			constantPath.setRhs(new ConstantLiteral(yVertexType, yAttrName, null));
 
 			System.out.println("Performing Constant TGFD discovery");
 			System.out.println("Pattern: " + newPattern);
@@ -1317,7 +1319,7 @@ public class TgfdDiscovery {
 					break;
 				}
 				literalTree.addLevel();
-				ArrayList<ArrayList<ConstantLiteral>> visitedPaths = new ArrayList<>(); //TO-DO: Can this be implemented as HashSet to improve performance?
+				ArrayList<AttributeDependency> visitedPaths = new ArrayList<>(); //TO-DO: Can this be implemented as HashSet to improve performance?
 				ArrayList<TGFD> currentLevelTGFDs = new ArrayList<>();
 				for (LiteralTreeNode previousLevelLiteral : literalTreePreviousLevel) {
 					System.out.println("Creating literal tree node " + literalTree.getLevel(j).size() + "/" + (literalTreePreviousLevel.size() * (literalTreePreviousLevel.size()-1)));
@@ -1331,9 +1333,7 @@ public class TgfdDiscovery {
 						}
 
 						// Check if path to candidate leaf node is unique
-						ArrayList<ConstantLiteral> newPath = new ArrayList<>();
-						newPath.add(literal);
-						newPath.addAll(previousLevelLiteral.getPathToRoot());
+						AttributeDependency newPath = new AttributeDependency(previousLevelLiteral.getPathToRoot(),literal);
 						System.out.println("New candidate literal path: " + newPath);
 						if (isPathVisited(newPath, visitedPaths)) { // TO-DO: Is this relevant anymore?
 							System.out.println("Skip. Duplicate literal path.");
