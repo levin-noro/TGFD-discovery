@@ -896,7 +896,7 @@ public class TgfdDiscovery {
 			System.out.println("Mark as Pruned. No entities found during entity discovery.");
 			if (!this.noSupportPruning) {
 				literalTreeNode.setIsPruned();
-				patternNode.addZeroEntityDependency(literalPath);
+				patternNode.addLowSupportDependency(literalPath);
 			}
 			return tgfds;
 		}
@@ -991,9 +991,9 @@ public class TgfdDiscovery {
 		System.out.println("Evaluating candidate deltas for general TGFD...");
 		for (Entry<Pair, ArrayList<TreeSet<Pair>>> intersection : sortedIntersections) {
 			Pair candidateDelta = intersection.getKey();
-			if (!this.noSupportPruning && isSupersetPath(literalPath, candidateDelta, patternTreeNode.getAllLowSupportGeneralTgfds())) {
-				continue;
-			}
+//			if (!this.noSupportPruning && isSupersetPath(literalPath, candidateDelta, patternTreeNode.getAllLowSupportGeneralTgfds())) {
+//				continue;
+//			}
 			int generalMin = candidateDelta.min();
 			int generalMax = candidateDelta.max();
 			System.out.println("Calculating support for candidate general TGFD candidate delta: " + intersection.getKey());
@@ -1021,7 +1021,7 @@ public class TgfdDiscovery {
 			System.out.println("Candidate general TGFD support: " + support);
 			this.generalTgfdSupportsList.add(support);
 			if (support < this.theta) {
-				if (!this.noSupportPruning) patternTreeNode.addToLowSupportGeneralTgfdList(literalPath, candidateDelta);
+				if (!this.noSupportPruning) patternTreeNode.addLowSupportDependency(literalPath);
 				System.out.println("Support for candidate general TGFD is below support threshold");
 				continue;
 			}
@@ -1164,7 +1164,7 @@ public class TgfdDiscovery {
 				if (minDistance <= maxDistance) {
 					System.out.println("Calculating support for candidate delta ("+minDistance+","+maxDistance+")");
 					float numer;
-					float denom = 2 * 1 * this.numOfSnapshots;
+					float denom = 2 * entities.size() * this.numOfSnapshots;
 					List<Integer> timestamps = attrValuesTimestampsSortedByFreq.get(0).getValue();
 					TreeSet<Pair> satisfyingPairs = new TreeSet<Pair>();
 					for (int index = 0; index < timestamps.size() - 1; index++) {
@@ -1206,15 +1206,15 @@ public class TgfdDiscovery {
 			candidateTGFDdelta = new Delta(Period.ofDays(minDistance * 183), Period.ofDays(maxDistance * 183 + 1), Duration.ofDays(183));
 			System.out.println("Constant TGFD delta: "+candidateTGFDdelta);
 
-			if (!this.noMinimalityPruning && isSupersetPath(constantPath, patternNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
-				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
-				continue;
-			}
+//			if (!this.noMinimalityPruning && isSupersetPath(constantPath, patternNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
+//				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
+//				continue;
+//			}
 			System.out.println("Creating new constant TGFD...");
 			TGFD entityTGFD = new TGFD(newPattern, candidateTGFDdelta, newDependency, candidateTGFDsupport, patternNode.getPatternSupport(), "");
 			System.out.println("TGFD: " + entityTGFD);
 			tgfds.add(entityTGFD);
-			if (!this.noMinimalityPruning) patternNode.addMinimalDependency(constantPath);
+//			if (!this.noMinimalityPruning) patternNode.addMinimalDependency(constantPath);
 		}
 		constantXdeltas.sort(new Comparator<Pair>() {
 			@Override
@@ -1340,12 +1340,10 @@ public class TgfdDiscovery {
 							continue;
 						}
 
-						//TO-DO: Can this be implemented as HashSet to improve performance?
-						if (!this.noSupportPruning && isSupersetPath(newPath, patternTreeNode.getAllZeroEntityDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
-							System.out.println("Skip. Candidate literal path is a superset of zero-entity dependency.");
+						if (!this.noSupportPruning && isSupersetPath(newPath, patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
+							System.out.println("Skip. Candidate literal path is a superset of low-support dependency.");
 							continue;
 						}
-						//TO-DO: Can this be implemented as HashSet to improve performance?
 						if (!this.noMinimalityPruning && isSupersetPath(newPath, patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
 							System.out.println("Skip. Candidate literal path is a superset of minimal dependency.");
 							continue;
