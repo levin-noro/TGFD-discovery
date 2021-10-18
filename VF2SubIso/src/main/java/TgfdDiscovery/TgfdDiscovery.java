@@ -6,7 +6,9 @@ import Infra.*;
 import VF2Runner.VF2SubgraphIsomorphism;
 import changeExploration.Change;
 import changeExploration.ChangeLoader;
+import graphLoader.CitationLoader;
 import graphLoader.DBPediaLoader;
+import graphLoader.GraphLoader;
 import org.apache.commons.cli.*;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
@@ -137,7 +139,7 @@ public class TgfdDiscovery {
 		}
 	}
 
-	public void initialize(ArrayList<DBPediaLoader> graphs) {
+	public void initialize(ArrayList<GraphLoader> graphs) {
 		vSpawnInit(graphs);
 		if (this.generatek0Tgfds) {
 			String experimentName = "api-test";
@@ -213,6 +215,8 @@ public class TgfdDiscovery {
 		options.addOption("changefile", false, "run experiment using changefiles instead of snapshots");
 		options.addOption("subgraph", false, "run experiment using incremental subgraphs instead of snapshots");
 		options.addOption("k0", false, "run experiment and generate tgfds for single-node patterns");
+		options.addOption("dataset", true, "run experiment using specified dataset");
+
 
 		CommandLineParser parser = new DefaultParser();
 		CommandLine cmd = null;
@@ -222,6 +226,14 @@ public class TgfdDiscovery {
 			e.printStackTrace();
 		}
 		assert cmd != null;
+
+		String dataset = null;
+		if (!cmd.hasOption("dataset")) {
+			System.out.println("No dataset is specified.");
+			return;
+		} else {
+			dataset = cmd.getOptionValue("dataset");
+		}
 
 		String timeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
 		if (!cmd.hasOption("console")) {
@@ -252,20 +264,33 @@ public class TgfdDiscovery {
 		double patternSupportThreshold = cmd.getOptionValue("p") == null ? DEFAULT_PATTERN_SUPPORT_THRESHOLD : Double.parseDouble(cmd.getOptionValue("p"));
 
 		TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(k, theta, gamma, graphSize, patternSupportThreshold, DEFAULT_NUM_OF_SNAPSHOTS, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds);
-		final long histogramTime = System.currentTimeMillis();
-		tgfdDiscovery.histogram();
-		printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
 
-
-		ArrayList<DBPediaLoader> graphs = null;
-		if (!tgfdDiscovery.useChangeFile) {
-			final long graphLoadTime = System.currentTimeMillis();
-			graphs = tgfdDiscovery.loadDBpediaSnapshots(graphSize);
+		ArrayList<GraphLoader> graphs = null;
+		if (dataset.equals("dbpedia")) {
+			final long histogramTime = System.currentTimeMillis();
+			tgfdDiscovery.histogram();
+			printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
+			if (!tgfdDiscovery.useChangeFile) {
+				final long graphLoadTime = System.currentTimeMillis();
+				graphs = tgfdDiscovery.loadDBpediaSnapshots(graphSize);
+				printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
+			} else {
+				final long modelsLoadTime = System.currentTimeMillis();
+				tgfdDiscovery.loadModels(graphSize);
+				printWithTime("modelsLoadTime", (System.currentTimeMillis() - modelsLoadTime));
+			}
+		} else if (dataset.equals("citation")) {
+			graphs = new ArrayList<>();
+			long graphLoadTime = System.currentTimeMillis();
+			graphs.add(new CitationLoader("dblp_papers_v11.txt", true));
 			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-		} else {
-			final long modelsLoadTime = System.currentTimeMillis();
-			tgfdDiscovery.loadModels(graphSize);
-			printWithTime("modelsLoadTime", (System.currentTimeMillis() - modelsLoadTime));
+			graphLoadTime = System.currentTimeMillis();
+			graphs.add(new CitationLoader("dblp.v12.json", false));
+			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
+			graphLoadTime = System.currentTimeMillis();
+			graphs.add(new CitationLoader("dblpv13.json", false));
+			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
+			return;
 		}
 
 		tgfdDiscovery.setExperimentDateAndTimeStamp(timeAndDateStamp);
@@ -346,7 +371,7 @@ public class TgfdDiscovery {
 				TimeUnit.MILLISECONDS.toMinutes(this.totalDiscoverGeneralTGFDTime) +  "(min)");
 	}
 
-	private void getMatchesUsingCenterVerticesForK1 (ArrayList<DBPediaLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	private void getMatchesUsingCenterVerticesForK1 (ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
 		String sourceType = patternTreeNode.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
 		HashSet<String> entityURIs = new HashSet<>();
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
@@ -393,7 +418,7 @@ public class TgfdDiscovery {
 		calculatePatternSupport(entityURIs.size(), patternTreeNode);
 	}
 
-	private void getMatchesUsingCenterVertices(ArrayList<DBPediaLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	private void getMatchesUsingCenterVertices(ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
 		if (this.currentVSpawnLevel == 1) {
 			getMatchesUsingCenterVerticesForK1(graphs, patternTreeNode, matchesPerTimestamps);
 			return;
@@ -415,6 +440,7 @@ public class TgfdDiscovery {
 		for (int year = 0; year < this.numOfSnapshots; year++) {
 			HashSet<HashSet<ConstantLiteral>> matchesSet = new HashSet<>();
 			ArrayList<DataVertex> centerVertexMatchesInThisTimestamp = matchesOfCenterVertex.get(year);
+			System.out.println("Number of center vertex matches in this timestamp from previous levels: "+centerVertexMatchesInThisTimestamp.size());
 			newMatchesOfCenterVertex.add(new ArrayList<>());
 			int numOfMatchesInTimestamp = 0;
 			for (DataVertex dataVertex: centerVertexMatchesInThisTimestamp) {
@@ -430,6 +456,7 @@ public class TgfdDiscovery {
 			}
 			System.out.println("Number of matches found: " + numOfMatchesInTimestamp);
 			System.out.println("Number of matches found that contain active attributes: " + matchesSet.size());
+			System.out.println("Number of center vertex matches in this timestamp in this level: " + newMatchesOfCenterVertex.get(year).size());
 			matchesPerTimestamps.get(year).addAll(matchesSet);
 		}
 		patternTreeNode.setMatchesOfCenterVertices(newMatchesOfCenterVertex);
@@ -1280,10 +1307,9 @@ public class TgfdDiscovery {
 		}
 	}
 
-	public ArrayList<DBPediaLoader> loadDBpediaSnapshots(Long graphSize) {
+	public ArrayList<GraphLoader> loadDBpediaSnapshots(Long graphSize) {
 		ArrayList<TGFD> dummyTGFDs = new ArrayList<>();
-		System.out.println("Number of dummy TGFDs: " + dummyTGFDs.size());
-		ArrayList<DBPediaLoader> graphs = new ArrayList<>();
+		ArrayList<GraphLoader> graphs = new ArrayList<>();
 		String fileSuffix = graphSize == null ? "" : "-" + graphSize;
 		for (int year = 5; year < 8; year++) {
 			String typeFileName = "201" + year + "types" + fileSuffix + ".ttl";
@@ -1456,7 +1482,7 @@ public class TgfdDiscovery {
 //		}
 //	}
 
-	public void vSpawnInit(ArrayList<DBPediaLoader> graphs) {
+	public void vSpawnInit(ArrayList<GraphLoader> graphs) {
 		this.patternTree = new PatternTree();
 		this.patternTree.addLevel();
 
@@ -1773,7 +1799,7 @@ public class TgfdDiscovery {
 		return null;
 	}
 
-	public ArrayList<ArrayList<DataVertex>> extractMatchesForCenterVertex(ArrayList<DBPediaLoader> graphs, String patternVertexType) {
+	public ArrayList<ArrayList<DataVertex>> extractMatchesForCenterVertex(ArrayList<GraphLoader> graphs, String patternVertexType) {
 		ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertex = new ArrayList<>(3);
 		for (int year = 0; year < this.numOfSnapshots; year++) {
 			ArrayList<DataVertex> matchesInThisTimestamp = new ArrayList<>();
@@ -1815,7 +1841,7 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesForPattern(ArrayList<DBPediaLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public void getMatchesForPattern(ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
 		// TO-DO: Potential speed up for single-edge/single-node patterns. Iterate through all edges/nodes in graph.
 		HashSet<String> entityURIs = new HashSet<>();
 		patternTreeNode.getPattern().getCenterVertexType();
