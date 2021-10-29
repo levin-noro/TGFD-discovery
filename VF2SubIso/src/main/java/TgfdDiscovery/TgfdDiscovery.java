@@ -12,8 +12,6 @@ import graphLoader.GraphLoader;
 import org.apache.commons.cli.*;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
-import org.apache.jena.rdf.model.Statement;
-import org.apache.jena.rdf.model.StmtIterator;
 import org.jetbrains.annotations.NotNull;
 import org.jgrapht.Graph;
 import org.jgrapht.GraphMapping;
@@ -227,7 +225,7 @@ public class TgfdDiscovery {
 		}
 		assert cmd != null;
 
-		String dataset = null;
+		String dataset;
 		if (!cmd.hasOption("dataset")) {
 			System.out.println("No dataset is specified.");
 			return;
@@ -267,31 +265,19 @@ public class TgfdDiscovery {
 
 		ArrayList<GraphLoader> graphs = null;
 		if (dataset.equals("dbpedia")) {
+			graphs = tgfdDiscovery.loadDBpediaSnapshots(graphSize);
 			final long histogramTime = System.currentTimeMillis();
-			tgfdDiscovery.histogram();
+			tgfdDiscovery.histogram(graphs);
 			printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
-			if (!tgfdDiscovery.useChangeFile) {
-				final long graphLoadTime = System.currentTimeMillis();
-				graphs = tgfdDiscovery.loadDBpediaSnapshots(graphSize);
-				printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-			} else {
-				final long modelsLoadTime = System.currentTimeMillis();
-				tgfdDiscovery.loadModels(graphSize);
-				printWithTime("modelsLoadTime", (System.currentTimeMillis() - modelsLoadTime));
-			}
 		} else if (dataset.equals("citation")) {
-			graphs = new ArrayList<>();
-			long graphLoadTime = System.currentTimeMillis();
-			graphs.add(new CitationLoader("dblp_papers_v11.txt", true));
-			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-			graphLoadTime = System.currentTimeMillis();
-			graphs.add(new CitationLoader("dblp.v12.json", false));
-			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-			graphLoadTime = System.currentTimeMillis();
-			graphs.add(new CitationLoader("dblpv13.json", false));
-			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-			return;
-		}
+			graphs = tgfdDiscovery.loadCitationSnapshots(Arrays.asList("dblp_papers_v11.txt","dblp.v12.json","dblpv13.json"));
+			final long histogramTime = System.currentTimeMillis();
+			tgfdDiscovery.histogram(graphs);
+			printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
+		} else {
+            System.out.println("No dataset is specified.");
+            return;
+        }
 
 		tgfdDiscovery.setExperimentDateAndTimeStamp(timeAndDateStamp);
 		tgfdDiscovery.initialize(graphs);
@@ -323,7 +309,7 @@ public class TgfdDiscovery {
 				printWithTime("getMatchesUsingCenterVertices", (matchingTime));
 				tgfdDiscovery.totalMatchingTime += matchingTime;
 			} else if (useChangeFile) {
-				tgfdDiscovery.getMatchesForPattern2(patternTreeNode, matches);
+				tgfdDiscovery.getMatchesForPattern2(graphs, patternTreeNode, matches);
 				printWithTime("getMatchesForPattern2", (System.currentTimeMillis() - matchingTime));
 			} else {
 				// TO-DO: Investigate - why is there a slight discrepancy between the # of matches found via snapshot vs. changefile?
@@ -514,122 +500,77 @@ public class TgfdDiscovery {
 		this.timeAndDateStamp = timeAndDateStamp;
 	}
 
-	public void computeVertexHistogram() {
+	public void computeVertexHistogram(ArrayList<GraphLoader> graphs) {
 
 		System.out.println("Computing Node Histogram");
 
 		Map<String, Integer> vertexTypesHistogram = new HashMap<>();
-//		Map<String, Map<String, Integer>> tempVertexAttrFreqMap = new HashMap<>();
 		Map<String, Set<String>> tempVertexAttrFreqMap = new HashMap<>();
 		Map<String, String> vertexNameToTypeMap = new HashMap<>();
-		Model model = ModelFactory.createDefaultModel();
 
-		for (int i = 5; i < 8; i++) {
-			String fileSuffix = this.graphSize == null ? "" : "-" + this.graphSize;
-			String fileName = "201" + i + "types" + fileSuffix + ".ttl";
-			Path input = Paths.get(fileName);
-			System.out.println("Reading " + fileName);
-			model.read(input.toUri().toString());
-			StmtIterator typeTriples = model.listStatements();
-			while (typeTriples.hasNext()) {
-				Statement stmt = typeTriples.nextStatement();
-				String vertexType = stmt.getObject().asResource().getLocalName().toLowerCase();
-				String vertexName = stmt.getSubject().getURI().toLowerCase();
-				if (vertexName.length() > 28) {
-					vertexName = vertexName.substring(28);
+		for (GraphLoader graph: graphs) {
+			int numOfVertices = 0;
+			for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
+				numOfVertices++;
+				for (String vertexType : v.getTypes()) {
+					String vertexName = v.getAttributeValueByName("uri");
+					vertexTypesHistogram.merge(vertexType, 1, Integer::sum);
+					tempVertexAttrFreqMap.putIfAbsent(vertexType, new HashSet<>());
+					vertexNameToTypeMap.putIfAbsent(vertexName, vertexType); // Every vertex only has one type?
 				}
-				vertexTypesHistogram.merge(vertexType, 1, Integer::sum);
-//			tempVertexAttrFreqMap.putIfAbsent(vertexType, new HashMap<String, Integer>());
-				tempVertexAttrFreqMap.putIfAbsent(vertexType, new HashSet<String>());
-				vertexNameToTypeMap.putIfAbsent(vertexName, vertexType); // Every vertex in DBpedia only has one type?
 			}
+			System.out.println("Number of vertices in graph: " + numOfVertices);
 		}
 
 		this.NUM_OF_VERTICES_IN_GRAPH = 0;
 		for (Map.Entry<String, Integer> entry : vertexTypesHistogram.entrySet()) {
 			this.NUM_OF_VERTICES_IN_GRAPH += entry.getValue();
 		}
-		System.out.println("Number of vertices in graph: " + this.NUM_OF_VERTICES_IN_GRAPH);
-		System.out.println("Number of vertex types in graph: " + vertexTypesHistogram.size());
+		System.out.println("Number of vertices across all graphs: " + this.NUM_OF_VERTICES_IN_GRAPH);
+		System.out.println("Number of vertex types across all graphs: " + vertexTypesHistogram.size());
 
 		getSortedFrequentVertexTypesHistogram(vertexTypesHistogram);
 
-		computeAttrHistogram(vertexNameToTypeMap, tempVertexAttrFreqMap);
-		computeEdgeHistogram(vertexNameToTypeMap, vertexTypesHistogram);
+		computeAttrHistogram(graphs, vertexNameToTypeMap, tempVertexAttrFreqMap);
+		computeEdgeHistogram(graphs, vertexNameToTypeMap, vertexTypesHistogram);
 
 	}
 
-	//	public static void computeAttrHistogram(Map<String, String> nodesRecord, Map<String, Map<String, Integer>> tempVertexAttrFreqMap) {
-	public void computeAttrHistogram(Map<String, String> nodesRecord, Map<String, Set<String>> tempVertexAttrFreqMap) {
+	public void computeAttrHistogram(ArrayList<GraphLoader> graphs, Map<String, String> nodesRecord, Map<String, Set<String>> tempVertexAttrFreqMap) {
 		System.out.println("Computing attributes histogram");
 
-//		Map<String, Integer> attrHistMap = new HashMap<>();
 		Map<String, Set<String>> attrDistributionMap = new HashMap<>();
 
-		Model model = ModelFactory.createDefaultModel();
-		for (int i = 5; i < 8; i++) {
-			String fileSuffix = this.graphSize == null ? "" : "-" + this.graphSize;
-			String fileName = "201" + i + "literals" + fileSuffix + ".ttl";
-			Path input = Paths.get(fileName);
-			System.out.println("Reading " + fileName);
-			model.read(input.toUri().toString());
-		}
-		StmtIterator typeTriples = model.listStatements();
-		int numOfAttributes = 0;
-		while (typeTriples.hasNext()) {
-			numOfAttributes++;
-			Statement stmt = typeTriples.nextStatement();
-			String vertexName = stmt.getSubject().getURI().toLowerCase();
-			if (vertexName.length() > 28) {
-				vertexName = vertexName.substring(28);
-			}
-			String attrName = stmt.getPredicate().getLocalName().toLowerCase();
-			if (nodesRecord.get(vertexName) != null) {
-//				attrHistMap.merge(attrName, 1, Integer::sum);
-				String vertexType = nodesRecord.get(vertexName);
-				if (tempVertexAttrFreqMap.containsKey(vertexType)) {
-					tempVertexAttrFreqMap.get(vertexType).add(attrName);
-				}
-				if (!attrDistributionMap.containsKey(attrName)) {
-					attrDistributionMap.put(attrName, new HashSet<>());
-				} else {
-					attrDistributionMap.get(attrName).add(vertexType);
+		for (GraphLoader graph: graphs) {
+			int numOfAttributes = 0;
+			for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
+				String vertexName = v.getAttributeValueByName("uri");
+				if (nodesRecord.get(vertexName) != null) {
+					String vertexType = nodesRecord.get(vertexName);
+					for (String attrName: v.getAllAttributesNames()) {
+						if (attrName.equals("uri")) continue;
+						numOfAttributes++;
+						if (tempVertexAttrFreqMap.containsKey(vertexType)) {
+							tempVertexAttrFreqMap.get(vertexType).add(attrName);
+						}
+						if (!attrDistributionMap.containsKey(attrName)) {
+							attrDistributionMap.put(attrName, new HashSet<>());
+						} else {
+							attrDistributionMap.get(attrName).add(vertexType);
+						}
+					}
 				}
 			}
+			System.out.println("Number of attributes in graph: " + numOfAttributes);
 		}
-		System.out.println("Number of attributes in graph: " + numOfAttributes);
 
 		ArrayList<Entry<String,Set<String>>> sortedAttrDistributionMap = new ArrayList<>(attrDistributionMap.entrySet());
-//		if (!this.isNaive) {
-			sortedAttrDistributionMap.sort(new Comparator<Entry<String, Set<String>>>() {
-				@Override
-				public int compare(Entry<String, Set<String>> o1, Entry<String, Set<String>> o2) {
-					return o2.getValue().size() - o1.getValue().size();
-				}
-			});
-//		}
+		sortedAttrDistributionMap.sort((o1, o2) -> o2.getValue().size() - o1.getValue().size());
 		HashSet<String> mostDistributedAttributesSet = new HashSet<>();
 		for (Entry<String, Set<String>> attrNameEntry : sortedAttrDistributionMap.subList(0, Math.min(this.gamma, sortedAttrDistributionMap.size()))) {
 			mostDistributedAttributesSet.add(attrNameEntry.getKey());
 		}
 		this.activeAttributesSet = mostDistributedAttributesSet;
-
-//		tgfdDiscovery.attrHist = attrHistMap;
-//		ArrayList<Entry<String, Integer>> sortedHistogram = new ArrayList<>(attrHistMap.entrySet());
-//		if (!this.isNaive) {
-//			sortedHistogram.sort(new Comparator<Entry<String, Integer>>() {
-//				@Override
-//				public int compare(Entry<String, Integer> o1, Entry<String, Integer> o2) {
-//					return o2.getValue() - o1.getValue();
-//				}
-//			});
-//		}
-
-//		HashSet<String> mostFrequentAttributesSet = new HashSet<>();
-//		for (Map.Entry<String, Integer> attrNameEntry : sortedHistogram.subList(0, Math.min(SIZE_OF_ACTIVE_ATTR_SET, sortedHistogram.size()))) {
-//			mostFrequentAttributesSet.add(attrNameEntry.getKey());
-//		}
-//		tgfdDiscovery.activeAttributesSet = mostFrequentAttributesSet;
 
 		Map<String, HashSet<String>> vertexTypesAttributes = new HashMap<>();
 		for (String vertexType : tempVertexAttrFreqMap.keySet()) {
@@ -642,45 +583,35 @@ public class TgfdDiscovery {
 			}
 		}
 
-
 		this.vertexTypesAttributes = vertexTypesAttributes;
 	}
 
-	public void computeEdgeHistogram(Map<String, String> nodesRecord, Map<String, Integer> vertexTypesHistogram) {
+	public void computeEdgeHistogram(ArrayList<GraphLoader> graphs, Map<String, String> nodesRecord, Map<String, Integer> vertexTypesHistogram) {
 		System.out.println("Computing edges histogram");
 
 		Map<String, Integer> edgeTypesHistogram = new HashMap<>();
 
-		Model model = ModelFactory.createDefaultModel();
-		for (int i = 5; i < 8; i++) {
-			String fileSuffix = this.graphSize == null ? "" : "-" + this.graphSize;
-			String fileName = "201" + i + "objects" + fileSuffix + ".ttl";
-			Path input = Paths.get(fileName);
-			System.out.println("Reading " + fileName);
-			model.read(input.toUri().toString());
-
-			StmtIterator typeTriples = model.listStatements();
-			while (typeTriples.hasNext()) {
-				Statement stmt = typeTriples.nextStatement();
-				String subjectName = stmt.getSubject().getURI().toLowerCase();
-				if (subjectName.length() > 28) {
-					subjectName = subjectName.substring(28);
-				}
-				String predicateName = stmt.getPredicate().getLocalName().toLowerCase();
-				String objectName = stmt.getObject().toString().substring(stmt.getObject().toString().lastIndexOf("/") + 1).toLowerCase();
+		for (GraphLoader graph: graphs) {
+			int numOfEdges = 0;
+			for (RelationshipEdge e: graph.getGraph().getGraph().edgeSet()) {
+				numOfEdges++;
+				String subjectName = e.getSource().getAttributeValueByName("uri");
+				String predicateName = e.getLabel();
+				String objectName = e.getTarget().getAttributeValueByName("uri");
 				if (nodesRecord.get(subjectName) != null && nodesRecord.get(objectName) != null) {
 					String uniqueEdge = nodesRecord.get(subjectName) + " " + predicateName + " " + nodesRecord.get(objectName);
 					edgeTypesHistogram.merge(uniqueEdge, 1, Integer::sum);
 				}
 			}
+			System.out.println("Number of edges in graph: " + numOfEdges);
 		}
 
 		this.NUM_OF_EDGES_IN_GRAPH = 0;
 		for (Map.Entry<String, Integer> entry : edgeTypesHistogram.entrySet()) {
 			this.NUM_OF_EDGES_IN_GRAPH += entry.getValue();
 		}
-		System.out.println("Number of edges in graph: " + this.NUM_OF_EDGES_IN_GRAPH);
-		System.out.println("Number of edges labels in graph: " + edgeTypesHistogram.size());
+		System.out.println("Number of edges across all graphs: " + this.NUM_OF_EDGES_IN_GRAPH);
+		System.out.println("Number of edges labels across all graphs: " + edgeTypesHistogram.size());
 
 		this.sortedEdgeHistogram = getSortedFrequentEdgeHistogram(edgeTypesHistogram, vertexTypesHistogram);
 	}
@@ -747,8 +678,8 @@ public class TgfdDiscovery {
 		return sortedEdgesHist.subList(0, size);
 	}
 
-	public void histogram() {
-		computeVertexHistogram();
+	public void histogram(ArrayList<GraphLoader> graphs) {
+		computeVertexHistogram(graphs);
 		printHistogram();
 	}
 
@@ -1307,16 +1238,30 @@ public class TgfdDiscovery {
 		}
 	}
 
+	public ArrayList<GraphLoader> loadCitationSnapshots(List<String> filePaths) {
+		ArrayList<GraphLoader> graphs = new ArrayList<>();
+		for (String filePath: filePaths) {
+			long graphLoadTime = System.currentTimeMillis();
+			graphs.add(new CitationLoader(filePath, filePath.contains("v11")));
+			printWithTime(filePath+" graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
+			if (this.useChangeFile) break;
+		}
+		return graphs;
+	}
+
 	public ArrayList<GraphLoader> loadDBpediaSnapshots(Long graphSize) {
 		ArrayList<TGFD> dummyTGFDs = new ArrayList<>();
 		ArrayList<GraphLoader> graphs = new ArrayList<>();
 		String fileSuffix = graphSize == null ? "" : "-" + graphSize;
 		for (int year = 5; year < 8; year++) {
+			final long graphLoadTime = System.currentTimeMillis();
 			String typeFileName = "201" + year + "types" + fileSuffix + ".ttl";
 			String literalsFileName = "201" + year + "literals" + fileSuffix + ".ttl";
 			String objectsFileName = "201" + year + "objects" + fileSuffix + ".ttl";
 			DBPediaLoader dbpedia = new DBPediaLoader(dummyTGFDs, new ArrayList<>(Collections.singletonList(typeFileName)), new ArrayList<>(Arrays.asList(literalsFileName, objectsFileName)));
 			graphs.add(dbpedia);
+			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
+			if (this.useChangeFile) break;
 		}
 		return graphs;
 	}
@@ -1959,7 +1904,7 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesForPattern2(PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public void getMatchesForPattern2(ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
 
 		patternTreeNode.getPattern().setDiameter(this.currentVSpawnLevel);
 
@@ -1972,7 +1917,7 @@ public class TgfdDiscovery {
 		List<TGFD> tgfds = Collections.singletonList(dummyTgfd);
 		int numberOfMatchesFound = 0;
 //		LocalDate currentSnapshotDate = LocalDate.parse("2015-10-01");
-		DBPediaLoader dbpedia = new DBPediaLoader(tgfds, this.models.subList(0, 1), this.models.subList(1, this.models.size()));
+		GraphLoader graph = graphs.get(0);
 
 		printWithTime("Load graph (1)", System.currentTimeMillis()-startTime);
 
@@ -1996,7 +1941,7 @@ public class TgfdDiscovery {
 //			matchCollectionHashMap.get(tgfd.getName()).addMatches(currentSnapshotDate, results);
 //			printWithTime("Match retrieval", System.currentTimeMillis()-startTime);
 			final long searchStartTime = System.currentTimeMillis();
-			VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(dbpedia.getGraph(), patternTreeNode.getPattern(), false);
+			VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(graph.getGraph(), patternTreeNode.getPattern(), false);
 			ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
 			if (results.isomorphismExists()) {
 				extractMatches(results.getMappings(), matches, patternTreeNode, entityURIs);
@@ -2050,7 +1995,7 @@ public class TgfdDiscovery {
 
 			startTime=System.currentTimeMillis();
 			System.out.println("Updating the graph");
-			IncUpdates incUpdatesOnDBpedia = new IncUpdates(dbpedia.getGraph(), tgfds);
+			IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), tgfds);
 			incUpdatesOnDBpedia.AddNewVertices(allChangesAsList);
 
 //			HashMap<String, ArrayList<String>> newMatchesSignaturesByTGFD = new HashMap<>();

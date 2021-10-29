@@ -3,6 +3,7 @@ import changeExploration.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphLoader.DBPediaLoader;
 import Infra.TGFD;
+import graphLoader.GraphLoader;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import util.Config;
@@ -75,7 +76,8 @@ public class testDiffExtractorDbpedia {
         // Create dummy TGFDs based on frequent nodes and edges from histogram
         TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(Config.getTimestamps().size());
         tgfdDiscovery.graphSize = graphSize;
-        tgfdDiscovery.histogram();
+        ArrayList<GraphLoader> graphs = tgfdDiscovery.loadDBpediaSnapshots(graphSize);
+        tgfdDiscovery.histogram(graphs);
 
         ArrayList<TGFD> dummyTGFDs = tgfdDiscovery.getDummyTGFDs();
         System.out.println("Number of dummy TGFDs: " + dummyTGFDs.size());

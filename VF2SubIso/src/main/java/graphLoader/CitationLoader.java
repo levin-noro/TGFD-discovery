@@ -2,6 +2,7 @@ package graphLoader;
 
 import Infra.DataVertex;
 import Infra.RelationshipEdge;
+import Infra.TGFD;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.TypeAdapter;
@@ -22,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -44,6 +46,17 @@ public class CitationLoader extends GraphLoader {
 
         loadJSON(filePath, v11);
 
+    }
+
+    public CitationLoader(TGFD dummyTGFD, String filePath, boolean v11) {
+        super(Collections.singletonList(dummyTGFD));
+
+        if (filePath == null || filePath.length() == 0) {
+            System.out.println("No Input File Path!");
+            return;
+        }
+
+        loadJSON(filePath, v11);
     }
 
     private void parse(JsonReader jsonReader) throws Exception {
