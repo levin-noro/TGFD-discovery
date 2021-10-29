@@ -43,7 +43,8 @@ public class TgfdDiscovery {
 	private final boolean dontSortHistogram;
 	private final boolean useSubgraph;
 	private final boolean generatek0Tgfds;
-	private Integer NUM_OF_EDGES_IN_GRAPH;
+    private final boolean skipK1;
+    private Integer NUM_OF_EDGES_IN_GRAPH;
 	public int NUM_OF_VERTICES_IN_GRAPH;
 	public Map<String, HashSet<String>> vertexTypesAttributes; // freq attributes come from here
 	public PatternTree patternTree;
@@ -97,6 +98,7 @@ public class TgfdDiscovery {
 		this.dontSortHistogram = false;
 		this.useSubgraph = false;
 		this.generatek0Tgfds = false;
+        this.skipK1 = true;
 
 		System.out.println("Running experiment for |G|="+this.graphSize+", k="+this.k+", theta="+this.theta+", gamma"+this.gamma+", patternSupport="+this.edgeSupportThreshold +", interesting="+this.interestingTGFDs+", optimized="+!this.noMinimalityPruning);
 
@@ -106,7 +108,7 @@ public class TgfdDiscovery {
 		}
 	}
 
-	public TgfdDiscovery(int k, double theta, int gamma, Long graphSize, double patternSupport, int numOfSnapshots, boolean noMinimalityPruning, boolean interestingTGFDsOnly, boolean useChangeFile, boolean noSupportPruning, boolean dontSortHistogram, boolean useSubgraph, boolean generatek0Tgfds) {
+	public TgfdDiscovery(int k, double theta, int gamma, Long graphSize, double patternSupport, int numOfSnapshots, boolean noMinimalityPruning, boolean interestingTGFDsOnly, boolean useChangeFile, boolean noSupportPruning, boolean dontSortHistogram, boolean useSubgraph, boolean generatek0Tgfds, boolean skipK1) {
 		this.startTime = System.currentTimeMillis();
 		this.k = k;
 		this.theta = theta;
@@ -121,6 +123,7 @@ public class TgfdDiscovery {
 		this.dontSortHistogram = dontSortHistogram;
 		this.useSubgraph = useSubgraph;
 		this.generatek0Tgfds = generatek0Tgfds;
+        this.skipK1 = skipK1;
 
 		System.out.println("Running experiment for |G|="+this.graphSize
 				+", k="+this.k
@@ -214,6 +217,7 @@ public class TgfdDiscovery {
 		options.addOption("subgraph", false, "run experiment using incremental subgraphs instead of snapshots");
 		options.addOption("k0", false, "run experiment and generate tgfds for single-node patterns");
 		options.addOption("dataset", true, "run experiment using specified dataset");
+        options.addOption("skipK1", false, "run experiment and generate tgfds for k > 1");
 
 
 		CommandLineParser parser = new DefaultParser();
@@ -251,6 +255,7 @@ public class TgfdDiscovery {
 		boolean useChangeFile = cmd.hasOption("changefile");
 		boolean useSubgraph = cmd.hasOption("subgraph");
 		boolean generatek0Tgfds = cmd.hasOption("k0");
+        boolean skipK1 = cmd.hasOption("skipK1");
 
 		Long graphSize = null;
 		if (cmd.getOptionValue("g") != null) {
@@ -261,7 +266,7 @@ public class TgfdDiscovery {
 		int k = cmd.getOptionValue("k") == null ? DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k"));
 		double patternSupportThreshold = cmd.getOptionValue("p") == null ? DEFAULT_PATTERN_SUPPORT_THRESHOLD : Double.parseDouble(cmd.getOptionValue("p"));
 
-		TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(k, theta, gamma, graphSize, patternSupportThreshold, DEFAULT_NUM_OF_SNAPSHOTS, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds);
+		TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(k, theta, gamma, graphSize, patternSupportThreshold, DEFAULT_NUM_OF_SNAPSHOTS, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds, skipK1);
 
 		ArrayList<GraphLoader> graphs = null;
 		if (dataset.equals("dbpedia")) {
@@ -302,6 +307,7 @@ public class TgfdDiscovery {
 				matches.add(new ArrayList<>());
 			}
 			long matchingTime = System.currentTimeMillis();
+
 			assert patternTreeNode != null;
 			if (useSubgraph) {
 				tgfdDiscovery.getMatchesUsingCenterVertices(graphs, patternTreeNode, matches);
@@ -323,7 +329,9 @@ public class TgfdDiscovery {
 				if (!tgfdDiscovery.noSupportPruning) patternTreeNode.setIsPruned();
 				continue;
 			}
-//			if (tgfdDiscovery.currentVSpawnLevel == 1) continue;
+
+			if (tgfdDiscovery.skipK1 && tgfdDiscovery.currentVSpawnLevel == 1) continue;
+			
 			final long hSpawnStartTime = System.currentTimeMillis();
 			ArrayList<TGFD> tgfds = tgfdDiscovery.hSpawn(patternTreeNode, matches);
 			printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
