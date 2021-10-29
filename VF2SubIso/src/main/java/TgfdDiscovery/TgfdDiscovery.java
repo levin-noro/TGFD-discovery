@@ -1501,12 +1501,21 @@ public class TgfdDiscovery {
 
 	}
 
-	public static boolean isDuplicateEdge(VF2PatternGraph pattern, String edgeType, String type1, String type2) {
+	public static boolean isDuplicateEdge(VF2PatternGraph pattern, String edgeType, String sourceType, String targetType) {
 		for (RelationshipEdge edge : pattern.getPattern().edgeSet()) {
 			if (edge.getLabel().equalsIgnoreCase(edgeType)) {
-				if (edge.getSource().getTypes().contains(type1) && edge.getTarget().getTypes().contains(type2)) {
+				if (edge.getSource().getTypes().contains(sourceType) && edge.getTarget().getTypes().contains(targetType)) {
 					return true;
 				}
+			}
+		}
+		return false;
+	}
+
+	public static boolean isMultipleEdge(VF2PatternGraph pattern, String sourceType, String targetType) {
+		for (RelationshipEdge edge : pattern.getPattern().edgeSet()) {
+			if (edge.getSource().getTypes().contains(sourceType) && edge.getTarget().getTypes().contains(targetType)) {
+				return true;
 			}
 		}
 		return false;
@@ -1587,6 +1596,12 @@ public class TgfdDiscovery {
 		if (isDuplicateEdge(previousLevelNode.getPattern(), edgeType, sourceVertexType, targetVertexType)) {
 			System.out.println("Candidate edge: " + candidateEdge.getKey());
 			System.out.println("already exists in pattern");
+			this.candidateEdgeIndex++;
+			return null;
+		}
+
+		if (isMultipleEdge(previousLevelNode.getPattern(), sourceVertexType, targetVertexType)) {
+			System.out.println("We do not support multiple edges between existing vertices.");
 			this.candidateEdgeIndex++;
 			return null;
 		}
