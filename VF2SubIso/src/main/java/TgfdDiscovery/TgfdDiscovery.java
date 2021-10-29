@@ -979,7 +979,7 @@ public class TgfdDiscovery {
 			System.out.println("Candidate general TGFD support: " + support);
 			this.generalTgfdSupportsList.add(support);
 			if (support < this.theta) {
-				if (!this.noSupportPruning) patternTreeNode.addLowSupportDependency(literalPath);
+//				if (!this.noSupportPruning) patternTreeNode.addLowSupportDependency(literalPath);
 				System.out.println("Support for candidate general TGFD is below support threshold");
 				continue;
 			}
