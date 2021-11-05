@@ -1,11 +1,8 @@
 package Infra;
 
-import TgfdDiscovery.TgfdDiscovery;
 import org.jgrapht.Graph;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 
 public class PatternTreeNode {
     private final VF2PatternGraph pattern;
@@ -17,6 +14,7 @@ public class PatternTreeNode {
     private boolean isPruned = false;
     private ArrayList<AttributeDependency> lowSupportDependencies = new ArrayList<>();
     private ArrayList<AttributeDependency> minimalDependencies = new ArrayList<>();
+    private ArrayList<AttributeDependency> minimalConstantDependencies = new ArrayList<>();
 //    private HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> lowSupportGeneralTgfdList = new HashMap<>();
     private ArrayList<ArrayList<DataVertex>> matchesOfCenterVertices = null;
 
@@ -84,6 +82,23 @@ public class PatternTreeNode {
             zeroEntityPaths.addAll(parentNode.getLowSupportDependenciesOnThisPath());
         }
         return zeroEntityPaths;
+    }
+
+    public void addMinimalConstantDependency(AttributeDependency constantPath) {
+        this.minimalConstantDependencies.add(constantPath);
+    }
+
+    public ArrayList<AttributeDependency> getMinimalConstantDependencies() {
+        return this.minimalConstantDependencies;
+    }
+
+    public ArrayList<AttributeDependency> getAllMinimalConstantDependenciesOnThisPath() {
+        PatternTreeNode currPatternTreeNode = this;
+        ArrayList<AttributeDependency> minimalConstantPaths = new ArrayList<>(currPatternTreeNode.getMinimalConstantDependencies());
+        for (PatternTreeNode parentNode: subgraphParents) {
+            minimalConstantPaths.addAll(parentNode.getAllMinimalConstantDependenciesOnThisPath());
+        }
+        return minimalConstantPaths;
     }
 
     public void addMinimalDependency(AttributeDependency dependency) {

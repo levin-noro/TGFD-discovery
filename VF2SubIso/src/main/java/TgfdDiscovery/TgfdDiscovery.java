@@ -83,6 +83,7 @@ public class TgfdDiscovery {
 	private long totalVspawnTime = 0;
 	private long totalDiscoverConstantTGFDsTime = 0;
 	private long totalDiscoverGeneralTGFDTime = 0;
+	private String experimentName;
 
 	public TgfdDiscovery(int numOfSnapshots) {
 		this.startTime = System.currentTimeMillis();
@@ -108,8 +109,9 @@ public class TgfdDiscovery {
 		}
 	}
 
-	public TgfdDiscovery(int k, double theta, int gamma, Long graphSize, double patternSupport, int numOfSnapshots, boolean noMinimalityPruning, boolean interestingTGFDsOnly, boolean useChangeFile, boolean noSupportPruning, boolean dontSortHistogram, boolean useSubgraph, boolean generatek0Tgfds, boolean skipK1) {
+	public TgfdDiscovery(String experimentName, int k, double theta, int gamma, Long graphSize, double patternSupport, int numOfSnapshots, boolean noMinimalityPruning, boolean interestingTGFDsOnly, boolean useChangeFile, boolean noSupportPruning, boolean dontSortHistogram, boolean useSubgraph, boolean generatek0Tgfds, boolean skipK1) {
 		this.startTime = System.currentTimeMillis();
+		this.experimentName = experimentName;
 		this.k = k;
 		this.theta = theta;
 		this.gamma = gamma;
@@ -143,8 +145,7 @@ public class TgfdDiscovery {
 	public void initialize(ArrayList<GraphLoader> graphs) {
 		vSpawnInit(graphs);
 		if (this.generatek0Tgfds) {
-			String experimentName = "api-test";
-			this.printTgfdsToFile(experimentName, this.tgfds.get(this.currentVSpawnLevel));
+			this.printTgfdsToFile(this.experimentName, this.tgfds.get(this.currentVSpawnLevel));
 		}
 		this.kRuntimes.add(System.currentTimeMillis() - this.startTime);
 		this.patternTree.addLevel();
@@ -153,7 +154,7 @@ public class TgfdDiscovery {
 
 	@Override
 	public String toString() {
-		return (this.noMinimalityPruning ? "noMinimalityPruning" : "") +
+		return (this.noMinimalityPruning ? "-noMinimalityPruning" : "") +
 				(this.noSupportPruning ? "-noSupportPruning" : "") +
 				(this.graphSize == null ? "" : "-G"+this.graphSize) +
 				(this.interestingTGFDs ? "-interesting" : "") +
@@ -175,7 +176,7 @@ public class TgfdDiscovery {
 		});
 		System.out.println("Printing TGFDs to file for k = " + this.currentVSpawnLevel);
 		try {
-			PrintStream printStream = new PrintStream(experimentName + "-tgfds-" + this + ".txt");
+			PrintStream printStream = new PrintStream(experimentName + "-tgfds" + this + ".txt");
 			printStream.println("k = " + this.currentVSpawnLevel);
 			printStream.println("# of TGFDs generated = " + tgfds.size());
 			for (TGFD tgfd : tgfds) {
@@ -202,6 +203,7 @@ public class TgfdDiscovery {
 	public static void main(String[] args) {
 
 		Options options = new Options();
+		options.addOption("name", true, "output files will be given the specified name");
 		options.addOption("console", false, "print to console");
 		options.addOption("noMinimalityPruning", false, "run algorithm without minimality pruning");
 		options.addOption("noSupportPruning", false, "run algorithm without support pruning");
@@ -218,7 +220,6 @@ public class TgfdDiscovery {
 		options.addOption("k0", false, "run experiment and generate tgfds for single-node patterns");
 		options.addOption("dataset", true, "run experiment using specified dataset");
         options.addOption("skipK1", false, "run experiment and generate tgfds for k > 1");
-
 
 		CommandLineParser parser = new DefaultParser();
 		CommandLine cmd = null;
@@ -238,6 +239,14 @@ public class TgfdDiscovery {
 		}
 
 		String timeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
+
+		String experimentName = null;
+		if (cmd.hasOption("name")) {
+			experimentName = cmd.getOptionValue("name");
+		} else  {
+			experimentName = "experiment";
+		}
+
 		if (!cmd.hasOption("console")) {
 			PrintStream logStream = null;
 			try {
@@ -266,7 +275,7 @@ public class TgfdDiscovery {
 		int k = cmd.getOptionValue("k") == null ? DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k"));
 		double patternSupportThreshold = cmd.getOptionValue("p") == null ? DEFAULT_PATTERN_SUPPORT_THRESHOLD : Double.parseDouble(cmd.getOptionValue("p"));
 
-		TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(k, theta, gamma, graphSize, patternSupportThreshold, DEFAULT_NUM_OF_SNAPSHOTS, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds, skipK1);
+		TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(experimentName, k, theta, gamma, graphSize, patternSupportThreshold, DEFAULT_NUM_OF_SNAPSHOTS, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds, skipK1);
 
 		ArrayList<GraphLoader> graphs = null;
 		if (dataset.equals("dbpedia")) {
@@ -1115,12 +1124,12 @@ public class TgfdDiscovery {
 				}
 			}
 			if (candidateDeltas.size() == 0) {
-				System.out.println("Could not come up with any deltas for entity: " + entityEntry.getKey());
+				System.out.println("Could not find any deltas for entity: " + entityEntry.getKey());
 				continue;
 			}
 
 			// Compute TGFD support
-			Delta candidateTGFDdelta = null;
+			Delta candidateTGFDdelta;
 			float candidateTGFDsupport = 0;
 			Pair mostSupportedDelta = null;
 			TreeSet<Pair> mostSupportedSatisfyingPairs = null;
@@ -1160,9 +1169,14 @@ public class TgfdDiscovery {
 			System.out.println("Entity satisfying attributes:" + mostSupportedSatisfyingPairs);
 			System.out.println("Entity delta = " + mostSupportedDelta);
 			System.out.println("Entity support = " + candidateTGFDsupport);
+
+			// All entities are considered in general TGFD, regardless of their support
 			satisfyingAttrValues.add(mostSupportedSatisfyingPairs);
 			constantXdeltas.add(mostSupportedDelta);
-			this.constantTgfdSupportsList.add(candidateTGFDsupport);
+
+			this.constantTgfdSupportsList.add(candidateTGFDsupport); // Statistics
+
+			// Only output constant TGFDs that satisfy support
 			if (candidateTGFDsupport < this.theta) {
 				System.out.println("Could not satisfy TGFD support threshold for entity: " + entityEntry.getKey());
 				continue;
@@ -1172,15 +1186,15 @@ public class TgfdDiscovery {
 			candidateTGFDdelta = new Delta(Period.ofDays(minDistance * 183), Period.ofDays(maxDistance * 183 + 1), Duration.ofDays(183));
 			System.out.println("Constant TGFD delta: "+candidateTGFDdelta);
 
-//			if (!this.noMinimalityPruning && isSupersetPath(constantPath, patternNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
-//				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
-//				continue;
-//			}
+			if (!this.noMinimalityPruning && isSupersetPath(constantPath, patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
+				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
+				continue;
+			}
 			System.out.println("Creating new constant TGFD...");
 			TGFD entityTGFD = new TGFD(newPattern, candidateTGFDdelta, newDependency, candidateTGFDsupport, patternNode.getPatternSupport(), "");
 			System.out.println("TGFD: " + entityTGFD);
 			tgfds.add(entityTGFD);
-//			if (!this.noMinimalityPruning) patternNode.addMinimalDependency(constantPath);
+			if (!this.noMinimalityPruning) patternNode.addMinimalConstantDependency(constantPath);
 		}
 		constantXdeltas.sort(new Comparator<Pair>() {
 			@Override
@@ -1538,8 +1552,7 @@ public class TgfdDiscovery {
 
 		if (this.previousLevelNodeIndex >= this.patternTree.getLevel(this.currentVSpawnLevel -1).size()) {
 			this.kRuntimes.add(System.currentTimeMillis() - this.startTime);
-			String experimentName = "api-test";
-			this.printTgfdsToFile(experimentName, this.tgfds.get(this.currentVSpawnLevel));
+			this.printTgfdsToFile(this.experimentName, this.tgfds.get(this.currentVSpawnLevel));
 			if (this.isKExperiment) this.printExperimentRuntimestoFile(experimentName, this.kRuntimes);
 			this.printSupportStatistics();
 			this.currentVSpawnLevel++;
