@@ -1,13 +1,13 @@
 package graphLoader;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
 import Infra.Attribute;
 import Infra.DataVertex;
 import Infra.RelationshipEdge;
 import Infra.TGFD;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
 import org.apache.jena.rdf.model.*;
 import util.Config;
 
@@ -50,6 +50,18 @@ public class DBPediaLoader extends GraphLoader {
 
         for (Model dataModel : dataModels) {
             loadDataGraph2(dataModel);
+        }
+    }
+
+    public DBPediaLoader(ArrayList<TGFD> dummyTGFDs, List<String> paths) {
+        super(dummyTGFDs);
+        for (String path : paths) {
+            if (path.toLowerCase().contains("literal") || path.toLowerCase().contains("object")) continue;
+            loadNodeMap(path);
+        }
+        for (String path: paths) {
+            if (path.toLowerCase().contains("types")) continue;
+            loadDataGraph(path);
         }
     }
 
@@ -102,6 +114,8 @@ public class DBPediaLoader extends GraphLoader {
 
             while (typeTriples.hasNext()) {
                 Statement stmt = typeTriples.nextStatement();
+
+                if (!stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
 
                 String nodeURI = stmt.getSubject().getURI().toLowerCase();
                 if (nodeURI.length() > 28) {
@@ -223,12 +237,15 @@ public class DBPediaLoader extends GraphLoader {
             while (dataTriples.hasNext()) {
 
                 Statement stmt = dataTriples.nextStatement();
+
+                String predicate = stmt.getPredicate().getLocalName().toLowerCase();
+                if (predicate.equals("type")) continue;
+
                 String subjectNodeURI = stmt.getSubject().getURI().toLowerCase();
                 if (subjectNodeURI.length() > 28) {
                     subjectNodeURI = subjectNodeURI.substring(28);
                 }
 
-                String predicate = stmt.getPredicate().getLocalName().toLowerCase();
                 RDFNode object = stmt.getObject();
                 String objectNodeURI;
 
