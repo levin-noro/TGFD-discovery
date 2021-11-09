@@ -387,4 +387,107 @@ public class VF2DataGraph implements Serializable {
         nodeMap.get(v1.getVertexURI()).setOrAddAttribute(attribute);
     }
 
+    public Graph<Vertex, RelationshipEdge> getSubGraphWithinDiameter(DataVertex center, int diameter, Set<String> edgeLabels, Set<RelationshipEdge> edgeSet) {
+        Graph<Vertex, RelationshipEdge> subgraph = new DefaultDirectedGraph<>(RelationshipEdge.class);
+
+        List<Vertex> withinDiameter=new ArrayList<>();
+
+        // Define a HashMap to store visited vertices
+        HashMap<String,Integer> visited=new HashMap<>();
+
+        // Create a queue for BFS
+        LinkedList<DataVertex> queue = new LinkedList<>();
+
+        // Mark the current node as visited with distance 0 and then enqueue it
+        visited.put(center.getVertexURI(),0);
+        queue.add(center);
+        // Store the center as the node within the diameter
+        withinDiameter.add(center);
+        //temp variables
+        DataVertex v,w;
+
+        while (queue.size() != 0)
+        {
+            // Dequeue a vertex from queue and get its distance
+            v = queue.poll();
+            int distance=visited.get(v.getVertexURI());
+
+            // Outgoing edges
+            for (RelationshipEdge edge : graph.outgoingEdgesOf(v)) {
+
+                if (!edgeLabels.contains(edge.getLabel())) continue;
+
+                boolean skip = true;
+                for (RelationshipEdge patternEdge: edgeSet) {
+                    if (edge.getLabel().equals(patternEdge.getLabel())
+                            && edge.getSource().getTypes().contains(patternEdge.getSource().getTypes().iterator().next())
+                            && edge.getTarget().getTypes().contains(patternEdge.getTarget().getTypes().iterator().next())) {
+                        skip = false;
+                        break;
+                    }
+                }
+                if (skip) continue;
+
+                w = (DataVertex) edge.getTarget();
+
+                // Check if the vertex is not visited
+                if (!visited.containsKey(w.getVertexURI())) {
+
+                    // Check if the vertex is within the diameter
+                    if (distance + 1 <= diameter) {
+
+                        //Enqueue the vertex and add it to the visited set
+                        visited.put(w.getVertexURI(), distance + 1);
+                        queue.add(w);
+                        withinDiameter.add(w);
+                    }
+
+                }
+            }
+            // Incoming edges
+            for (RelationshipEdge edge : graph.incomingEdgesOf(v)) {
+
+                if (!edgeLabels.contains(edge.getLabel())) continue;
+
+                boolean skip = true;
+                for (RelationshipEdge patternEdge: edgeSet) {
+                    if (edge.getLabel().equals(patternEdge.getLabel())
+                            && edge.getSource().getTypes().contains(patternEdge.getSource().getTypes().iterator().next())
+                            && edge.getTarget().getTypes().contains(patternEdge.getTarget().getTypes().iterator().next())) {
+                        skip = false;
+                        break;
+                    }
+                }
+                if (skip) continue;
+
+
+                w = (DataVertex) edge.getSource();
+
+                // Check if the vertex is not visited
+                if (!visited.containsKey(w.getVertexURI())) {
+
+                    // Check if the vertex is within the diameter
+                    if (distance + 1 <= diameter) {
+
+                        //Enqueue the vertex and add it to the visited set
+                        visited.put(w.getVertexURI(), distance + 1);
+                        queue.add(w);
+                        withinDiameter.add(w);
+                    }
+
+                }
+            }
+        }
+        for (Vertex vertex:withinDiameter) {
+            subgraph.addVertex(vertex);
+        }
+        for (Vertex source:withinDiameter) {
+            for (RelationshipEdge e:graph.outgoingEdgesOf(source)) {
+                DataVertex target=(DataVertex)e.getTarget();
+                if(visited.containsKey(target.getVertexURI()))
+                    subgraph.addEdge(e.getSource(),e.getTarget(),e);
+            }
+        }
+        return subgraph;
+    }
 }
