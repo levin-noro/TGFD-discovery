@@ -387,11 +387,18 @@ public class TgfdDiscovery {
 	}
 
 	private void getMatchesUsingCenterVerticesForK1 (ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+		Set<String> edgeLabels = patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
+		List<Set<String>> vertexTypesSets = patternTreeNode.getGraph().vertexSet().stream().map(Vertex::getTypes).collect(Collectors.toList());
+		Set<String> vertexTypes = new HashSet<>();
+		for (Set<String> vertexTypesSet: vertexTypesSets) {
+			vertexTypes.addAll(vertexTypesSet);
+		}
 		String sourceType = patternTreeNode.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
+		String targetType = patternTreeNode.getGraph().edgeSet().iterator().next().getTarget().getTypes().iterator().next();
 		HashSet<String> entityURIs = new HashSet<>();
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
 		System.out.println("Center vertex type: "+centerVertexType);
-		ArrayList<ArrayList<DataVertex>> matchesOfCenterVertex = null;
+		ArrayList<ArrayList<DataVertex>> matchesOfCenterVertex;
 		if (patternTreeNode.getCenterVertexParent() != null) {
 			matchesOfCenterVertex = patternTreeNode.getCenterVertexParent().getMatchesOfCenterVertices();
 		} else {
@@ -409,9 +416,9 @@ public class TgfdDiscovery {
 				ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
 				Set<RelationshipEdge> edgeSet;
 				if (centerVertexType.equals(sourceType)) {
-					edgeSet = graphs.get(year).getGraph().getGraph().outgoingEdgesOf(dataVertex);
+					edgeSet = graphs.get(year).getGraph().getGraph().outgoingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getTarget().getTypes().contains(targetType)).collect(Collectors.toSet());
 				} else {
-					edgeSet = graphs.get(year).getGraph().getGraph().incomingEdgesOf(dataVertex);
+					edgeSet = graphs.get(year).getGraph().getGraph().incomingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getTarget().getTypes().contains(sourceType)).collect(Collectors.toSet());
 				}
 				int numOfMatchesForCenterVertex = extractMatches(edgeSet, matches, patternTreeNode, entityURIs);
 				if (numOfMatchesForCenterVertex > 0) { // equivalent to results.isomorphismExists()
@@ -437,6 +444,12 @@ public class TgfdDiscovery {
 		if (this.getCurrentVSpawnLevel() == 1) {
 			getMatchesUsingCenterVerticesForK1(graphs, patternTreeNode, matchesPerTimestamps);
 			return;
+		}
+		Set<String> edgeLabels = patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
+		List<Set<String>> vertexTypesSets = patternTreeNode.getGraph().vertexSet().stream().map(Vertex::getTypes).collect(Collectors.toList());
+		Set<String> vertexTypes = new HashSet<>();
+		for (Set<String> vertexTypesSet: vertexTypesSets) {
+			vertexTypes.addAll(vertexTypesSet);
 		}
 		HashSet<String> entityURIs = new HashSet<>();
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
