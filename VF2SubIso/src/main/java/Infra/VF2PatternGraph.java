@@ -13,7 +13,7 @@ public class VF2PatternGraph {
 
     private int diameter;
 
-    private String centerVertexType="";
+    public String centerVertexType="";
 
     public VF2PatternGraph(int diameter)
     {
@@ -57,13 +57,10 @@ public class VF2PatternGraph {
 
     public String getCenterVertexType()
     {
-        if(!centerVertexType.equals(""))
-            return centerVertexType;
-        else
-        {
+        if(centerVertexType.equals("")) {
             findCenterNode();
-            return centerVertexType;
         }
+        return centerVertexType;
     }
 
     public int getSize()
@@ -73,7 +70,13 @@ public class VF2PatternGraph {
 
     private void findCenterNode()
     {
+        if (this.pattern.vertexSet().size() == 1) {
+            this.centerVertexType = this.pattern.vertexSet().stream().iterator().next().getTypes().stream().iterator().next();
+            this.diameter = 0;
+            return;
+        }
         int patternDiameter=0;
+        int patternRadius = this.pattern.vertexSet().size();
         Vertex centerNode=null;
         for (Vertex v:this.pattern.vertexSet()) {
             // Define a HashMap to store visited vertices
@@ -137,7 +140,10 @@ public class VF2PatternGraph {
             if(d>patternDiameter)
             {
                 patternDiameter=d;
-                centerNode=v;
+            }
+            if (d < patternRadius) {
+                patternRadius = d;
+                centerNode = v;
             }
         }
         if(!centerNode.getTypes().isEmpty())
