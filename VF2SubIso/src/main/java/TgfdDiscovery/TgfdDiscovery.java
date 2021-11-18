@@ -418,7 +418,7 @@ public class TgfdDiscovery {
 				if (centerVertexType.equals(sourceType)) {
 					edgeSet = graphs.get(year).getGraph().getGraph().outgoingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getTarget().getTypes().contains(targetType)).collect(Collectors.toSet());
 				} else {
-					edgeSet = graphs.get(year).getGraph().getGraph().incomingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getTarget().getTypes().contains(sourceType)).collect(Collectors.toSet());
+					edgeSet = graphs.get(year).getGraph().getGraph().incomingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getSource().getTypes().contains(sourceType)).collect(Collectors.toSet());
 				}
 				int numOfMatchesForCenterVertex = extractMatches(edgeSet, matches, patternTreeNode, entityURIs);
 				if (numOfMatchesForCenterVertex > 0) { // equivalent to results.isomorphismExists()
