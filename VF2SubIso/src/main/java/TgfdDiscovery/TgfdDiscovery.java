@@ -497,13 +497,10 @@ public class TgfdDiscovery {
 		calculatePatternSupport(entityURIs.size(), patternTreeNode);
 	}
 
-	private void printSupportStatistics() {
-		System.out.println("----------------Statistics for vSpawn level "+ this.getCurrentVSpawnLevel() +"-----------------");
+	private void printHistogramStatistics() {
+		System.out.println("----------------Statistics for Histogram-----------------");
 		Collections.sort(this.vertexSupportsList);
 		Collections.sort(this.edgeSupportsList);
-		Collections.sort(this.patternSupportsList);
-		Collections.sort(this.constantTgfdSupportsList);
-		Collections.sort(this.generalTgfdSupportsList);
 		float medianVertexSupport = 0;
 		if (this.vertexSupportsList.size() > 0) {
 			medianVertexSupport = this.vertexSupportsList.size() % 2 != 0 ? this.vertexSupportsList.get(this.vertexSupportsList.size() / 2) : ((this.vertexSupportsList.get(this.vertexSupportsList.size() / 2) + this.vertexSupportsList.get(this.vertexSupportsList.size() / 2 - 1)) / 2);
@@ -512,6 +509,17 @@ public class TgfdDiscovery {
 		if (this.edgeSupportsList.size() > 0) {
 			medianEdgeSupport = this.edgeSupportsList.size() % 2 != 0 ? this.edgeSupportsList.get(this.edgeSupportsList.size() / 2) : ((this.edgeSupportsList.get(this.edgeSupportsList.size() / 2) + this.edgeSupportsList.get(this.edgeSupportsList.size() / 2 - 1)) / 2);
 		}
+		System.out.println("Median Vertex Support: " + medianVertexSupport);
+		System.out.println("Median Edge Support: " + medianEdgeSupport);
+	}
+
+	private void printSupportStatistics() {
+		System.out.println("----------------Statistics for vSpawn level "+ this.getCurrentVSpawnLevel() +"-----------------");
+
+		Collections.sort(this.patternSupportsList);
+		Collections.sort(this.constantTgfdSupportsList);
+		Collections.sort(this.generalTgfdSupportsList);
+
 		float patternSupportsList = 0;
 		if (this.patternSupportsList.size() > 0) {
 			patternSupportsList = this.patternSupportsList.size() % 2 != 0 ? this.patternSupportsList.get(this.patternSupportsList.size() / 2) : ((this.patternSupportsList.get(this.patternSupportsList.size() / 2) + this.patternSupportsList.get(this.patternSupportsList.size() / 2 - 1)) / 2);
@@ -524,8 +532,7 @@ public class TgfdDiscovery {
 		if (this.generalTgfdSupportsList.size() > 0) {
 			generalTgfdSupportsList = this.generalTgfdSupportsList.size() % 2 != 0 ? this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2) : ((this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2) + this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2 - 1)) / 2);
 		}
-		System.out.println("Median Vertex Support: " + medianVertexSupport);
-		System.out.println("Median Edge Support: " + medianEdgeSupport);
+
 		System.out.println("Median Pattern Support: " + patternSupportsList);
 		System.out.println("Median Constant TGFD Support: " + constantTgfdSupportsList);
 		System.out.println("Median General TGFD Support: " + generalTgfdSupportsList);
@@ -545,24 +552,38 @@ public class TgfdDiscovery {
 
 	public void computeVertexHistogram(ArrayList<GraphLoader> graphs) {
 
-		System.out.println("Computing Node Histogram");
+		System.out.println("Computing Vertex Histogram");
 
 		Map<String, Integer> vertexTypesHistogram = new HashMap<>();
 		Map<String, Set<String>> tempVertexAttrFreqMap = new HashMap<>();
-		Map<String, String> vertexNameToTypeMap = new HashMap<>();
+
+		Map<String, Set<String>> attrDistributionMap = new HashMap<>();
 
 		for (GraphLoader graph: graphs) {
 			int numOfVertices = 0;
+			int numOfAttributes = 0;
 			for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
+
 				numOfVertices++;
 				for (String vertexType : v.getTypes()) {
-					String vertexName = v.getAttributeValueByName("uri");
 					vertexTypesHistogram.merge(vertexType, 1, Integer::sum);
 					tempVertexAttrFreqMap.putIfAbsent(vertexType, new HashSet<>());
-					vertexNameToTypeMap.putIfAbsent(vertexName, vertexType); // Every vertex only has one type?
+
+					for (String attrName: v.getAllAttributesNames()) {
+						if (attrName.equals("uri")) continue;
+						numOfAttributes++;
+						if (tempVertexAttrFreqMap.containsKey(vertexType)) {
+							tempVertexAttrFreqMap.get(vertexType).add(attrName);
+						}
+						if (!attrDistributionMap.containsKey(attrName)) {
+							attrDistributionMap.put(attrName, new HashSet<>());
+						}
+						attrDistributionMap.get(attrName).add(vertexType);
+					}
 				}
 			}
 			System.out.println("Number of vertices in graph: " + numOfVertices);
+			System.out.println("Number of attributes in graph: " + numOfAttributes);
 		}
 
 		this.NUM_OF_VERTICES_IN_GRAPH = 0;
@@ -573,39 +594,6 @@ public class TgfdDiscovery {
 		System.out.println("Number of vertex types across all graphs: " + vertexTypesHistogram.size());
 
 		getSortedFrequentVertexTypesHistogram(vertexTypesHistogram);
-
-		computeAttrHistogram(graphs, vertexNameToTypeMap, tempVertexAttrFreqMap);
-		computeEdgeHistogram(graphs, vertexNameToTypeMap, vertexTypesHistogram);
-
-	}
-
-	public void computeAttrHistogram(ArrayList<GraphLoader> graphs, Map<String, String> nodesRecord, Map<String, Set<String>> tempVertexAttrFreqMap) {
-		System.out.println("Computing attributes histogram");
-
-		Map<String, Set<String>> attrDistributionMap = new HashMap<>();
-
-		for (GraphLoader graph: graphs) {
-			int numOfAttributes = 0;
-			for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
-				String vertexName = v.getAttributeValueByName("uri");
-				if (nodesRecord.get(vertexName) != null) {
-					String vertexType = nodesRecord.get(vertexName);
-					for (String attrName: v.getAllAttributesNames()) {
-						if (attrName.equals("uri")) continue;
-						numOfAttributes++;
-						if (tempVertexAttrFreqMap.containsKey(vertexType)) {
-							tempVertexAttrFreqMap.get(vertexType).add(attrName);
-						}
-						if (!attrDistributionMap.containsKey(attrName)) {
-							attrDistributionMap.put(attrName, new HashSet<>());
-						} else {
-							attrDistributionMap.get(attrName).add(vertexType);
-						}
-					}
-				}
-			}
-			System.out.println("Number of attributes in graph: " + numOfAttributes);
-		}
 
 		ArrayList<Entry<String,Set<String>>> sortedAttrDistributionMap = new ArrayList<>(attrDistributionMap.entrySet());
 		sortedAttrDistributionMap.sort((o1, o2) -> o2.getValue().size() - o1.getValue().size());
@@ -627,9 +615,12 @@ public class TgfdDiscovery {
 		}
 
 		this.vertexTypesAttributes = vertexTypesAttributes;
+
+		computeEdgeHistogram(graphs, vertexTypesHistogram);
+
 	}
 
-	public void computeEdgeHistogram(ArrayList<GraphLoader> graphs, Map<String, String> nodesRecord, Map<String, Integer> vertexTypesHistogram) {
+	public void computeEdgeHistogram(ArrayList<GraphLoader> graphs, Map<String, Integer> vertexTypesHistogram) {
 		System.out.println("Computing edges histogram");
 
 		Map<String, Integer> edgeTypesHistogram = new HashMap<>();
@@ -638,12 +629,14 @@ public class TgfdDiscovery {
 			int numOfEdges = 0;
 			for (RelationshipEdge e: graph.getGraph().getGraph().edgeSet()) {
 				numOfEdges++;
-				String subjectName = e.getSource().getAttributeValueByName("uri");
+				Vertex sourceVertex = e.getSource();
 				String predicateName = e.getLabel();
-				String objectName = e.getTarget().getAttributeValueByName("uri");
-				if (nodesRecord.get(subjectName) != null && nodesRecord.get(objectName) != null) {
-					String uniqueEdge = nodesRecord.get(subjectName) + " " + predicateName + " " + nodesRecord.get(objectName);
-					edgeTypesHistogram.merge(uniqueEdge, 1, Integer::sum);
+				Vertex objectVertex = e.getTarget();
+				for (String subjectVertexType: sourceVertex.getTypes()) {
+					for (String objectVertexType: objectVertex.getTypes()) {
+						String uniqueEdge = subjectVertexType + " " + predicateName + " " + objectVertexType;
+						edgeTypesHistogram.merge(uniqueEdge, 1, Integer::sum);
+					}
 				}
 			}
 			System.out.println("Number of edges in graph: " + numOfEdges);
@@ -665,12 +658,7 @@ public class TgfdDiscovery {
 			this.sortedVertexHistogram = sortedVertexTypesHistogram;
 			return;
 		}
-		sortedVertexTypesHistogram.sort(new Comparator<Entry<String, Integer>>() {
-			@Override
-			public int compare(Entry<String, Integer> o1, Entry<String, Integer> o2) {
-				return o2.getValue() - o1.getValue();
-			}
-		});
+		sortedVertexTypesHistogram.sort((o1, o2) -> o2.getValue() - o1.getValue());
 		int size = 0;
 		for (Entry<String, Integer> entry : sortedVertexTypesHistogram) {
 			this.vertexHistogram.put(entry.getKey(),entry.getValue());
@@ -697,12 +685,7 @@ public class TgfdDiscovery {
 			}
 			return sortedEdgesHist;
 		}
-		sortedEdgesHist.sort(new Comparator<Entry<String, Integer>>() {
-			@Override
-			public int compare(Entry<String, Integer> o1, Entry<String, Integer> o2) {
-				return o2.getValue() - o1.getValue();
-			}
-		});
+		sortedEdgesHist.sort((o1, o2) -> o2.getValue() - o1.getValue());
 		int size = 0;
 		for (Entry<String, Integer> entry : sortedEdgesHist) {
 			float edgeSupport = (float) entry.getValue() / this.NUM_OF_EDGES_IN_GRAPH;
@@ -724,6 +707,7 @@ public class TgfdDiscovery {
 	public void histogram(ArrayList<GraphLoader> graphs) {
 		computeVertexHistogram(graphs);
 		printHistogram();
+		printHistogramStatistics();
 	}
 
 	public void printHistogram() {
@@ -1941,9 +1925,9 @@ public class TgfdDiscovery {
 		ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertex = new ArrayList<>(3);
 		for (int year = 0; year < this.getNumOfSnapshots(); year++) {
 			ArrayList<DataVertex> matchesInThisTimestamp = new ArrayList<>();
-			for (Vertex matchedVertex : graphs.get(year).getGraph().getGraph().vertexSet()) {
-				if (matchedVertex.getTypes().iterator().next().equals(patternVertexType)) {
-					DataVertex dataVertex = (DataVertex) matchedVertex;
+			for (Vertex vertex : graphs.get(year).getGraph().getGraph().vertexSet()) {
+				if (vertex.getTypes().contains(patternVertexType)) {
+					DataVertex dataVertex = (DataVertex) vertex;
 					matchesInThisTimestamp.add(dataVertex);
 				}
 			}
@@ -1960,12 +1944,12 @@ public class TgfdDiscovery {
 		int numOfMatches = 0;
 		for (RelationshipEdge edge: edgeSet) {
 			String matchedEdgeLabel = edge.getLabel();
-			String matchedSourceVertexType = edge.getSource().getTypes().iterator().next();
-			String matchedTargetVertexType = edge.getTarget().getTypes().iterator().next();
-			if (matchedEdgeLabel.equals(patternEdgeLabel) && sourceVertexType.equals(matchedSourceVertexType) && targetVertexType.equals(matchedTargetVertexType)) {
+			Set<String> matchedSourceVertexType = edge.getSource().getTypes();
+			Set<String> matchedTargetVertexType = edge.getTarget().getTypes();
+			if (matchedEdgeLabel.equals(patternEdgeLabel) && matchedSourceVertexType.contains(sourceVertexType) && matchedTargetVertexType.contains(targetVertexType)) {
 				numOfMatches++;
 				HashSet<ConstantLiteral> match = new HashSet<>();
-				extractMatch(edge.getSource(), edge.getTarget(), patternTreeNode, match, entityURIs);
+				extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, patternTreeNode, match, entityURIs);
 				if (match.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
 				matches.add(match);
 			}
@@ -2033,10 +2017,11 @@ public class TgfdDiscovery {
 		for (Vertex v : patternTreeNode.getGraph().vertexSet()) {
 			Vertex currentMatchedVertex = result.getVertexCorrespondence(v, false);
 			if (currentMatchedVertex == null) continue;
+			String patternVertexType = v.getTypes().iterator().next();
 			if (entityURI == null) {
-				entityURI = extractAttributes(patternTreeNode, match, currentMatchedVertex);
+				entityURI = extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
 			} else {
-				extractAttributes(patternTreeNode, match, currentMatchedVertex);
+				extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
 			}
 		}
 		if (entityURI != null && match.size() > patternTreeNode.getGraph().vertexSet().size()) {
@@ -2044,13 +2029,17 @@ public class TgfdDiscovery {
 		}
 	}
 
-	private void extractMatch(Vertex currentSourceVertex, Vertex currentTargetVertex, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, HashSet<String> entityURIs) {
+	private void extractMatch(Vertex currentSourceVertex, String sourceVertexType, Vertex currentTargetVertex, String targetVertexType, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, HashSet<String> entityURIs) {
 		String entityURI = null;
-		for (Vertex currentMatchedVertex: Arrays.asList(currentSourceVertex, currentTargetVertex)) {
+		List<String> patternVerticesTypes = Arrays.asList(sourceVertexType, targetVertexType);
+		List<Vertex> vertices = Arrays.asList(currentSourceVertex, currentTargetVertex);
+		for (int index = 0; index < vertices.size(); index++) {
+			Vertex currentMatchedVertex = vertices.get(index);
+			String patternVertexType = patternVerticesTypes.get(index);
 			if (entityURI == null) {
-				entityURI = extractAttributes(patternTreeNode, match, currentMatchedVertex);
+				entityURI = extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
 			} else {
-				extractAttributes(patternTreeNode, match, currentMatchedVertex);
+				extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
 			}
 		}
 		if (entityURI != null && match.size() > patternTreeNode.getGraph().vertexSet().size()) {
@@ -2058,14 +2047,14 @@ public class TgfdDiscovery {
 		}
 	}
 
-	private String extractAttributes(PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, Vertex currentMatchedVertex) {
+	private String extractAttributes(PatternTreeNode patternTreeNode, String patternVertexType, HashSet<ConstantLiteral> match, Vertex currentMatchedVertex) {
 		String entityURI = null;
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
-		String patternVertexType = new ArrayList<>(currentMatchedVertex.getTypes()).get(0);
+		Set<String> matchedVertexTypes = currentMatchedVertex.getTypes();
 		for (ConstantLiteral activeAttribute : getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(),true)) {
-			if (!activeAttribute.getVertexType().equals(patternVertexType)) continue;
+			if (!matchedVertexTypes.contains(activeAttribute.getVertexType())) continue;
 			for (String matchedAttrName : currentMatchedVertex.getAllAttributesNames()) {
-				if (patternVertexType.equals(centerVertexType) && matchedAttrName.equals("uri")) {
+				if (matchedVertexTypes.contains(centerVertexType) && matchedAttrName.equals("uri")) {
 					entityURI = currentMatchedVertex.getAttributeValueByName(matchedAttrName);
 				}
 				if (!activeAttribute.getAttrName().equals(matchedAttrName)) continue;
