@@ -1126,8 +1126,9 @@ public class TgfdDiscovery {
 				System.out.println(entry.getKey() + ":" + entry.getValue());
 			}
 
-			ArrayList<Pair> candidateDeltas = new ArrayList<>();
-			if (attrValuesTimestampsSortedByFreq.size() == 1) {
+            System.out.println("Computing candidate delta for RHS value...\n" + attrValuesTimestampsSortedByFreq.get(0).getKey());
+            ArrayList<Pair> candidateDeltas = new ArrayList<>();
+            if (attrValuesTimestampsSortedByFreq.size() == 1) {
 				List<Integer> timestamps = attrValuesTimestampsSortedByFreq.get(0).getValue();
 				int minDistance = this.getNumOfSnapshots() - 1;
 				int maxDistance = timestamps.get(timestamps.size() - 1) - timestamps.get(0);
@@ -1140,29 +1141,24 @@ public class TgfdDiscovery {
 				}
 				candidateDeltas.add(new Pair(minDistance, maxDistance));
 			} else if (attrValuesTimestampsSortedByFreq.size() > 1) {
-				int minExclusionDistance = this.getNumOfSnapshots() - 1;
+				List<Integer> mostFreqTimestamps = attrValuesTimestampsSortedByFreq.get(0).getValue();
+				int minExclusionDistance = this.numOfSnapshots - 1;
 				int maxExclusionDistance = 0;
-				ArrayList<Integer> distances = new ArrayList<>();
-				int l1 = attrValuesTimestampsSortedByFreq.get(0).getValue().get(0);
-				int u1 = attrValuesTimestampsSortedByFreq.get(0).getValue().get(attrValuesTimestampsSortedByFreq.get(0).getValue().size() - 1);
-				for (int index = 1; index < attrValuesTimestampsSortedByFreq.size(); index++) {
-					int l2 = attrValuesTimestampsSortedByFreq.get(index).getValue().get(0);
-					int u2 = attrValuesTimestampsSortedByFreq.get(index).getValue().get(attrValuesTimestampsSortedByFreq.get(index).getValue().size() - 1);
-					distances.add(Math.abs(u2 - l1));
-					distances.add(Math.abs(u1 - l2));
+				for (Map.Entry<ConstantLiteral, List<Integer>> otherTimestamps : attrValuesTimestampsSortedByFreq.subList(1,attrValuesTimestampsSortedByFreq.size())) {
+					for (Integer timestamp: otherTimestamps.getValue()) {
+						for (Integer refTimestamp: mostFreqTimestamps) {
+							int distance = Math.abs(timestamp - refTimestamp);
+							minExclusionDistance = Math.min(minExclusionDistance, distance);
+							maxExclusionDistance = Math.max(maxExclusionDistance, distance);
+						}
+					}
+					if (minExclusionDistance == 0 && maxExclusionDistance == (this.numOfSnapshots-1)) break;
 				}
-				for (int index = 0; index < distances.size(); index++) {
-					minExclusionDistance = Math.min(minExclusionDistance, distances.get(index));
-					maxExclusionDistance = Math.max(maxExclusionDistance, distances.get(index));
-				}
-
 				if (minExclusionDistance > 0) {
-					Pair deltaPair = new Pair(0, minExclusionDistance - 1);
-					candidateDeltas.add(deltaPair);
+					candidateDeltas.add(new Pair(0, minExclusionDistance-1));
 				}
-				if (maxExclusionDistance < this.getNumOfSnapshots() - 1) {
-					Pair deltaPair = new Pair(maxExclusionDistance + 1, this.getNumOfSnapshots() - 1);
-					candidateDeltas.add(deltaPair);
+				if (maxExclusionDistance < this.numOfSnapshots-1) {
+					candidateDeltas.add(new Pair(maxExclusionDistance+1, this.numOfSnapshots-1));
 				}
 			}
 			if (candidateDeltas.size() == 0) {
@@ -1175,15 +1171,15 @@ public class TgfdDiscovery {
 			float candidateTGFDsupport = 0;
 			Pair mostSupportedDelta = null;
 			TreeSet<Pair> mostSupportedSatisfyingPairs = null;
+			float denominator = 2 * entities.size() * this.getNumOfSnapshots();
 			for (Pair candidateDelta : candidateDeltas) {
 				int minDistance = candidateDelta.min();
 				int maxDistance = candidateDelta.max();
 				if (minDistance <= maxDistance) {
 					System.out.println("Calculating support for candidate delta ("+minDistance+","+maxDistance+")");
-					float numer;
-					float denom = 2 * entities.size() * this.getNumOfSnapshots();
+					float numerator;
 					List<Integer> timestamps = attrValuesTimestampsSortedByFreq.get(0).getValue();
-					TreeSet<Pair> satisfyingPairs = new TreeSet<Pair>();
+					TreeSet<Pair> satisfyingPairs = new TreeSet<>();
 					for (int index = 0; index < timestamps.size() - 1; index++) {
 						for (int j = index + 1; j < timestamps.size(); j++) {
 							if (timestamps.get(j) - timestamps.get(index) >= minDistance && timestamps.get(j) - timestamps.get(index) <= maxDistance) {
@@ -1194,8 +1190,8 @@ public class TgfdDiscovery {
 
 					System.out.println("Satisfying pairs: " + satisfyingPairs);
 
-					numer = satisfyingPairs.size();
-					float candidateSupport = numer / denom;
+					numerator = satisfyingPairs.size();
+					float candidateSupport = numerator / denominator;
 
 					if (candidateSupport > candidateTGFDsupport) {
 						candidateTGFDsupport = candidateSupport;
@@ -1210,7 +1206,7 @@ public class TgfdDiscovery {
 			}
 			System.out.println("Entity satisfying attributes:" + mostSupportedSatisfyingPairs);
 			System.out.println("Entity delta = " + mostSupportedDelta);
-			System.out.println("Entity support = " + candidateTGFDsupport);
+			System.out.println("Entity support : "+mostSupportedSatisfyingPairs.size()+"/"+denominator+" = " + candidateTGFDsupport);
 
 			// All entities are considered in general TGFD, regardless of their support
 			if (!deltaToPairsMap.containsKey(mostSupportedDelta)) {
