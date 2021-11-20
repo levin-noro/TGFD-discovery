@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 
 public class TgfdDiscovery {
 	public static final int DEFAULT_NUM_OF_SNAPSHOTS = 3;
+	public static long SUPER_VERTEX_DEGREE = 25;
 	private int numOfSnapshots;
 	public static final double DEFAULT_PATTERN_SUPPORT_THRESHOLD = 0.001;
 	public static final int DEFAULT_GAMMA = 20;
@@ -559,6 +560,8 @@ public class TgfdDiscovery {
 
 		Map<String, Set<String>> attrDistributionMap = new HashMap<>();
 
+		Map<String, List<Integer>> vertexTypesToInDegreesMap = new HashMap<>();
+
 		for (GraphLoader graph: graphs) {
 			int numOfVertices = 0;
 			int numOfAttributes = 0;
@@ -580,6 +583,14 @@ public class TgfdDiscovery {
 						}
 						attrDistributionMap.get(attrName).add(vertexType);
 					}
+				}
+
+				int inDegree = graph.getGraph().getGraph().incomingEdgesOf(v).size();
+				for (String vertexType: v.getTypes()) {
+					if (!vertexTypesToInDegreesMap.containsKey(vertexType)) {
+						vertexTypesToInDegreesMap.put(vertexType, new ArrayList<>());
+					}
+					vertexTypesToInDegreesMap.get(vertexType).add(inDegree);
 				}
 			}
 			System.out.println("Number of vertices in graph: " + numOfVertices);
@@ -615,6 +626,50 @@ public class TgfdDiscovery {
 		}
 
 		this.vertexTypesAttributes = vertexTypesAttributes;
+
+		System.out.println("Number of edges before collapsing super vertices...");
+		for (GraphLoader graph: graphs) {
+			System.out.println(graph.getGraph().getGraph().edgeSet().size());
+		}
+		// TO-DO: Is there a way to estimate a good value for SUPER_VERTEX_DEGREE for each run?
+		List<Long> listOfAverageDegreesAbove1 = new ArrayList<>();
+		for (Entry<String, List<Integer>> entry: vertexTypesToInDegreesMap.entrySet()) {
+			long averageDegree = Math.round(entry.getValue().stream().reduce(0, Integer::sum).doubleValue() / (double) entry.getValue().size());
+			if (averageDegree > 1) {
+				listOfAverageDegreesAbove1.add(averageDegree);
+			}
+		}
+		SUPER_VERTEX_DEGREE = Math.round(listOfAverageDegreesAbove1.stream().reduce(0L, Long::sum).doubleValue() / (double) listOfAverageDegreesAbove1.size());
+		System.out.println("Collapsing vertices with an in-degree above " + SUPER_VERTEX_DEGREE);
+		int numOfCollapsedSuperVertices = 0;
+		for (Entry<String, List<Integer>> entry: vertexTypesToInDegreesMap.entrySet()) {
+			String superVertexType = entry.getKey();
+			long averageDegree = Math.round(entry.getValue().stream().reduce(0, Integer::sum).doubleValue() / (double) entry.getValue().size());
+			if (averageDegree > SUPER_VERTEX_DEGREE) {
+				numOfCollapsedSuperVertices++;
+				for (GraphLoader graph: graphs) {
+					for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
+						if (v.getTypes().contains(superVertexType)) {
+							List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.getGraph().getGraph().incomingEdgesOf(v));
+							for (RelationshipEdge e: edgesToDelete) {
+								Vertex sourceVertex = e.getSource();
+								Map<String, Attribute> sourceVertexAttrMap = sourceVertex.getAllAttributesHashMap();
+								String newAttrName = e.getLabel();
+								if (sourceVertexAttrMap.containsKey(newAttrName)) {
+									newAttrName = e.getLabel() + "value";
+									if (!sourceVertexAttrMap.containsKey(newAttrName)) {
+										sourceVertex.addAttribute(newAttrName, v.getAttributeValueByName("uri"));
+									}
+								}
+								graph.getGraph().getGraph().removeEdge(e);
+							}
+						}
+					}
+				}
+				System.out.println("Collapesed super vertex "+superVertexType);
+			}
+		}
+		System.out.println("Number of super vertices collapsed: "+numOfCollapsedSuperVertices);
 
 		computeEdgeHistogram(graphs, vertexTypesHistogram);
 
