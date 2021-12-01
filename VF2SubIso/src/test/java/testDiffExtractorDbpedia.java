@@ -1,41 +1,70 @@
+import Infra.TGFD;
 import TgfdDiscovery.TgfdDiscovery;
 import changeExploration.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphLoader.DBPediaLoader;
-import Infra.TGFD;
-import graphLoader.GraphLoader;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.Options;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import util.Config;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class testDiffExtractorDbpedia {
 
+    public static double PERCENT = 0.05;
+
     public static void main(String []args) throws FileNotFoundException {
 
-        Long graphSize = args.length > 0 ? Long.valueOf(args[0]) : null;
-        String graphSizeStr = graphSize == null ? "" : "-"+ graphSize;
-        String str = "-t1 2015types"+graphSizeStr+".ttl\n" +
-                "-d1 2015literals"+graphSizeStr+".ttl\n" +
-                "-d1 2015objects"+graphSizeStr+".ttl\n" +
-                "-t2 2016types"+graphSizeStr+".ttl\n" +
-                "-d2 2016literals"+graphSizeStr+".ttl\n" +
-                "-d2 2016objects"+graphSizeStr+".ttl\n" +
-                "-t3 2017types"+graphSizeStr+".ttl\n" +
-                "-d3 2017literals"+graphSizeStr+".ttl\n" +
-                "-d3 2017objects"+graphSizeStr+".ttl\n" +
-                "-s1 2015-10-01\n" +
-                "-s2 2016-04-01\n" +
-                "-s3 2016-10-01\n" +
-                "-logcap 1,1,1";
+        Options options = TgfdDiscovery.initializeCmdOptions();
+        options.addOption("percent", true, "percentage of changes to keep");
+        CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
+
+        String path = null;
+        String graphSize = null;
+        if (cmd.hasOption("path")) {
+            path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
+            if (!Files.isDirectory(Path.of(path))) {
+                System.out.println(Path.of(path) + " is not a valid directory.");
+                return;
+            }
+            graphSize = Path.of(path).getFileName().toString();
+        }
+
+        if (cmd.hasOption("percent")) {
+            PERCENT = Double.parseDouble(cmd.getOptionValue("percent"));
+        }
+
+        assert path != null;
+        ArrayList<File> directories = new ArrayList<>(List.of(Objects.requireNonNull(new File(path).listFiles(File::isDirectory))));
+        directories.sort(Comparator.comparing(File::getName));
+        StringBuilder str = new StringBuilder();
+        int index = 1;
+        for (File directory: directories) {
+            str.append("-s"+index+" "+directory.getName()+"-01-01\n");
+            ArrayList<File> files = new ArrayList<>(List.of(Objects.requireNonNull(new File(directory.getPath()).listFiles(File::isFile))));
+            List<String> paths = files.stream().map(File::getPath).collect(Collectors.toList());
+            for (String filepath: paths) {
+                if (filepath.contains("types")) {
+                    str.append("-t"+index+" "+filepath+"\n");
+                } else {
+                    str.append("-d"+index+" "+filepath+"\n");
+                }
+            }
+            index++;
+        }
+        str.append("-logcap 1,1,1");
+
         try {
             BufferedWriter writer = new BufferedWriter(new FileWriter("conf.txt"));
-            writer.write(str);
+            writer.write(str.toString());
             writer.close();
         } catch (IOException e) {
             e.printStackTrace();
