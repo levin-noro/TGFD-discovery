@@ -1,3 +1,4 @@
+import org.apache.commons.cli.*;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import org.apache.jena.rdf.model.Statement;
@@ -16,8 +17,25 @@ public class generateCustomDBpedia {
     public static final String OBJECTS = "objects";
 
     public static void main(String[] args) {
-//        generateCustomDBpediaBasedOnSize(args);
-        generateCustomDBpediaBasedOnType(args);
+        Options options = new Options();
+        options.addOption("type", true, "generate graphs using type");
+        options.addOption("count", true, "generate graphs based on vertex count");
+        CommandLineParser parser = new DefaultParser();
+        CommandLine cmd = null;
+        try {
+            cmd = parser.parse(options, args);
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+        assert cmd != null;
+        if (cmd.hasOption("type")) {
+            String[] numOfTypes = cmd.getOptionValue("type").split(",");
+            generateCustomDBpediaBasedOnType(numOfTypes);
+        }
+        if (cmd.hasOption("count")) {
+            String[] sizes = cmd.getOptionValue("count").split(",");
+            generateCustomDBpediaBasedOnSize(sizes);
+        }
     }
 
     public static void generateCustomDBpediaBasedOnType(String[] args) {
@@ -35,7 +53,7 @@ public class generateCustomDBpedia {
 
         for (int i = 0; i < 3; i++) {
             for (String fileType : fileTypes) {
-                String fileName = "201" + (i+5) + fileType + ".ttl";
+                String fileName = "dbpedia/201"+ (i+5) + "/201" + (i+5) + fileType + ".ttl";
                 System.out.println("Processing " + fileName);
                 Path input = Paths.get(fileName);
                 switch (fileType) {
@@ -184,7 +202,7 @@ public class generateCustomDBpedia {
             HashSet<String> vertexSet = new HashSet<>();
             for (String fileType : fileTypes) {
                 Model model = ModelFactory.createDefaultModel();
-                String fileName = "201" + i + fileType + ".ttl";
+                String fileName = "dbpedia/201"+i+"/201"+i+fileType+".ttl";
                 System.out.println("Processing " + fileName);
                 Path input = Paths.get(fileName);
                 model.read(input.toUri().toString());
