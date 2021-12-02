@@ -74,11 +74,11 @@ public class TgfdDiscovery {
 	private List<Entry<String, Integer>> sortedEdgeHistogram; // freq edges come from here
 	private final HashMap<String, Integer> vertexHistogram = new HashMap<>();
 	private boolean noSupportPruning;
-	private ArrayList<Float> patternSupportsList = new ArrayList<>();
-	private ArrayList<Float> constantTgfdSupportsList = new ArrayList<>();
-	private ArrayList<Float> generalTgfdSupportsList = new ArrayList<>();
-	private final ArrayList<Float> vertexSupportsList = new ArrayList<>();
-	private final ArrayList<Float> edgeSupportsList = new ArrayList<>();
+	private ArrayList<Double> patternSupportsList = new ArrayList<>();
+	private ArrayList<Double> constantTgfdSupportsList = new ArrayList<>();
+	private ArrayList<Double> generalTgfdSupportsList = new ArrayList<>();
+	private final ArrayList<Double> vertexSupportsList = new ArrayList<>();
+	private final ArrayList<Double> edgeSupportsList = new ArrayList<>();
 	private long totalVisitedPathCheckingTime = 0;
 	private long totalMatchingTime = 0;
 	private long totalSupersetPathCheckingTime = 0;
@@ -522,11 +522,11 @@ public class TgfdDiscovery {
 		System.out.println("----------------Statistics for Histogram-----------------");
 		Collections.sort(this.vertexSupportsList);
 		Collections.sort(this.edgeSupportsList);
-		float medianVertexSupport = 0;
+		double medianVertexSupport = 0;
 		if (this.vertexSupportsList.size() > 0) {
 			medianVertexSupport = this.vertexSupportsList.size() % 2 != 0 ? this.vertexSupportsList.get(this.vertexSupportsList.size() / 2) : ((this.vertexSupportsList.get(this.vertexSupportsList.size() / 2) + this.vertexSupportsList.get(this.vertexSupportsList.size() / 2 - 1)) / 2);
 		}
-		float medianEdgeSupport = 0;
+		double medianEdgeSupport = 0;
 		if (this.edgeSupportsList.size() > 0) {
 			medianEdgeSupport = this.edgeSupportsList.size() % 2 != 0 ? this.edgeSupportsList.get(this.edgeSupportsList.size() / 2) : ((this.edgeSupportsList.get(this.edgeSupportsList.size() / 2) + this.edgeSupportsList.get(this.edgeSupportsList.size() / 2 - 1)) / 2);
 		}
@@ -541,15 +541,15 @@ public class TgfdDiscovery {
 		Collections.sort(this.constantTgfdSupportsList);
 		Collections.sort(this.generalTgfdSupportsList);
 
-		float patternSupportsList = 0;
+		double patternSupportsList = 0;
 		if (this.patternSupportsList.size() > 0) {
 			patternSupportsList = this.patternSupportsList.size() % 2 != 0 ? this.patternSupportsList.get(this.patternSupportsList.size() / 2) : ((this.patternSupportsList.get(this.patternSupportsList.size() / 2) + this.patternSupportsList.get(this.patternSupportsList.size() / 2 - 1)) / 2);
 		}
-		float constantTgfdSupportsList = 0;
+		double constantTgfdSupportsList = 0;
 		if (this.constantTgfdSupportsList.size() > 0) {
 			constantTgfdSupportsList = this.constantTgfdSupportsList.size() % 2 != 0 ? this.constantTgfdSupportsList.get(this.constantTgfdSupportsList.size() / 2) : ((this.constantTgfdSupportsList.get(this.constantTgfdSupportsList.size() / 2) + this.constantTgfdSupportsList.get(this.constantTgfdSupportsList.size() / 2 - 1)) / 2);
 		}
-		float generalTgfdSupportsList = 0;
+		double generalTgfdSupportsList = 0;
 		if (this.generalTgfdSupportsList.size() > 0) {
 			generalTgfdSupportsList = this.generalTgfdSupportsList.size() % 2 != 0 ? this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2) : ((this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2) + this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2 - 1)) / 2);
 		}
@@ -737,7 +737,7 @@ public class TgfdDiscovery {
 		int size = 0;
 		for (Entry<String, Integer> entry : sortedVertexTypesHistogram) {
 			this.vertexHistogram.put(entry.getKey(),entry.getValue());
-			float vertexSupport = (float) entry.getValue() / this.NUM_OF_VERTICES_IN_GRAPH;
+			double vertexSupport = (double) entry.getValue() / this.NUM_OF_VERTICES_IN_GRAPH;
 			this.vertexSupportsList.add(vertexSupport);
 			if (vertexSupport >= this.edgeSupportThreshold) {
 				size++;
@@ -763,7 +763,7 @@ public class TgfdDiscovery {
 		sortedEdgesHist.sort((o1, o2) -> o2.getValue() - o1.getValue());
 		int size = 0;
 		for (Entry<String, Integer> entry : sortedEdgesHist) {
-			float edgeSupport = (float) entry.getValue() / this.NUM_OF_EDGES_IN_GRAPH;
+			double edgeSupport = (double) entry.getValue() / (double) this.NUM_OF_EDGES_IN_GRAPH;
 			this.edgeSupportsList.add(edgeSupport);
 			if (edgeSupport >= this.edgeSupportThreshold) {
 				String[] edgeString = entry.getKey().split(" ");
@@ -1086,14 +1086,14 @@ public class TgfdDiscovery {
 			System.out.println("Calculating support for candidate general TGFD candidate delta: " + intersection.getKey());
 
 			// Compute general support
-			float denominator = 2 * entitiesSize * this.getNumOfSnapshots();
+			double denominator = 2 * entitiesSize * this.getNumOfSnapshots();
 
 			int numberOfSatisfyingPairs = intersection.getValue().size();
 
 			System.out.println("Number of satisfying pairs: " + numberOfSatisfyingPairs);
 			System.out.println("Satisfying pairs: " + intersection.getValue());
 
-			float support = numberOfSatisfyingPairs / denominator;
+			double support = numberOfSatisfyingPairs / denominator;
 			System.out.println("Candidate general TGFD support = " + numberOfSatisfyingPairs + "/" + denominator);
 			System.out.println("Candidate general TGFD support: " + support);
 			this.generalTgfdSupportsList.add(support);
@@ -1228,16 +1228,16 @@ public class TgfdDiscovery {
 
 			// Compute TGFD support
 			Delta candidateTGFDdelta;
-			float candidateTGFDsupport = 0;
+			double candidateTGFDsupport = 0;
 			Pair mostSupportedDelta = null;
 			TreeSet<Pair> mostSupportedSatisfyingPairs = null;
-			float denominator = 2 * entities.size() * this.getNumOfSnapshots();
+			double denominator = 2 * entities.size() * this.getNumOfSnapshots();
 			for (Pair candidateDelta : candidateDeltas) {
 				int minDistance = candidateDelta.min();
 				int maxDistance = candidateDelta.max();
 				if (minDistance <= maxDistance) {
 					System.out.println("Calculating support for candidate delta ("+minDistance+","+maxDistance+")");
-					float numerator;
+					double numerator;
 					List<Integer> timestamps = attrValuesTimestampsSortedByFreq.get(0).getValue();
 					TreeSet<Pair> satisfyingPairs = new TreeSet<>();
 					for (int index = 0; index < timestamps.size() - 1; index++) {
@@ -1251,7 +1251,7 @@ public class TgfdDiscovery {
 					System.out.println("Satisfying pairs: " + satisfyingPairs);
 
 					numerator = satisfyingPairs.size();
-					float candidateSupport = numerator / denominator;
+					double candidateSupport = numerator / denominator;
 
 					if (candidateSupport > candidateTGFDsupport) {
 						candidateTGFDsupport = candidateSupport;
@@ -2081,12 +2081,11 @@ public class TgfdDiscovery {
 	private void calculatePatternSupport(int numberOfEntitiesFound, PatternTreeNode patternTreeNode) {
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
 		System.out.println("Center vertex type: " + centerVertexType);
-		float s = this.vertexHistogram.get(centerVertexType);
-//		float numerator = numberOfEntitiesFound >= 2 ? CombinatoricsUtils.binomialCoefficient(numberOfEntitiesFound, 2) : numberOfEntitiesFound;
-		float numerator = 2 * numberOfEntitiesFound * this.getNumOfSnapshots();
-		float denominator = (2 * s * this.getNumOfSnapshots());
+		double s = this.vertexHistogram.get(centerVertexType);
+		double numerator = 2 * numberOfEntitiesFound * this.getNumOfSnapshots();
+		double denominator = (2 * s * this.getNumOfSnapshots());
 		assert numerator <= denominator;
-		float realPatternSupport = numerator / denominator;
+		double realPatternSupport = numerator / denominator;
 		System.out.println("Real Pattern Support: "+numerator+" / "+denominator+" = " + realPatternSupport);
 		patternTreeNode.setPatternSupport(realPatternSupport);
 		this.patternSupportsList.add(realPatternSupport);
