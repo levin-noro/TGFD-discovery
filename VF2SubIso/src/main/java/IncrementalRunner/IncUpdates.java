@@ -10,6 +10,10 @@ import java.util.*;
 
 public class IncUpdates {
 
+    public VF2DataGraph getBaseGraph() {
+        return baseGraph;
+    }
+
     private VF2DataGraph baseGraph;
     private VF2SubgraphIsomorphism VF2;
 
