@@ -23,6 +23,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.PrintStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -52,7 +53,7 @@ public class TgfdDiscovery {
 	public Map<String, HashSet<String>> vertexTypesAttributes; // freq attributes come from here
 	public PatternTree patternTree;
 	public boolean noMinimalityPruning;
-	public Long graphSize = null;
+	public String graphSize = null;
 	private final boolean interestingTGFDs;
 	private final int k;
 	private final double theta;
@@ -111,7 +112,7 @@ public class TgfdDiscovery {
 		}
 	}
 
-	public TgfdDiscovery(String experimentName, int k, double theta, int gamma, Long graphSize, double patternSupport, boolean noMinimalityPruning, boolean interestingTGFDsOnly, boolean useChangeFile, boolean noSupportPruning, boolean dontSortHistogram, boolean useSubgraph, boolean generatek0Tgfds, boolean skipK1) {
+	public TgfdDiscovery(String experimentName, int k, double theta, int gamma, String graphSize, double patternSupport, boolean noMinimalityPruning, boolean interestingTGFDsOnly, boolean useChangeFile, boolean noSupportPruning, boolean dontSortHistogram, boolean useSubgraph, boolean generatek0Tgfds, boolean skipK1) {
 		this.startTime = System.currentTimeMillis();
 		this.experimentName = experimentName;
 		this.k = k;
@@ -160,7 +161,7 @@ public class TgfdDiscovery {
 		options.addOption("changefile", false, "run experiment using changefiles instead of snapshots");
 		options.addOption("subgraph", false, "run experiment using incremental subgraphs instead of snapshots");
 		options.addOption("k0", false, "run experiment and generate tgfds for single-node patterns");
-		options.addOption("dataset", true, "run experiment using specified dataset");
+		options.addOption("loader", true, "run experiment using specified loader");
 		options.addOption("path", true, "path to dataset");
 		options.addOption("skipK1", false, "run experiment and generate tgfds for k > 1");
 		options.addOption("changeFileTest", false, "run experiment to test effectiveness of using changefiles");
@@ -247,17 +248,28 @@ public class TgfdDiscovery {
 			return;
 		}
 
-		String dataset;
-		if (!cmd.hasOption("dataset")) {
-			System.out.println("No dataset is specified.");
+		String path = null;
+		String graphSize = null;
+		if (cmd.hasOption("path")) {
+			path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
+			if (!Files.isDirectory(Path.of(path))) {
+				System.out.println(Path.of(path) + " is not a valid directory.");
+				return;
+			}
+			graphSize = Path.of(path).getFileName().toString();
+		}
+
+		String specifiedLoader;
+		if (!cmd.hasOption("loader")) {
+			System.out.println("No specifiedLoader is specified.");
 			return;
 		} else {
-			dataset = cmd.getOptionValue("dataset");
+			specifiedLoader = cmd.getOptionValue("loader");
 		}
 
 		String timeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
 
-		String experimentName = null;
+		String experimentName;
 		if (cmd.hasOption("name")) {
 			experimentName = cmd.getOptionValue("name");
 		} else  {
@@ -283,10 +295,6 @@ public class TgfdDiscovery {
 		boolean generatek0Tgfds = cmd.hasOption("k0");
 		boolean skipK1 = cmd.hasOption("skipK1");
 
-		Long graphSize = null;
-		if (cmd.getOptionValue("g") != null) {
-			graphSize = Long.parseLong(cmd.getOptionValue("g"));
-		}
 		int gamma = cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a"));
 		double theta = cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta"));
 		int k = cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k"));
@@ -295,24 +303,18 @@ public class TgfdDiscovery {
 		TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(experimentName, k, theta, gamma, graphSize, patternSupportThreshold, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds, skipK1);
 
 		ArrayList<GraphLoader> graphs;
-		if (dataset.equals("dbpedia")) {
-//			graphs = tgfdDiscovery.loadDBpediaSnapshots(graphSize);
-			if (cmd.hasOption("path")) {
-				graphs = tgfdDiscovery.loadDBpediaSnapshots2(cmd.getOptionValue("path"));
-			} else {
-				System.out.println("Invalid path dataset files.");
-				return;
-			}
+		if (specifiedLoader.equals("dbpedia")) {
+			graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(path);
 			final long histogramTime = System.currentTimeMillis();
 			tgfdDiscovery.histogram(graphs);
 			TgfdDiscovery.printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
-		} else if (dataset.equals("citation")) {
+		} else if (specifiedLoader.equals("citation")) {
 			graphs = tgfdDiscovery.loadCitationSnapshots(Arrays.asList("dblp_papers_v11.txt","dblp.v12.json","dblpv13.json"));
 			final long histogramTime = System.currentTimeMillis();
 			tgfdDiscovery.histogram(graphs);
 			TgfdDiscovery.printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
 		} else {
-			System.out.println("No dataset is specified.");
+			System.out.println("No specifiedLoader is specified.");
 			return;
 		}
 
@@ -370,6 +372,7 @@ public class TgfdDiscovery {
 			tgfdDiscovery.getTgfds().get(tgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
 		}
 		tgfdDiscovery.printTimeStatistics();
+		System.out.println("Total execution time: "+(System.currentTimeMillis() - startTime));
 	}
 
 	public void printTimeStatistics() {
@@ -423,9 +426,11 @@ public class TgfdDiscovery {
 			ArrayList<DataVertex> centerVertexMatchesInThisTimestamp = matchesOfCenterVertex.get(year);
 			newMatchesOfCenterVertex.add(new ArrayList<>());
 			int numOfMatchesInTimestamp = 0;
-			for (DataVertex dataVertex : centerVertexMatchesInThisTimestamp) {
+			for (int index = 0; index < centerVertexMatchesInThisTimestamp.size(); index++) {
+				DataVertex dataVertex = centerVertexMatchesInThisTimestamp.get(index);
 				ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
 				Set<RelationshipEdge> edgeSet;
+
 				if (centerVertexType.equals(sourceType)) {
 					edgeSet = graphs.get(year).getGraph().getGraph().outgoingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getTarget().getTypes().contains(targetType)).collect(Collectors.toSet());
 				} else {
@@ -437,6 +442,10 @@ public class TgfdDiscovery {
 					newMatchesOfCenterVertex.get(year).add(dataVertex);
 				}
 				numOfMatchesInTimestamp += numOfMatchesForCenterVertex;
+
+				if (centerVertexMatchesInThisTimestamp.size() >= 100000 && index % 100000 == 0) {
+					System.out.println("Processed " + index + "/" + centerVertexMatchesInThisTimestamp.size());
+				}
 			}
 			System.out.println("Number of matches found: " + numOfMatchesInTimestamp);
 			System.out.println("Number of matches found that contain active attributes: " + matchesSet.size());
@@ -457,11 +466,7 @@ public class TgfdDiscovery {
 			return;
 		}
 		Set<String> edgeLabels = patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
-		List<Set<String>> vertexTypesSets = patternTreeNode.getGraph().vertexSet().stream().map(Vertex::getTypes).collect(Collectors.toList());
-		Set<String> vertexTypes = new HashSet<>();
-		for (Set<String> vertexTypesSet: vertexTypesSets) {
-			vertexTypes.addAll(vertexTypesSet);
-		}
+
 		HashSet<String> entityURIs = new HashSet<>();
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
 		System.out.println("Center vertex type: "+centerVertexType);
@@ -482,16 +487,21 @@ public class TgfdDiscovery {
 			System.out.println("Number of center vertex matches in this timestamp from previous levels: "+centerVertexMatchesInThisTimestamp.size());
 			newMatchesOfCenterVertex.add(new ArrayList<>());
 			int numOfMatchesInTimestamp = 0;
-			for (DataVertex dataVertex: centerVertexMatchesInThisTimestamp) {
+			for (int index = 0; index < centerVertexMatchesInThisTimestamp.size(); index++) {
+				DataVertex dataVertex = centerVertexMatchesInThisTimestamp.get(index);
 				ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
 
-				Graph<Vertex, RelationshipEdge> subgraph = graphs.get(year).getGraph().getSubGraphWithinDiameter(dataVertex, diameter, edgeLabels, vertexTypes);
+				Graph<Vertex, RelationshipEdge> subgraph = graphs.get(year).getGraph().getSubGraphWithinDiameter(dataVertex, diameter, edgeLabels, patternTreeNode.getGraph().edgeSet());
 				VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(subgraph, patternTreeNode.getPattern(), false);
 				if (results.isomorphismExists()) {
 					int numOfMatchesForCenterVertex = extractMatches(results.getMappings(), matches, patternTreeNode, entityURIs);
 					matchesSet.addAll(matches);
 					newMatchesOfCenterVertex.get(year).add(dataVertex);
 					numOfMatchesInTimestamp += numOfMatchesForCenterVertex;
+				}
+
+				if (centerVertexMatchesInThisTimestamp.size() >= 100000 && index % 100000 == 0) {
+					System.out.println("Processed " + index + "/" + centerVertexMatchesInThisTimestamp.size());
 				}
 			}
 			System.out.println("Number of matches found: " + numOfMatchesInTimestamp);
@@ -950,6 +960,7 @@ public class TgfdDiscovery {
 			}
 			return tgfds;
 		}
+		System.out.println("Number of entities discovered: " + entities.size());
 
 		System.out.println("Discovering constant TGFDs");
 
@@ -1354,7 +1365,7 @@ public class TgfdDiscovery {
 		return graphs;
 	}
 
-	public ArrayList<GraphLoader> loadDBpediaSnapshots2(String path) {
+	public ArrayList<GraphLoader> loadDBpediaSnapshotsFromPath(String path) {
 		ArrayList<TGFD> dummyTGFDs = new ArrayList<>();
 		ArrayList<GraphLoader> graphs = new ArrayList<>();
 		ArrayList<File> directories = new ArrayList<>(List.of(Objects.requireNonNull(new File(path).listFiles(File::isDirectory))));
@@ -1376,7 +1387,7 @@ public class TgfdDiscovery {
 		return graphs;
 	}
 
-	public ArrayList<GraphLoader> loadDBpediaSnapshots(Long graphSize) {
+	public ArrayList<GraphLoader> loadDBpediaSnapshots(String graphSize) {
 		ArrayList<TGFD> dummyTGFDs = new ArrayList<>();
 		ArrayList<GraphLoader> graphs = new ArrayList<>();
 		String fileSuffix = graphSize == null ? "" : "-" + graphSize;
@@ -1913,7 +1924,7 @@ public class TgfdDiscovery {
 				continue;
 			}
 
-			if (!this.hasNoSupportPruning() && isSupergraphPattern(newPattern, this.patternTree)) {
+			if (!this.hasNoSupportPruning() && isSuperGraphOfPrunedPattern(newPattern, this.patternTree)) {
 				v.setMarked(true);
 				System.out.println("Skip. Candidate pattern is a supergraph of pruned pattern");
 				continue;
@@ -1954,8 +1965,8 @@ public class TgfdDiscovery {
 		return isIsomorphic;
 	}
 
-	private boolean isSupergraphPattern(VF2PatternGraph newPattern, PatternTree patternTree) {
-		final long isSupergraphPatternTime = System.currentTimeMillis();
+	private boolean isSuperGraphOfPrunedPattern(VF2PatternGraph newPattern, PatternTree patternTree) {
+		final long isSuperGraphOfPrunedPatternTime = System.currentTimeMillis();
         ArrayList<String> newPatternEdges = new ArrayList<>();
         newPattern.getPattern().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
 		int i = this.getCurrentVSpawnLevel();
@@ -1977,7 +1988,7 @@ public class TgfdDiscovery {
 			}
 			i--;
 		}
-		printWithTime("isSupergraphPattern", System.currentTimeMillis()-isSupergraphPatternTime);
+		printWithTime("isSuperGraphOfPrunedPattern", System.currentTimeMillis()-isSuperGraphOfPrunedPatternTime);
 		return isSupergraph;
 	}
 
