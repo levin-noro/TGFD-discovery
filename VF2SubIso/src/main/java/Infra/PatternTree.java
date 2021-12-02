@@ -17,8 +17,8 @@ public class PatternTree {
     public PatternTreeNode createNodeAtLevel(int level, VF2PatternGraph pattern, PatternTreeNode parentNode, String candidateEdgeString) {
         PatternTreeNode node = new PatternTreeNode(pattern, parentNode, candidateEdgeString);
         tree.get(level).add(node);
-        findSubgraphParents(level-1, node); // TO-DO
-        findCenterVertexParent(level-1, node);
+        findSubgraphParents(level-1, node);
+        findCenterVertexParent(level-1, node); // TO-DO: Why do we only need one parent?
         return node;
     }
 
@@ -71,12 +71,12 @@ public class PatternTree {
             otherPatternNode.getGraph().edgeSet().forEach((edge) -> {otherPatternEdges.add(edge.toString());});
             if (newPatternEdges.containsAll(otherPatternEdges)) {
                 System.out.println("New pattern: " + node.getPattern());
-                if (otherPatternNode.getGraph().edgeSet().size() == 0) {
-                    System.out.println("is a child of center vertex parent pattern: " + otherPatternNode.getGraph().vertexSet());
-                } else {
-                    System.out.println("is a child of center vertex parent pattern: " + otherPatternNode.getPattern());
-                }
                 if (otherPatternNode.getPattern().getCenterVertexType().equals(node.getPattern().getCenterVertexType())) {
+                    if (otherPatternNode.getGraph().edgeSet().size() == 0) {
+                        System.out.println("is a child of center vertex parent pattern: " + otherPatternNode.getGraph().vertexSet());
+                    } else {
+                        System.out.println("is a child of center vertex parent pattern: " + otherPatternNode.getPattern());
+                    }
                     node.setCenterVertexParent(otherPatternNode);
                     return;
                 }
