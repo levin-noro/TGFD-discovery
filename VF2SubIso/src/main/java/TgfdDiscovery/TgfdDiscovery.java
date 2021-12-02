@@ -69,7 +69,6 @@ public class TgfdDiscovery {
 	private boolean isKExperiment = false;
 	private boolean useChangeFile;
 	private final ArrayList<Model> models = new ArrayList<>();
-	private final HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
 	private List<Entry<String, Integer>> sortedVertexHistogram; // freq nodes come from here
 	private List<Entry<String, Integer>> sortedEdgeHistogram; // freq edges come from here
 	private final HashMap<String, Integer> vertexHistogram = new HashMap<>();
@@ -144,7 +143,7 @@ public class TgfdDiscovery {
 		}
 	}
 
-	public static CommandLine parseArgs(String[] args) {
+	public static Options initializeCmdOptions() {
 		Options options = new Options();
 		options.addOption("name", true, "output files will be given the specified name");
 		options.addOption("console", false, "print to console");
@@ -164,7 +163,11 @@ public class TgfdDiscovery {
 		options.addOption("dataset", true, "run experiment using specified dataset");
 		options.addOption("path", true, "path to dataset");
 		options.addOption("skipK1", false, "run experiment and generate tgfds for k > 1");
+		options.addOption("changeFileTest", false, "run experiment to test effectiveness of using changefiles");
+		return options;
+	}
 
+	public static CommandLine parseArgs(Options options, String[] args) {
 		CommandLineParser parser = new DefaultParser();
 		CommandLine cmd = null;
 		try {
@@ -235,7 +238,14 @@ public class TgfdDiscovery {
 	}
 
 	public static void main(String[] args) {
-		CommandLine cmd = TgfdDiscovery.parseArgs(args);
+		final long startTime = System.currentTimeMillis();
+		Options options = TgfdDiscovery.initializeCmdOptions();
+		CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
+
+		if (cmd.hasOption("changeFileTest")) {
+			TestChangeFile.testChangeFile(args);
+			return;
+		}
 
 		String dataset;
 		if (!cmd.hasOption("dataset")) {
@@ -337,8 +347,8 @@ public class TgfdDiscovery {
 				TgfdDiscovery.printWithTime("getMatchesUsingCenterVertices", (matchingTime));
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 			} else if (useChangeFile) {
-				tgfdDiscovery.getMatchesForPattern2(graphs, patternTreeNode, matches);
-				TgfdDiscovery.printWithTime("getMatchesForPattern2", (System.currentTimeMillis() - matchingTime));
+				tgfdDiscovery.getMatchesUsingChangefiles(graphs, patternTreeNode, matches);
+				TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (System.currentTimeMillis() - matchingTime));
 			} else {
 				// TO-DO: Investigate - why is there a slight discrepancy between the # of matches found via snapshot vs. changefile?
 				// TO-DO: For full-sized dbpedia, can we store the models and create an optimized graph for every search?
@@ -1358,7 +1368,11 @@ public class TgfdDiscovery {
 			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
 			if (this.isUseChangeFile()) break;
 		}
-		this.setNumOfSnapshots(graphs.size());
+		if (this.isUseChangeFile()) {
+			this.setNumOfSnapshots(directories.size());
+		} else {
+			this.setNumOfSnapshots(graphs.size());
+		}
 		return graphs;
 	}
 
@@ -2141,7 +2155,7 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesForPattern2(ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public void getMatchesUsingChangefiles(ArrayList<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
 
 		patternTreeNode.getPattern().setDiameter(this.getCurrentVSpawnLevel());
 
@@ -2153,30 +2167,19 @@ public class TgfdDiscovery {
 		long startTime=System.currentTimeMillis();
 		List<TGFD> tgfds = Collections.singletonList(dummyTgfd);
 		int numberOfMatchesFound = 0;
-//		LocalDate currentSnapshotDate = LocalDate.parse("2015-10-01");
+
 		GraphLoader graph = graphs.get(0);
 
 		printWithTime("Load graph (1)", System.currentTimeMillis()-startTime);
-
-//		HashMap<String, MatchCollection> matchCollectionHashMap = new HashMap<>();
-//		for (TGFD tgfd : tgfds) {
-//			matchCollectionHashMap.put(tgfd.getName(), new MatchCollection(tgfd.getPattern(), tgfd.getDependency(), Duration.ofDays(183)));
-//		}
 
 		// Now, we need to find the matches for each snapshot.
 		// Finding the matches...
 		HashSet<String> entityURIs = new HashSet<>();
 
 		for (TGFD tgfd : tgfds) {
-//			VF2SubgraphIsomorphism VF2 = new VF2SubgraphIsomorphism();
 			System.out.println("\n###########" + tgfd.getName() + "###########");
-//			Iterator<GraphMapping<Vertex, RelationshipEdge>> results = VF2.execute(dbpedia.getGraph(), tgfd.getPattern(), false);
 
 			//Retrieving and storing the matches of each timestamp.
-//			System.out.println("Retrieving the matches");
-//			startTime=System.currentTimeMillis();
-//			matchCollectionHashMap.get(tgfd.getName()).addMatches(currentSnapshotDate, results);
-//			printWithTime("Match retrieval", System.currentTimeMillis()-startTime);
 			final long searchStartTime = System.currentTimeMillis();
 			VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(graph.getGraph(), patternTreeNode.getPattern(), false);
 			ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
@@ -2189,42 +2192,30 @@ public class TgfdDiscovery {
 		}
 
 		//Load the change files
-//		List<String> paths = Arrays.asList("changes_t1_t2_film_starring_person_"+this.graphSize+"_full_test.json", "changes_t2_t3_film_starring_person_"+this.graphSize+"_full_test.json");
-//		List<LocalDate> snapshotDates = Arrays.asList(LocalDate.parse("2016-04-01"), LocalDate.parse("2016-10-01"));
-//		for (int i = 0; i < paths.size(); i++) {
 		for (int i = 0; i < 2; i++) {
 			System.out.println("-----------Snapshot (" + (i+2) + ")-----------");
 
-//			currentSnapshotDate = snapshotDates.get(i);
-//			ChangeLoader changeLoader = new ChangeLoader(paths.get(i));
-//			List<Change> changes = changeLoader.getAllChanges();
 			List<HashMap<Integer,HashSet<Change>>> changes = new ArrayList<>();
-			List<Change> allChangesAsList=new ArrayList<>();
-			for (String edgeString : patternTreeNode.getAllEdgeStrings()) {
-				String path = "changes_t"+(i+1)+"_t"+(i+2)+"_"+edgeString.replace(" ", "_")+"_"+this.graphSize+".json";
-				if (!this.changeFilesMap.containsKey(path)) {
-					JSONParser parser = new JSONParser();
-					Object json;
-					org.json.simple.JSONArray jsonArray = new JSONArray();
-					try {
-						json = parser.parse(new FileReader(path));
-						jsonArray = (org.json.simple.JSONArray) json;
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-					System.out.println("Storing " + path + " in memory");
-					this.changeFilesMap.put(path, jsonArray);
-				}
-				startTime = System.currentTimeMillis();
-				ChangeLoader changeLoader = new ChangeLoader(this.changeFilesMap.get(path));
-				HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
-				printWithTime("Load changes (" + path + ")", System.currentTimeMillis()-startTime);
-				System.out.println("Total number of changes in changefile: " + newChanges.size());
-				changes.add(newChanges);
-				allChangesAsList.addAll(changeLoader.getAllChanges());
+			String path = "changes_t"+(i+1)+"_t"+(i+2)+"_"+this.graphSize+".json";
+			HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
+			JSONParser parser = new JSONParser();
+			Object json;
+			org.json.simple.JSONArray jsonArray = new JSONArray();
+			try {
+				json = parser.parse(new FileReader(path));
+				jsonArray = (org.json.simple.JSONArray) json;
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
+			System.out.println("Storing " + path + " in memory");
+			changeFilesMap.put(path, jsonArray);
+			startTime = System.currentTimeMillis();
+			ChangeLoader changeLoader = new ChangeLoader(changeFilesMap.get(path));
+			HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
+			printWithTime("Load changes (" + path + ")", System.currentTimeMillis()-startTime);
+			System.out.println("Total number of changes in changefile: " + newChanges.size());
+			changes.add(newChanges);
 
-//			printWithTime("Load changes ("+paths.get(i) + ")", System.currentTimeMillis()-startTime);
 			System.out.println("Total number of changes: " + changes.size());
 
 			// Now, we need to find the matches for each snapshot.
@@ -2233,14 +2224,10 @@ public class TgfdDiscovery {
 			startTime=System.currentTimeMillis();
 			System.out.println("Updating the graph");
 			IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), tgfds);
-			incUpdatesOnDBpedia.AddNewVertices(allChangesAsList);
+			incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
 
-//			HashMap<String, ArrayList<String>> newMatchesSignaturesByTGFD = new HashMap<>();
-//			HashMap<String, ArrayList<String>> removedMatchesSignaturesByTGFD = new HashMap<>();
 			HashMap<String, TGFD> tgfdsByName = new HashMap<>();
 			for (TGFD tgfd : tgfds) {
-//				newMatchesSignaturesByTGFD.put(tgfd.getName(), new ArrayList<>());
-//				removedMatchesSignaturesByTGFD.put(tgfd.getName(), new ArrayList<>());
 				tgfdsByName.put(tgfd.getName(), tgfd);
 			}
 			ArrayList<HashSet<ConstantLiteral>> newMatches = new ArrayList<>();
@@ -2249,14 +2236,10 @@ public class TgfdDiscovery {
 			for (HashMap<Integer,HashSet<Change>> changesByFile:changes) {
 				for (int changeID : changesByFile.keySet()) {
 
-					//System.out.print("\n" + change.getId() + " --> ");
 					HashMap<String, IncrementalChange> incrementalChangeHashMap = incUpdatesOnDBpedia.updateGraphByGroupOfChanges(changesByFile.get(changeID), tgfdsByName);
 					if (incrementalChangeHashMap == null)
 						continue;
 					for (String tgfdName : incrementalChangeHashMap.keySet()) {
-//					newMatchesSignaturesByTGFD.get(tgfdName).addAll(incrementalChangeHashMap.get(tgfdName).getNewMatches().keySet());
-//					removedMatchesSignaturesByTGFD.get(tgfdName).addAll(incrementalChangeHashMap.get(tgfdName).getRemovedMatchesSignatures());
-//					matchCollectionHashMap.get(tgfdName).addMatches(currentSnapshotDate, incrementalChangeHashMap.get(tgfdName).getNewMatches());
 						for (GraphMapping<Vertex, RelationshipEdge> mapping : incrementalChangeHashMap.get(tgfdName).getNewMatches().values()) {
 							numOfNewMatchesFoundInSnapshot++;
 							HashSet<ConstantLiteral> match = new HashSet<>();
@@ -2282,19 +2265,14 @@ public class TgfdDiscovery {
 
 			int numOfOldMatchesFoundInSnapshot = 0;
 			for (HashSet<ConstantLiteral> previousMatch : matchesPerTimestamps.get(i)) {
-//				if(removedMatches.contains(previousMatch) || newMatches.contains(previousMatch)) { /*previousMatch not in newMatches && previousMatch not in removedMatches*/
-//					continue;
-//				}
 				boolean skip = false;
 				for (HashSet<ConstantLiteral> removedMatch : removedMatches) {
-//					if (removedMatch.equals(previousMatch)) {
 					if (equalsLiteral(removedMatch, previousMatch)) {
 						skip = true;
 					}
 				}
 				if (skip) continue;
 				for (HashSet<ConstantLiteral> newMatch : newMatches) {
-//					if (newMatch.equals(previousMatch)) {
 					if (equalsLiteral(newMatch, previousMatch)) {
 						skip = true;
 					}
@@ -2314,14 +2292,8 @@ public class TgfdDiscovery {
 					return o1.size() - o2.size();
 				}
 			});
-//			for (TGFD tgfd : tgfds) {
-//				matchCollectionHashMap.get(tgfd.getName()).addTimestamp(currentSnapshotDate,
-//						newMatchesSignaturesByTGFD.get(tgfd.getName()), removedMatchesSignaturesByTGFD.get(tgfd.getName()));
-//				System.out.println("New matches (" + tgfd.getName() + "): " +
-//						newMatchesSignaturesByTGFD.get(tgfd.getName()).size() + " ** " + removedMatchesSignaturesByTGFD.get(tgfd.getName()).size());
-//			}
+
 			printWithTime("Update and retrieve matches", System.currentTimeMillis()-startTime);
-			//myConsole.print("#new matches: " + newMatchesSignatures.size()  + " - #removed matches: " + removedMatchesSignatures.size());
 		}
 
 		System.out.println("-------------------------------------");
