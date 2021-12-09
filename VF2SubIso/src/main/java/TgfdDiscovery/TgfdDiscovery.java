@@ -2008,7 +2008,21 @@ public class TgfdDiscovery {
 			for (Vertex vertex : graphs.get(year).getGraph().getGraph().vertexSet()) {
 				if (vertex.getTypes().contains(patternVertexType)) {
 					DataVertex dataVertex = (DataVertex) vertex;
-					matchesInThisTimestamp.add(dataVertex);
+					if (this.interestingTGFDs) {
+						// Check if vertex contains at least one active attribute
+						boolean containsActiveAttributes = false;
+						for (String attrName : vertex.getAllAttributesNames()) {
+							if (this.activeAttributesSet.contains(attrName)) {
+								containsActiveAttributes = true;
+								break;
+							}
+						}
+						if (containsActiveAttributes) {
+							matchesInThisTimestamp.add(dataVertex);
+						}
+					} else {
+						matchesInThisTimestamp.add(dataVertex);
+					}
 				}
 			}
 			System.out.println("Number of matches found: " + matchesInThisTimestamp.size());
@@ -2028,10 +2042,23 @@ public class TgfdDiscovery {
 			Set<String> matchedTargetVertexType = edge.getTarget().getTypes();
 			if (matchedEdgeLabel.equals(patternEdgeLabel) && matchedSourceVertexType.contains(sourceVertexType) && matchedTargetVertexType.contains(targetVertexType)) {
 				numOfMatches++;
-				HashSet<ConstantLiteral> match = new HashSet<>();
-				extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, patternTreeNode, match, entityURIs);
-				if (match.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
-				matches.add(match);
+				HashSet<ConstantLiteral> literalsInMatch = new HashSet<>();
+				extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, patternTreeNode, literalsInMatch, entityURIs);
+				if (this.interestingTGFDs) {
+					int interestingLiteralCount = 0;
+					for (ConstantLiteral literal: literalsInMatch) {
+						if (!literal.getAttrName().equals("uri")) {
+							interestingLiteralCount++;
+						}
+						if (interestingLiteralCount >= patternTreeNode.getGraph().vertexSet().size()) {
+							break;
+						}
+					}
+					if (interestingLiteralCount < patternTreeNode.getGraph().vertexSet().size()) continue;
+				} else {
+					if (literalsInMatch.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
+				}
+				matches.add(literalsInMatch);
 			}
 		}
 		matches.sort(new Comparator<HashSet<ConstantLiteral>>() {
