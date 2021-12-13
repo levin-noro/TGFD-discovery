@@ -181,8 +181,14 @@ public class VF2PatternGraph {
     @Override
     public String toString() {
         StringBuilder res= new StringBuilder("VF2PatternGraph{");
-        for (RelationshipEdge edge: pattern.edgeSet()) {
-            res.append(edge.toString());
+        if (pattern.edgeSet().size() > 0) {
+            for (RelationshipEdge edge : pattern.edgeSet()) {
+                res.append(edge.toString());
+            }
+        } else {
+            for (Vertex v : pattern.vertexSet()) {
+                res.append(v.toString());
+            }
         }
         res.append('}');
         return res.toString();

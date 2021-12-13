@@ -53,7 +53,7 @@ public class DBPediaLoader extends GraphLoader {
         }
     }
 
-    public DBPediaLoader(ArrayList<TGFD> dummyTGFDs, List<String> paths) {
+    public DBPediaLoader(List<TGFD> dummyTGFDs, List<String> paths) {
         super(dummyTGFDs);
         for (String path : paths) {
             if (path.toLowerCase().contains("literal") || path.toLowerCase().contains("object")) continue;

@@ -22,8 +22,8 @@ public class PatternTree {
         return node;
     }
 
-    public PatternTreeNode createNodeAtLevel(int level, VF2PatternGraph pattern, double patternSupport) {
-        PatternTreeNode node = new PatternTreeNode(pattern, patternSupport);
+    public PatternTreeNode createNodeAtLevel(int level, VF2PatternGraph pattern) {
+        PatternTreeNode node = new PatternTreeNode(pattern);
         tree.get(level).add(node);
         return node;
     }
