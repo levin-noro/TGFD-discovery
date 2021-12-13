@@ -21,7 +21,7 @@ public class testDiffExtractorDbpedia {
 
     public static double PERCENT = 0.05;
 
-    public static void main(String []args) throws FileNotFoundException {
+    public static void main(String[] args) throws FileNotFoundException {
 
         Options options = TgfdDiscovery.initializeCmdOptions();
         options.addOption("percent", true, "percentage of changes to keep");
@@ -47,15 +47,15 @@ public class testDiffExtractorDbpedia {
         directories.sort(Comparator.comparing(File::getName));
         StringBuilder str = new StringBuilder();
         int index = 1;
-        for (File directory: directories) {
-            str.append("-s"+index+" "+directory.getName()+"-01-01\n");
+        for (File directory : directories) {
+            str.append("-s" + index + " " + directory.getName() + "-01-01\n");
             ArrayList<File> files = new ArrayList<>(List.of(Objects.requireNonNull(new File(directory.getPath()).listFiles(File::isFile))));
             List<String> paths = files.stream().map(File::getPath).collect(Collectors.toList());
-            for (String filepath: paths) {
+            for (String filepath : paths) {
                 if (filepath.contains("types")) {
-                    str.append("-t"+index+" "+filepath+"\n");
+                    str.append("-t" + index + " " + filepath + "\n");
                 } else {
-                    str.append("-d"+index+" "+filepath+"\n");
+                    str.append("-d" + index + " " + filepath + "\n");
                 }
             }
             index++;
@@ -142,13 +142,11 @@ public class testDiffExtractorDbpedia {
 
             analyzeChanges(allChanges, new ArrayList<>(), first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, graphSize, Config.getDiffCaps());
 
-            System.gc();
         }
     }
 
     private static void analyzeChanges(List<Change> allChanges, List<TGFD> allTGFDs, int graphSize,
-                                       int changeSize, int timestamp1, int timestamp2, String TGFDsName, ArrayList <Double> diffCaps)
-    {
+                                       int changeSize, int timestamp1, int timestamp2, String TGFDsName, ArrayList<Double> diffCaps) {
 //        ChangeTrimmer trimmer=new ChangeTrimmer(allChanges,allTGFDs);
 //        for (double i:diffCaps)
 //        {
@@ -160,48 +158,42 @@ public class testDiffExtractorDbpedia {
 //            }
 //            else
 //            {
-                saveChanges(allChanges,timestamp1,timestamp2,TGFDsName);
+        saveChanges(allChanges, timestamp1, timestamp2, TGFDsName);
 //                return;
 //            }
 //        }
     }
 
-    private static void printWithTime(String message, long runTimeInMS)
-    {
+    private static void printWithTime(String message, long runTimeInMS) {
         System.out.println(message + " time: " + runTimeInMS + "(ms) ** " +
                 TimeUnit.MILLISECONDS.toSeconds(runTimeInMS) + "(sec) ** " +
-                TimeUnit.MILLISECONDS.toMinutes(runTimeInMS) +  "(min)");
+                TimeUnit.MILLISECONDS.toMinutes(runTimeInMS) + "(min)");
     }
 
     private static void printStatistics(List<Change> allChanges) {
-        int insertChangeEdge=0;
-        int insertChangeVertex=0;
-        int insertChangeAttribute=0;
-        int deleteChangeEdge=0;
-        int deleteChangeVertex=0;
-        int deleteChangeAttribute=0;
-        int changeAttributeValue=0;
+        int insertChangeEdge = 0;
+        int insertChangeVertex = 0;
+        int insertChangeAttribute = 0;
+        int deleteChangeEdge = 0;
+        int deleteChangeVertex = 0;
+        int deleteChangeAttribute = 0;
+        int changeAttributeValue = 0;
 
-        for (Change c:allChanges) {
-            if(c instanceof EdgeChange)
-            {
-                if(c.getTypeOfChange()== ChangeType.deleteEdge)
+        for (Change c : allChanges) {
+            if (c instanceof EdgeChange) {
+                if (c.getTypeOfChange() == ChangeType.deleteEdge)
                     deleteChangeEdge++;
-                else if(c.getTypeOfChange()== ChangeType.insertEdge)
+                else if (c.getTypeOfChange() == ChangeType.insertEdge)
                     insertChangeEdge++;
-            }
-            else if(c instanceof VertexChange)
-            {
-                if(c.getTypeOfChange()== ChangeType.deleteVertex)
+            } else if (c instanceof VertexChange) {
+                if (c.getTypeOfChange() == ChangeType.deleteVertex)
                     deleteChangeVertex++;
-                else if(c.getTypeOfChange()== ChangeType.insertVertex)
+                else if (c.getTypeOfChange() == ChangeType.insertVertex)
                     insertChangeVertex++;
-            }
-            else if(c instanceof AttributeChange)
-            {
-                if(c.getTypeOfChange()== ChangeType.deleteAttr)
+            } else if (c instanceof AttributeChange) {
+                if (c.getTypeOfChange() == ChangeType.deleteAttr)
                     deleteChangeAttribute++;
-                else if(c.getTypeOfChange()== ChangeType.insertAttr)
+                else if (c.getTypeOfChange() == ChangeType.insertAttr)
                     insertChangeAttribute++;
                 else
                     changeAttributeValue++;
@@ -210,18 +202,18 @@ public class testDiffExtractorDbpedia {
         System.out.println("Total number of changes: " + allChanges.size());
         System.out.println("Edges: +" + insertChangeEdge + " ** -" + deleteChangeEdge);
         System.out.println("Vertices: +" + insertChangeVertex + " ** -" + deleteChangeVertex);
-        System.out.println("Attributes: +" + insertChangeAttribute + " ** -" + deleteChangeAttribute +" ** updates: "+ changeAttributeValue);
+        System.out.println("Attributes: +" + insertChangeAttribute + " ** -" + deleteChangeAttribute + " ** updates: " + changeAttributeValue);
     }
 
     private static void saveChanges(List<Change> allChanges, int t1, int t2, String tgfdName) {
 
-        System.out.println("Number of changes: "+allChanges.size());
+        System.out.println("Number of changes: " + allChanges.size());
         int numOfChangesToConsider = (int) (allChanges.size() * PERCENT);
-        System.out.println("Number of changes considered: "+numOfChangesToConsider);
+        System.out.println("Number of changes considered: " + numOfChangesToConsider);
         Collections.shuffle(allChanges);
         List<Change> changesToConsider = allChanges.subList(0, numOfChangesToConsider);
 
-        System.out.println("Printing the changes: " + t1 +" -> " + t2);
+        System.out.println("Printing the changes: " + t1 + " -> " + t2);
 
         HashMap<ChangeType, Integer> map = new HashMap<>();
         map.put(ChangeType.deleteAttr, 1);
@@ -242,7 +234,7 @@ public class testDiffExtractorDbpedia {
             file.write("[");
             for (int index = 0; index < changesToConsider.size(); index++) {
                 Change change = changesToConsider.get(index);
-                final StringWriter sw =new StringWriter();
+                final StringWriter sw = new StringWriter();
                 final ObjectMapper mapper = new ObjectMapper();
                 mapper.writeValue(sw, change);
                 file.write(sw.toString());
