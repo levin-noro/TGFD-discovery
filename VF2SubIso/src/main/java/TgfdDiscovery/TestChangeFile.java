@@ -7,16 +7,12 @@ import Infra.TGFD;
 import changeExploration.Change;
 import changeExploration.ChangeLoader;
 import graphLoader.GraphLoader;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.Options;
 import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.PrintStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -26,73 +22,43 @@ import java.util.HashSet;
 import java.util.List;
 
 public class TestChangeFile {
-    public static void testChangeFile(String[] args) {
-        for (int index = 0; index < 3; index++) {
-            final long startTime = System.currentTimeMillis();
-            Options options = TgfdDiscovery.initializeCmdOptions();
-            CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
+    public static void main(String[] args) {
+        String overallTimeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
+        ArrayList<Long> runtimes = new ArrayList<>();
+        for (int index = 0; index < 4; index++) {
 
-            String path;
-            String graphSize = null;
-            if (cmd.hasOption("path")) {
-                path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
-                if (!Files.isDirectory(Path.of(path))) {
-                    System.out.println(Path.of(path) + " is not a valid directory.");
-                    return;
-                }
-                graphSize = Path.of(path).getFileName().toString();
-            }
+            TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(args);
 
-            String timeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
-
-            String experimentName;
-            if (cmd.hasOption("name")) {
-                experimentName = cmd.getOptionValue("name");
-            } else {
-                experimentName = "experiment";
-            }
-
-            if (!cmd.hasOption("console")) {
-                PrintStream logStream = null;
-                try {
-                    logStream = new PrintStream("tgfd-discovery-log-" + timeAndDateStamp + ".txt");
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                }
-                System.setOut(logStream);
-            }
-
-            boolean noMinimalityPruning = cmd.hasOption("noMinimalityPruning");
-            boolean noSupportPruning = cmd.hasOption("noSupportPruning");
-            boolean dontSortHistogram = cmd.hasOption("dontSortHistogram");
-            boolean interestingTGFDs = cmd.hasOption("interesting");
-            boolean useChangeFile = false;
-            boolean useSubgraph = false;
+            tgfdDiscovery.setUseChangeFile(false);
+            tgfdDiscovery.setReUseMatches(false);
+            tgfdDiscovery.setValidationSearch(false);
             if (index == 0) {
-                useChangeFile = true;
+                tgfdDiscovery.setUseChangeFile(true);
             } else if (index == 1) {
-                useSubgraph = true;
+                tgfdDiscovery.setUseChangeFile(true);
+                tgfdDiscovery.setReUseMatches(true);
+            } else if (index == 2) {
+                tgfdDiscovery.setReUseMatches(true);
             }
-            boolean generatek0Tgfds = cmd.hasOption("k0");
-            boolean skipK1 = cmd.hasOption("skipK1");
 
-            int gamma = cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a"));
-            double theta = cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta"));
-            int k = cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k"));
-            double patternSupportThreshold = cmd.getOptionValue("p") == null ? TgfdDiscovery.DEFAULT_PATTERN_SUPPORT_THRESHOLD : Double.parseDouble(cmd.getOptionValue("p"));
-
-            TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(experimentName, k, theta, gamma, graphSize, patternSupportThreshold, noMinimalityPruning, interestingTGFDs, useChangeFile, noSupportPruning, dontSortHistogram, useSubgraph, generatek0Tgfds, skipK1);
-
-            ArrayList<GraphLoader> graphs;
+            List<GraphLoader> graphs;
             if (!tgfdDiscovery.isUseChangeFile()) {
                 tgfdDiscovery.setUseChangeFile(true);
-                graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(cmd.getOptionValue("path"));
+                graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(tgfdDiscovery.getPath());
                 tgfdDiscovery.setUseChangeFile(false);
             } else {
-                graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(cmd.getOptionValue("path"));
+                graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(tgfdDiscovery.getPath());
             }
 
-            tgfdDiscovery.histogram(graphs); // TO-DO: This histogram is only computed on the first snapshot
+            // Had to compute histogram using only first snapshot because we need dummy TGFDs to build the other graphs
+            // TO-DO: Is there a better way?
+            final long histogramTime = System.currentTimeMillis();
+            if (tgfdDiscovery.isUseChangeFile()) {
+                tgfdDiscovery.histogram(tgfdDiscovery.getTimestampToFilesMap().subList(0,1));
+            } else {
+                tgfdDiscovery.histogram(graphs);
+            }
+            TgfdDiscovery.printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
 
             if (graphs.size() == 1) {
                 for (int i = 0; i < 2; i++) {
@@ -132,9 +98,8 @@ public class TestChangeFile {
                 }
             }
 
-            tgfdDiscovery.setExperimentDateAndTimeStamp(timeAndDateStamp);
             tgfdDiscovery.initialize(graphs);
-            if (cmd.hasOption("K")) tgfdDiscovery.markAsKexperiment();
+
             while (tgfdDiscovery.getCurrentVSpawnLevel() <= tgfdDiscovery.getK()) {
 
                 System.out.println("VSpawn level " + tgfdDiscovery.getCurrentVSpawnLevel());
@@ -157,19 +122,23 @@ public class TestChangeFile {
                 long matchingTime = System.currentTimeMillis();
 
                 assert patternTreeNode != null;
-                if (tgfdDiscovery.isUseSubgraph()) {
-                    tgfdDiscovery.getMatchesUsingCenterVertices(graphs, patternTreeNode, matches);
+                if (tgfdDiscovery.isValidationSearch()) {
+                    tgfdDiscovery.getMatchesForPattern(graphs, patternTreeNode, matches);
                     matchingTime = System.currentTimeMillis() - matchingTime;
-                    TgfdDiscovery.printWithTime("getMatchesUsingCenterVertices", (matchingTime));
+                    TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
-                } else if (tgfdDiscovery.isUseChangeFile()) {
+                }
+                else if (tgfdDiscovery.isUseChangeFile()) {
                     tgfdDiscovery.getMatchesUsingChangefiles(graphs, patternTreeNode, matches);
-                    TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (System.currentTimeMillis() - matchingTime));
-                } else {
-                    // TO-DO: Investigate - why is there a slight discrepancy between the # of matches found via snapshot vs. changefile?
-                    // TO-DO: For full-sized dbpedia, can we store the models and create an optimized graph for every search?
-                    tgfdDiscovery.getMatchesForPattern(graphs, patternTreeNode, matches); // this can be called repeatedly on many graphs
-                    TgfdDiscovery.printWithTime("getMatchesForPattern", (System.currentTimeMillis() - matchingTime));
+                    matchingTime = System.currentTimeMillis() - matchingTime;
+                    TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (matchingTime));
+                    tgfdDiscovery.addToTotalMatchingTime(matchingTime);
+                }
+                else {
+                    tgfdDiscovery.findMatchesUsingCenterVertices(graphs, patternTreeNode, matches);
+                    matchingTime = System.currentTimeMillis() - matchingTime;
+                    TgfdDiscovery.printWithTime("findMatchesUsingCenterVertices", (matchingTime));
+                    tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
 
                 if (patternTreeNode.getPatternSupport() < tgfdDiscovery.getTheta()) {
@@ -186,7 +155,19 @@ public class TestChangeFile {
                 tgfdDiscovery.getTgfds().get(tgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
             }
             tgfdDiscovery.printTimeStatistics();
-            System.out.println("Total execution time: " + (System.currentTimeMillis() - startTime));
+            final long endTime = System.currentTimeMillis() - tgfdDiscovery.getStartTime();
+            System.out.println("Total execution time: " + (endTime));
+            runtimes.add(endTime);
+        }
+        PrintStream logStream = null;
+        try {
+            logStream = new PrintStream("changefile-test-runtimes-" + overallTimeAndDateStamp + ".txt");
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        System.setOut(logStream);
+        for (Long runtime: runtimes) {
+            System.out.println(runtime);
         }
     }
 }
