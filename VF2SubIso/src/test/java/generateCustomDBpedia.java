@@ -6,6 +6,7 @@ import org.apache.jena.rdf.model.StmtIterator;
 
 import java.io.FileNotFoundException;
 import java.io.PrintStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -18,6 +19,7 @@ public class generateCustomDBpedia {
 
     public static void main(String[] args) {
         Options options = new Options();
+        options.addOption("path", true, "generate graphs using files from specified path");
         options.addOption("type", true, "generate graphs using type");
         options.addOption("count", true, "generate graphs based on vertex count");
         CommandLineParser parser = new DefaultParser();
@@ -28,13 +30,21 @@ public class generateCustomDBpedia {
             e.printStackTrace();
         }
         assert cmd != null;
+        String path = null;
+        if (cmd.hasOption("path")) {
+            path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
+            if (!Files.isDirectory(Path.of(path))) {
+                System.out.println(Path.of(path) + " is not a valid directory.");
+                return;
+            }
+        }
         if (cmd.hasOption("type")) {
             String[] numOfTypes = cmd.getOptionValue("type").split(",");
             generateCustomDBpediaBasedOnType(numOfTypes);
         }
         if (cmd.hasOption("count")) {
             String[] sizes = cmd.getOptionValue("count").split(",");
-            generateCustomDBpediaBasedOnSize(sizes);
+            generateCustomDBpediaBasedOnSize(sizes, path);
         }
     }
 
@@ -86,7 +96,7 @@ public class generateCustomDBpedia {
                     vertexTypes.add(vertexType);
                     vertexMap.put(vertexName, vertexTypes);
                 }
-//                if (counter % 100000 == 0) System.out.println("Processed "+counter+" statements for 201" + i + TYPES);
+                if (counter % 100000 == 0) System.out.println("Processed "+counter+" statements for 201" + i + TYPES);
             }
             sortedVertexTypesHistogram = new ArrayList<>(vertexTypesHistogram.entrySet());
             sortedVertexTypesHistogram.sort((o1, o2) -> o2.getValue() - o1.getValue());
@@ -192,54 +202,56 @@ public class generateCustomDBpedia {
         }
     }
 
-    public static void generateCustomDBpediaBasedOnSize(String[] args) {
-        String[] fileTypes = {TYPES, LITERALS, OBJECTS};
+    public static void generateCustomDBpediaBasedOnSize(String[] args, String path) {
+        String[] fileTypes = {OBJECTS, TYPES, LITERALS};
         long[] sizes = new long[args.length];
         for (int index = 0; index < sizes.length; index++) {
             sizes[index] = Long.parseLong(args[index]);
         }
+        Set<String> allURIsInData = new HashSet<>();
+        System.out.println("Gathering set of unique URIs in data...");
         for (int i = 5; i < 8; i++) {
-            HashSet<String> vertexSet = new HashSet<>();
+            Model model = ModelFactory.createDefaultModel();
+            String fileName = path+"/201"+i+ "/201"+i+TYPES+".ttl";
+            System.out.println("Processing " + fileName);
+            Path input = Paths.get(fileName);
+            model.read(input.toUri().toString());
+            StmtIterator stmtIterator = model.listStatements();
+            while (stmtIterator.hasNext()) {
+                Statement stmt = stmtIterator.nextStatement();
+                allURIsInData.add(stmt.getSubject().getURI().toLowerCase());
+            }
+        }
+        System.out.println("Number of unique URIs in data: "+allURIsInData.size());
+        for (int i = 5; i < 8; i++) {
+            HashMap<Long,Set<String>> verticesConnectedByEdgesSet = new HashMap<>();
             for (String fileType : fileTypes) {
                 Model model = ModelFactory.createDefaultModel();
-                String fileName = "dbpedia/201"+i+"/201"+i+fileType+".ttl";
+                String fileName = path+"/201"+i+ "/201"+i+ fileType + ".ttl";
                 System.out.println("Processing " + fileName);
                 Path input = Paths.get(fileName);
                 model.read(input.toUri().toString());
                 for (long size : sizes) {
+                    verticesConnectedByEdgesSet.putIfAbsent(size, new HashSet<>());
                     StmtIterator stmtIterator = model.listStatements();
                     System.out.println("Outputting size: " + size);
-                    int limit = fileType.equals(TYPES) ? Math.toIntExact(size) : (Math.toIntExact(size)*3);
+                    int limit = fileType.equals(OBJECTS) ? Math.toIntExact(size) : Integer.MAX_VALUE;
                     Model newModel = ModelFactory.createDefaultModel();
                     int counter = 0;
-                    while (stmtIterator.hasNext() && counter <= limit ) {
+                    while (stmtIterator.hasNext() && counter <= limit) {
                         Statement stmt = stmtIterator.nextStatement();
                         switch (fileType) {
-                            case TYPES -> {
-                                String vertexName = stmt.getSubject().getURI().toLowerCase();
-                                if (vertexName.length() > 28) {
-                                    vertexName = vertexName.substring(28);
+                            case TYPES, LITERALS -> {
+                                if (!verticesConnectedByEdgesSet.get(size).contains(stmt.getSubject().getURI().toLowerCase())) {
+                                    continue;
                                 }
-                                vertexSet.add(vertexName);
                             }
                             case OBJECTS -> {
-                                String subjectName = stmt.getSubject().getURI().toLowerCase();
-                                if (subjectName.length() > 28) {
-                                    subjectName = subjectName.substring(28);
-                                }
-                                String objectName = stmt.getObject().toString().substring(stmt.getObject().toString().lastIndexOf("/") + 1).toLowerCase();
-                                if (!vertexSet.contains(subjectName) || !vertexSet.contains(objectName)) {
-                                    continue;
-                                }
-                            }
-                            case LITERALS -> {
-                                String subjectName = stmt.getSubject().getURI().toLowerCase();
-                                if (subjectName.length() > 28) {
-                                    subjectName = subjectName.substring(28);
-                                }
-                                if (!vertexSet.contains(subjectName)) {
-                                    continue;
-                                }
+                                String subjectURI = stmt.getSubject().getURI().toLowerCase();
+                                String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
+                                if (!allURIsInData.contains(subjectURI) || !allURIsInData.contains(objectURI)) continue;
+                                verticesConnectedByEdgesSet.get(size).add(subjectURI);
+                                verticesConnectedByEdgesSet.get(size).add(objectURI);
                             }
                         }
                         newModel.add(stmt);
@@ -247,7 +259,7 @@ public class generateCustomDBpedia {
                     }
                     System.out.println("Number of statements = " + counter);
                     try {
-                        String newFileName = "201" + i + fileType + "-" + size + ".ttl";
+                        String newFileName = "dbpedia-"+size+"/201"+i+ "/201"+i+fileType+"-"+size+".ttl";
                         newModel.write(new PrintStream(newFileName), "N3");
                         System.out.println("Wrote to " + newFileName);
                     } catch (FileNotFoundException e) {
