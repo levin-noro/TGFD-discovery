@@ -16,7 +16,7 @@ public class PatternTreeNode {
     private ArrayList<AttributeDependency> minimalDependencies = new ArrayList<>();
     private ArrayList<AttributeDependency> minimalConstantDependencies = new ArrayList<>();
 //    private HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> lowSupportGeneralTgfdList = new HashMap<>();
-    private ArrayList<ArrayList<DataVertex>> matchesOfCenterVertices = null;
+    private ArrayList<ArrayList<DataVertex>> listOfCenterVertices = null;
 
     public PatternTreeNode(VF2PatternGraph pattern, PatternTreeNode parentNode, String edgeString) {
         this.pattern = pattern;
@@ -24,9 +24,8 @@ public class PatternTreeNode {
         this.edgeString = edgeString;
     }
 
-    public PatternTreeNode(VF2PatternGraph pattern, double patternSupport) {
+    public PatternTreeNode(VF2PatternGraph pattern) {
         this.pattern = pattern;
-        this.patternSupport = patternSupport;
         this.parentNode = null;
         this.edgeString = null;
     }
@@ -43,7 +42,7 @@ public class PatternTreeNode {
         this.patternSupport = patternSupport;
     }
 
-    public double getPatternSupport() {
+    public Double getPatternSupport() {
         return this.patternSupport;
     }
 
@@ -62,7 +61,7 @@ public class PatternTreeNode {
     @Override
     public String toString() {
         return "PatternTreeNode{" +
-                "pattern=" + pattern +
+                "pattern=" + (pattern.getPattern().edgeSet().size() > 0 ? pattern : pattern.getPattern().vertexSet()) +
                 ",\n support=" + patternSupport +
                 '}';
     }
@@ -157,12 +156,12 @@ public class PatternTreeNode {
         return edgeStrings;
     }
 
-    public ArrayList<ArrayList<DataVertex>> getMatchesOfCenterVertices() {
-        return this.matchesOfCenterVertices;
+    public ArrayList<ArrayList<DataVertex>> getListOfCenterVertices() {
+        return this.listOfCenterVertices;
     }
 
-    public void setMatchesOfCenterVertices(ArrayList<ArrayList<DataVertex>> matchesOfCenterVertices) {
-        this.matchesOfCenterVertices = matchesOfCenterVertices;
+    public void setListOfCenterVertices(ArrayList<ArrayList<DataVertex>> listOfCenterVertices) {
+        this.listOfCenterVertices = listOfCenterVertices;
     }
 
     public void addSubgraphParent(PatternTreeNode otherPatternNode) {
