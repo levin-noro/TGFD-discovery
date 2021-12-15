@@ -48,21 +48,20 @@ public class TgfdDiscovery {
 	public static final int DEFAULT_GAMMA = 20;
 	public static final int DEFAULT_K = 3;
 	public static final double DEFAULT_THETA = 0.5;
-	private boolean dontSortHistogram;
-	private boolean reUseMatches;
-	private boolean generatek0Tgfds;
-    private boolean skipK1;
+	private boolean reUseMatches = true;
+	private boolean generatek0Tgfds = false;
+    private boolean skipK1 = false;
     private Integer NUM_OF_EDGES_IN_ALL_GRAPH;
 	public int NUM_OF_VERTICES_IN_ALL_GRAPH;
 	public Map<String, HashSet<String>> vertexTypesToAttributesMap; // freq attributes come from here
 	public PatternTree patternTree;
-	public boolean noMinimalityPruning;
+	private boolean hasMinimalityPruning = true;
 	public String graphSize = null;
-	private boolean interestingTGFDs;
-	private int k;
-	private double theta;
-	private int gamma;
-	private int frequentSetSize;
+	private boolean onlyInterestingTGFDs;
+	private int k = DEFAULT_K;
+	private double theta = DEFAULT_THETA;
+	private int gamma = DEFAULT_GAMMA;
+	private int frequentSetSize = DEFAULT_FREQUENT_SIZE_SET;
 	private HashSet<String> activeAttributesSet;
 	private int previousLevelNodeIndex = 0;
 	private int candidateEdgeIndex = 0;
@@ -71,12 +70,12 @@ public class TgfdDiscovery {
 	private long startTime;
 	private final ArrayList<Long> kRuntimes = new ArrayList<>();
 	private String timeAndDateStamp = null;
-	private boolean isKExperiment = false;
-	private boolean useChangeFile;
+	private boolean kExperiment = false;
+	private boolean useChangeFile = false;
 	private List<Entry<String, Integer>> sortedVertexHistogram; // freq nodes come from here
 	private List<Entry<String, Integer>> sortedEdgeHistogram; // freq edges come from here
 	private final HashMap<String, Integer> vertexHistogram = new HashMap<>();
-	private boolean noSupportPruning;
+	private boolean hasSupportPruning = true;
 	private ArrayList<Double> patternSupportsList = new ArrayList<>();
 	private ArrayList<Double> constantTgfdSupportsList = new ArrayList<>();
 	private ArrayList<Double> generalTgfdSupportsList = new ArrayList<>();
@@ -100,17 +99,16 @@ public class TgfdDiscovery {
 		this.theta = DEFAULT_THETA;
 		this.gamma = DEFAULT_GAMMA;
 		this.frequentSetSize = DEFAULT_FREQUENT_SIZE_SET;
-		this.noMinimalityPruning = false;
-		this.interestingTGFDs = false;
+		this.setMinimalityPruning(true);
+		this.setOnlyInterestingTGFDs(false);
 		this.setUseChangeFile(false);
-		this.setNoSupportPruning(false);
-		this.dontSortHistogram = false;
-		this.reUseMatches = false;
-		this.generatek0Tgfds = false;
-        this.skipK1 = true;
+		this.setSupportPruning(true);
+		this.setReUseMatches(false);
+		this.setGeneratek0Tgfds(false);
+        this.setSkipK1(true);
 		this.validationSearch = true;
 
-		System.out.println("Running experiment for |G|="+this.graphSize+", k="+ this.getK() +", theta="+ this.getTheta() +", gamma"+this.gamma+", patternSupport="+this.frequentSetSize +", interesting="+this.interestingTGFDs+", optimized="+!this.noMinimalityPruning);
+		System.out.println("Running experiment for |G|="+this.graphSize+", k="+ this.getK() +", theta="+ this.getTheta() +", gamma"+this.gamma+", frequentSetSize="+this.frequentSetSize +", interesting="+ this.isOnlyInterestingTGFDs() +", isMinimalityPruning="+ this.hasMinimalityPruning());
 
 		this.tgfds = new ArrayList<>();
 		for (int vSpawnLevel = 0; vSpawnLevel <= this.getK(); vSpawnLevel++) {
@@ -143,7 +141,7 @@ public class TgfdDiscovery {
 			this.loader = cmd.getOptionValue("loader");
 		}
 
-		this.useChangeFile = this.loader.equalsIgnoreCase("imdb");
+		this.setUseChangeFile(this.loader.equalsIgnoreCase("imdb"));
 
 		if (cmd.hasOption("name")) {
 			this.experimentName = cmd.getOptionValue("name");
@@ -161,24 +159,23 @@ public class TgfdDiscovery {
 			System.setOut(logStream);
 		}
 
-		this.noMinimalityPruning = cmd.hasOption("noMinimalityPruning");
-		this.noSupportPruning = cmd.hasOption("noSupportPruning");
-		this.dontSortHistogram = cmd.hasOption("dontSortHistogram");
-		this.interestingTGFDs = !cmd.hasOption("uninteresting");
-		this.useChangeFile = false;
+		this.setMinimalityPruning(!cmd.hasOption("noMinimalityPruning"));
+		this.setSupportPruning(!cmd.hasOption("noSupportPruning"));
+		this.setOnlyInterestingTGFDs(!cmd.hasOption("uninteresting"));
+		this.setUseChangeFile(false);
 		boolean validationSearchTemp = false;
 		boolean reUseMatchesTemp = !cmd.hasOption(NO_REUSE_MATCHES_PARAMETER_TEXT);
 		if (cmd.hasOption("validation")) {
 			validationSearchTemp = true;
 			reUseMatchesTemp = false;
 		} else if (cmd.hasOption("changefile")) {
-			this.useChangeFile = true;
+			this.setUseChangeFile(true);
 		}
-		this.reUseMatches = reUseMatchesTemp;
+		this.setReUseMatches(reUseMatchesTemp);
 		this.validationSearch = validationSearchTemp;
 
-		this.generatek0Tgfds = cmd.hasOption("k0");
-		this.skipK1 = cmd.hasOption("skipK1");
+		this.setGeneratek0Tgfds(cmd.hasOption("k0"));
+		this.setSkipK1(cmd.hasOption("skipK1"));
 
 		this.gamma = cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a"));
 		this.theta = cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta"));
@@ -190,9 +187,9 @@ public class TgfdDiscovery {
 				+", theta="+ this.getTheta()
 				+", gamma"+this.gamma
 				+", edgeSupport=" +this.frequentSetSize
-				+", interesting="+this.interestingTGFDs
-				+", noMinimalityPruning="+this.noMinimalityPruning
-				+", noSupportPruning="+ this.hasNoSupportPruning());
+				+", interesting="+ this.isOnlyInterestingTGFDs()
+				+", noMinimalityPruning="+ !this.hasMinimalityPruning()
+				+", noSupportPruning="+ !this.hasSupportPruning());
 
 		this.tgfds = new ArrayList<>();
 		for (int vSpawnLevel = 0; vSpawnLevel <= this.getK(); vSpawnLevel++) {
@@ -210,7 +207,6 @@ public class TgfdDiscovery {
 		options.addOption("console", false, "print to console");
 		options.addOption("noMinimalityPruning", false, "run algorithm without minimality pruning");
 		options.addOption("noSupportPruning", false, "run algorithm without support pruning");
-		options.addOption("dontSortHistogram", false, "run algorithm without sorting histograms");
 		options.addOption("uninteresting", false, "run algorithm and also consider uninteresting TGFDs");
 		options.addOption("g", true, "run experiment on a specific graph size");
 		options.addOption("k", true, "run experiment for k iterations");
@@ -258,12 +254,13 @@ public class TgfdDiscovery {
 				"-k" + this.getCurrentVSpawnLevel() +
 				"-theta" + this.getTheta() +
 				"-a" + this.gamma +
-				"-eSupp" + (this.frequentSetSize == Integer.MAX_VALUE ? "All" : this.frequentSetSize) +
-				(this.isUseChangeFile() ? "-changefile" : "") +
-				(!this.isReUseMatches() ? "-noMatchesReUsed" : "") +
-				(!this.interestingTGFDs ? "-uninteresting" : "") +
-				(this.noMinimalityPruning ? "-noMinimalityPruning" : "") +
-				(this.hasNoSupportPruning() ? "-noSupportPruning" : "") +
+				"-freqSet" + (this.frequentSetSize == Integer.MAX_VALUE ? "All" : this.frequentSetSize) +
+				(this.isValidationSearch() ? "-validation" : "") +
+				(this.useChangeFile() ? "-changefile" : "") +
+				(!this.reUseMatches() ? "-noMatchesReUsed" : "") +
+				(!this.isOnlyInterestingTGFDs() ? "-uninteresting" : "") +
+				(!this.hasMinimalityPruning() ? "-noMinimalityPruning" : "") +
+				(!this.hasSupportPruning() ? "-noSupportPruning" : "") +
 				(this.timeAndDateStamp == null ? "" : ("-"+this.timeAndDateStamp));
 	}
 
@@ -315,13 +312,11 @@ public class TgfdDiscovery {
 				return;
 			}
 		}
-		final long histogramTime = System.currentTimeMillis();
-		if (tgfdDiscovery.isUseChangeFile()) {
+		if (tgfdDiscovery.useChangeFile()) {
 			tgfdDiscovery.histogram(tgfdDiscovery.getTimestampToFilesMap());
 		} else {
 			tgfdDiscovery.histogram(graphs);
 		}
-		TgfdDiscovery.printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
 
 		tgfdDiscovery.initialize(graphs);
 		while (tgfdDiscovery.getCurrentVSpawnLevel() <= tgfdDiscovery.getK()) {
@@ -352,7 +347,7 @@ public class TgfdDiscovery {
 				TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (matchingTime));
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 			}
-			else if (tgfdDiscovery.isUseChangeFile()) {
+			else if (tgfdDiscovery.useChangeFile()) {
 				tgfdDiscovery.getMatchesUsingChangefiles(graphs, patternTreeNode, matches);
 				matchingTime = System.currentTimeMillis() - matchingTime;
 				TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (matchingTime));
@@ -367,7 +362,7 @@ public class TgfdDiscovery {
 
 			if (tgfdDiscovery.satisfiesTheta(patternTreeNode)) {
 				System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
-				if (!tgfdDiscovery.hasNoSupportPruning()) patternTreeNode.setIsPruned();
+				if (tgfdDiscovery.hasSupportPruning()) patternTreeNode.setIsPruned();
 				continue;
 			}
 
@@ -459,7 +454,7 @@ public class TgfdDiscovery {
 		int numberOfMatchesFound = countTotalNumberOfMatchesFound(matchesPerTimestamps);
 		System.out.println("Total number of matches found across all snapshots:" + numberOfMatchesFound);
 
-		if (!this.useChangeFile) {
+		if (!this.useChangeFile()) {
 			calculatePatternSupport(entityURIs.size(), patternTreeNode);
 		}
 	}
@@ -500,7 +495,7 @@ public class TgfdDiscovery {
 			System.out.println("Number of center vertex matches in this timestamp in this level: " + newMatchesOfCenterVertexInCurrentSnapshot.size());
 			matchesPerTimestamps.get(year).addAll(matchesSet);
 		}
-		if (this.isReUseMatches()) {
+		if (this.reUseMatches()) {
 			patternTreeNode.setListOfCenterVertices(newMatchesOfCenterVerticesInAllSnapshots);
 		}
 	}
@@ -568,14 +563,14 @@ public class TgfdDiscovery {
 	}
 
 	public void markAsKexperiment() {
-		this.isKExperiment = true;
+		this.setkExperiment(true);
 	}
 
 	public void setExperimentDateAndTimeStamp(String timeAndDateStamp) {
 		this.timeAndDateStamp = timeAndDateStamp;
 	}
 
-	public void computeVertexHistogram(List<?> graphs) {
+	public void computeHistogram(List<?> graphs) {
 
 		System.out.println("Computing Vertex Histogram");
 
@@ -595,12 +590,14 @@ public class TgfdDiscovery {
 		} else {
 			for (Object graph: graphs) {
 				if (((Entry<?, ?>) graph).getValue() instanceof List) {
+					final long graphLoadTime = System.currentTimeMillis();
 					GraphLoader graphLoader;
 					if (this.getLoader().equalsIgnoreCase("imdb")) {
 						graphLoader = new IMDBLoader(new ArrayList<>(), ((Map.Entry<String, List<String>>) graph).getValue());
 					} else {
 						graphLoader = new DBPediaLoader(new ArrayList<>(), ((Map.Entry<String, List<String>>) graph).getValue());
 					}
+					printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
 					numOfVerticesAcrossAllGraphs += readVertexTypesAndAttributeNamesFromGraph(vertexTypesHistogram, tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, graphLoader);
 					numOfEdgesAcrossAllGraphs += readEdgesInfoFromGraph(edgeTypesHistogram, graphLoader);
 				}
@@ -821,7 +818,9 @@ public class TgfdDiscovery {
 	}
 
 	public void histogram(List<?> graphs) {
-		computeVertexHistogram(graphs);
+		final long histogramTime = System.currentTimeMillis();
+		computeHistogram(graphs);
+		printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
 		printHistogram();
 		printHistogramStatistics();
 	}
@@ -995,7 +994,7 @@ public class TgfdDiscovery {
 		totalFindEntitiesTime += findEntitiesTime;
 		if (entities == null) {
 			System.out.println("Mark as Pruned. No entities found during entity discovery.");
-			if (!this.hasNoSupportPruning()) {
+			if (this.hasSupportPruning()) {
 				literalTreeNode.setIsPruned();
 				patternNode.addLowSupportDependency(literalPath);
 			}
@@ -1026,7 +1025,7 @@ public class TgfdDiscovery {
 		totalDiscoverGeneralTGFDTime += discoverGeneralTGFDTime;
 		if (generalTGFD.size() > 0) {
 			System.out.println("Marking literal node as pruned. Discovered general TGFDs for this dependency.");
-			if (!this.noMinimalityPruning) {
+			if (this.hasMinimalityPruning()) {
 				literalTreeNode.setIsPruned();
 				patternNode.addMinimalDependency(literalPath);
 			}
@@ -1327,7 +1326,7 @@ public class TgfdDiscovery {
 			candidateTGFDdelta = new Delta(Period.ofDays(minDistance * 183), Period.ofDays(maxDistance * 183 + 1), Duration.ofDays(183));
 			System.out.println("Constant TGFD delta: "+candidateTGFDdelta);
 
-			if (!this.noMinimalityPruning && isSupersetPath(constantPath, patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
+			if (this.hasMinimalityPruning() && isSupersetPath(constantPath, patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
 				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
 				continue;
 			}
@@ -1335,7 +1334,7 @@ public class TgfdDiscovery {
 			TGFD entityTGFD = new TGFD(newPattern, candidateTGFDdelta, newDependency, candidateTGFDsupport, patternNode.getPatternSupport(), "");
 			System.out.println("TGFD: " + entityTGFD);
 			tgfds.add(entityTGFD);
-			if (!this.noMinimalityPruning) patternNode.addMinimalConstantDependency(constantPath);
+			if (this.hasMinimalityPruning()) patternNode.addMinimalConstantDependency(constantPath);
 		}
 		return tgfds;
 	}
@@ -1373,7 +1372,7 @@ public class TgfdDiscovery {
 //			HashSet<ConstantLiteral> activeAttributes = getActiveAttributesInPattern(patternGraph.getPattern().vertexSet());
 //			for (ConstantLiteral activeAttribute: activeAttributes) {
 				TGFD dummyTGFD = new TGFD();
-				dummyTGFD.setName(frequentEdge);
+				dummyTGFD.setName(frequentEdge.replaceAll(" ","_"));
 				dummyTGFD.setPattern(patternGraph);
 //				Dependency dependency = new Dependency();
 //				dependency.addLiteralToY(activeAttribute);
@@ -1389,7 +1388,7 @@ public class TgfdDiscovery {
 			long graphLoadTime = System.currentTimeMillis();
 			graphs.add(new CitationLoader(filePath, filePath.contains("v11")));
 			printWithTime(filePath+" graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-			if (this.isUseChangeFile()) break;
+			if (this.useChangeFile()) break;
 		}
 		this.numOfSnapshots = graphs.size();
 		return graphs;
@@ -1406,10 +1405,10 @@ public class TgfdDiscovery {
 			IMDBLoader imdbGraph = new IMDBLoader(dummyTGFDs, timestampToFilesEntry.getValue());
 			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
 			graphs.add(imdbGraph);
-			if (this.isUseChangeFile()) break;
+			if (this.useChangeFile()) break;
 		}
 
-		if (this.isUseChangeFile()) {
+		if (this.useChangeFile()) {
 			this.setNumOfSnapshots(sortedTimestampToFilesMap.size());
 			this.loadChangeFilesIntoMemory();
 		} else {
@@ -1466,9 +1465,9 @@ public class TgfdDiscovery {
 			DBPediaLoader dbpedia = new DBPediaLoader(dummyTGFDs, timestampEntry.getValue());
 			graphs.add(dbpedia);
 			printWithTime("graphLoadTime", (System.currentTimeMillis() - graphLoadTime));
-			if (this.isUseChangeFile()) break;
+			if (this.useChangeFile()) break;
 		}
-		if (this.isUseChangeFile()) {
+		if (this.useChangeFile()) {
 			this.setNumOfSnapshots(this.getTimestampToFilesMap().size());
 			this.loadChangeFilesIntoMemory();
 		} else {
@@ -1543,7 +1542,7 @@ public class TgfdDiscovery {
 					if (previousLevelLiteral.isPruned()) continue;
 					ArrayList<ConstantLiteral> parentsPathToRoot = previousLevelLiteral.getPathToRoot(); //TO-DO: Can this be implemented as HashSet to improve performance?
 					for (ConstantLiteral literal: activeAttributes) {
-						if (this.interestingTGFDs) { // Ensures all vertices are involved in dependency
+						if (this.isOnlyInterestingTGFDs()) { // Ensures all vertices are involved in dependency
 							if (isUsedVertexType(literal.getVertexType(), parentsPathToRoot)) continue;
 						} else { // Check if leaf node exists in path already
 							if (parentsPathToRoot.contains(literal)) continue;
@@ -1557,11 +1556,11 @@ public class TgfdDiscovery {
 							continue;
 						}
 
-						if (!this.hasNoSupportPruning() && isSupersetPath(newPath, patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
+						if (this.hasSupportPruning() && isSupersetPath(newPath, patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
 							System.out.println("Skip. Candidate literal path is a superset of low-support dependency.");
 							continue;
 						}
-						if (!this.noMinimalityPruning && isSupersetPath(newPath, patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
+						if (this.hasMinimalityPruning() && isSupersetPath(newPath, patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
 							System.out.println("Skip. Candidate literal path is a superset of minimal dependency.");
 							continue;
 						}
@@ -1571,7 +1570,7 @@ public class TgfdDiscovery {
 						LiteralTreeNode literalTreeNode = literalTree.createNodeAtLevel(j, literal, previousLevelLiteral);
 
 						// Ensures delta discovery only occurs when # of literals in dependency equals number of vertices in graph
-						if (this.interestingTGFDs && (j + 1) != patternTreeNode.getGraph().vertexSet().size()) {
+						if (this.isOnlyInterestingTGFDs() && (j + 1) != patternTreeNode.getGraph().vertexSet().size()) {
 							System.out.println("|LHS|+|RHS| != |Q|. Skip performing Delta Discovery HSpawn level " + j);
 							continue;
 						}
@@ -1643,12 +1642,12 @@ public class TgfdDiscovery {
 		this.totalMatchingTime += matchingTime;
 	}
 
-	public boolean hasNoSupportPruning() {
-		return this.noSupportPruning;
+	public boolean hasSupportPruning() {
+		return hasSupportPruning;
 	}
 
-	public void setNoSupportPruning(boolean noSupportPruning) {
-		this.noSupportPruning = noSupportPruning;
+	public void setSupportPruning(boolean hasSupportPruning) {
+		this.hasSupportPruning = hasSupportPruning;
 	}
 
 	public boolean isSkipK1() {
@@ -1659,11 +1658,7 @@ public class TgfdDiscovery {
 		return tgfds;
 	}
 
-	public boolean isDontSortHistogram() {
-		return dontSortHistogram;
-	}
-
-	public boolean isReUseMatches() {
+	public boolean reUseMatches() {
 		return reUseMatches;
 	}
 
@@ -1671,7 +1666,7 @@ public class TgfdDiscovery {
 		return generatek0Tgfds;
 	}
 
-	public boolean isUseChangeFile() {
+	public boolean useChangeFile() {
 		return useChangeFile;
 	}
 
@@ -1749,6 +1744,38 @@ public class TgfdDiscovery {
 
 	public void setKeepSuperVertex(boolean keepSuperVertex) {
 		this.keepSuperVertex = keepSuperVertex;
+	}
+
+	public boolean hasMinimalityPruning() {
+		return hasMinimalityPruning;
+	}
+
+	public void setMinimalityPruning(boolean hasMinimalityPruning) {
+		this.hasMinimalityPruning = hasMinimalityPruning;
+	}
+
+	public void setGeneratek0Tgfds(boolean generatek0Tgfds) {
+		this.generatek0Tgfds = generatek0Tgfds;
+	}
+
+	public void setSkipK1(boolean skipK1) {
+		this.skipK1 = skipK1;
+	}
+
+	public boolean isOnlyInterestingTGFDs() {
+		return onlyInterestingTGFDs;
+	}
+
+	public void setOnlyInterestingTGFDs(boolean onlyInterestingTGFDs) {
+		this.onlyInterestingTGFDs = onlyInterestingTGFDs;
+	}
+
+	public boolean iskExperiment() {
+		return kExperiment;
+	}
+
+	public void setkExperiment(boolean kExperiment) {
+		this.kExperiment = kExperiment;
 	}
 
 	public static class Pair implements Comparable<Pair> {
@@ -1829,7 +1856,7 @@ public class TgfdDiscovery {
 //			if (!this.isGeneratek0Tgfds()) {
 			final long extractListOfCenterVerticesTime = System.currentTimeMillis();
 			ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertexPerTimestamp = extractListOfCenterVertices(graphs, vertexType);
-			if (this.isReUseMatches()) {
+			if (this.reUseMatches()) {
 				patternTreeNode.setListOfCenterVertices(matchesOfThisCenterVertexPerTimestamp);
 			}
 			printWithTime("extractListOfCenterVerticesTime", (System.currentTimeMillis() - extractListOfCenterVerticesTime));
@@ -1907,7 +1934,7 @@ public class TgfdDiscovery {
 		if (this.getPreviousLevelNodeIndex() >= this.patternTree.getLevel(this.getCurrentVSpawnLevel() -1).size()) {
 			this.kRuntimes.add(System.currentTimeMillis() - this.startTime);
 			this.printTgfdsToFile(this.experimentName, this.getTgfds().get(this.getCurrentVSpawnLevel()));
-			if (this.isKExperiment) this.printExperimentRuntimestoFile(experimentName, this.kRuntimes);
+			if (this.iskExperiment()) this.printExperimentRuntimestoFile(experimentName, this.kRuntimes);
 			this.printSupportStatistics();
 			this.setCurrentVSpawnLevel(this.getCurrentVSpawnLevel() + 1);
 			if (this.getCurrentVSpawnLevel() > this.getK()) {
@@ -1932,7 +1959,7 @@ public class TgfdDiscovery {
 		System.out.println("Performing VSpawn on pattern: " + previousLevelNode.getPattern());
 
 		System.out.println("Level " + (this.getCurrentVSpawnLevel() - 1) + " pattern: " + previousLevelNode.getPattern());
-		if (!this.hasNoSupportPruning() && previousLevelNode.isPruned()) {
+		if (this.hasSupportPruning() && previousLevelNode.isPruned()) {
 			System.out.println("Marked as pruned. Skip.");
 			this.setPreviousLevelNodeIndex(this.getPreviousLevelNodeIndex() + 1);
 			return null;
@@ -2038,7 +2065,7 @@ public class TgfdDiscovery {
 				continue;
 			}
 
-			if (!this.hasNoSupportPruning() && isSuperGraphOfPrunedPattern(newPattern, this.patternTree)) {
+			if (this.hasSupportPruning() && isSuperGraphOfPrunedPattern(newPattern, this.patternTree)) {
 				v.setMarked(true);
 				System.out.println("Skip. Candidate pattern is a supergraph of pruned pattern");
 				continue;
@@ -2122,7 +2149,7 @@ public class TgfdDiscovery {
 			for (Vertex vertex : graph.getGraph().getGraph().vertexSet()) {
 				if (vertex.getTypes().contains(patternVertexType)) {
 					DataVertex dataVertex = (DataVertex) vertex;
-					if (this.interestingTGFDs) {
+					if (this.isOnlyInterestingTGFDs()) {
 						// Check if vertex contains at least one active attribute
 						boolean containsActiveAttributes = false;
 						for (String attrName : vertex.getAllAttributesNames()) {
@@ -2158,7 +2185,7 @@ public class TgfdDiscovery {
 				numOfMatches++;
 				HashSet<ConstantLiteral> literalsInMatch = new HashSet<>();
 				extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, patternTreeNode, literalsInMatch, entityURIs);
-				if (this.interestingTGFDs) {
+				if (this.isOnlyInterestingTGFDs()) {
 					int interestingLiteralCount = 0;
 					for (ConstantLiteral literal: literalsInMatch) {
 						if (!literal.getAttrName().equals("uri")) {
