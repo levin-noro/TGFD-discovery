@@ -32,11 +32,11 @@ public class DBPediaLoader extends GraphLoader {
         super(alltgfd);
 
         for (String typePath:typesPath) {
-            loadNodeMap(typePath);
+            loadNodeMapFromPath(typePath);
         }
 
         for (String dataP:dataPath) {
-            loadDataGraph(dataP);
+            loadDataGraphFromPath(dataP);
         }
     }
 
@@ -45,11 +45,11 @@ public class DBPediaLoader extends GraphLoader {
         super(alltgfd);
 
         for (Model typeModel : typeModels) {
-            loadNodeMap2(typeModel);
+            loadNodeMapFromModel(typeModel);
         }
 
         for (Model dataModel : dataModels) {
-            loadDataGraph2(dataModel);
+            loadDataGraphFromModel(dataModel);
         }
     }
 
@@ -57,11 +57,11 @@ public class DBPediaLoader extends GraphLoader {
         super(dummyTGFDs);
         for (String path : paths) {
             if (path.toLowerCase().contains("literal") || path.toLowerCase().contains("object")) continue;
-            loadNodeMap(path);
+            loadNodeMapFromPath(path);
         }
         for (String path: paths) {
             if (path.toLowerCase().contains("types")) continue;
-            loadDataGraph(path);
+            loadDataGraphFromPath(path);
         }
     }
 
@@ -74,7 +74,7 @@ public class DBPediaLoader extends GraphLoader {
      * This will load the type file and create a DataVertex for each different subject with type of object
      * @param nodeTypesPath Path to the Type file
      */
-    private void loadNodeMap(String nodeTypesPath) {
+    private void loadNodeMapFromPath(String nodeTypesPath) {
 
         if (nodeTypesPath == null || nodeTypesPath.length() == 0) {
             System.out.println("No Input Node Types File Path!");
@@ -110,35 +110,8 @@ public class DBPediaLoader extends GraphLoader {
                 model.read(input.toUri().toString());
             }
 
-            StmtIterator typeTriples = model.listStatements();
+            loadNodeMapFromModel(model);
 
-            while (typeTriples.hasNext()) {
-                Statement stmt = typeTriples.nextStatement();
-
-                if (!stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
-
-                String nodeURI = stmt.getSubject().getURI().toLowerCase();
-                if (nodeURI.length() > 28) {
-                    nodeURI = nodeURI.substring(28);
-                }
-                String nodeType = stmt.getObject().asResource().getLocalName().toLowerCase();
-
-                // ignore the node if the type is not in the validTypes and
-                // optimizedLoadingBasedOnTGFD is true
-                if(Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(nodeType))
-                    continue;
-                //int nodeId = subject.hashCode();
-                DataVertex v= (DataVertex) graph.getNode(nodeURI);
-
-                if (v==null) {
-                    v=new DataVertex(nodeURI,nodeType);
-                    graph.addVertex(v);
-                }
-                else {
-                    v.addType(nodeType);
-                }
-            }
-            System.out.println("Done. Number of Types: " + graph.getSize());
             if (fullObject != null) {
                 fullObject.close();
             }
@@ -153,15 +126,16 @@ public class DBPediaLoader extends GraphLoader {
         }
     }
 
-    private void loadNodeMap2(Model model) {
+    private void loadNodeMapFromModel(Model model) {
 
         try {
 
             StmtIterator typeTriples = model.listStatements();
 
             while (typeTriples.hasNext()) {
-
                 Statement stmt = typeTriples.nextStatement();
+
+                if (!stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
 
                 String nodeURI = stmt.getSubject().getURI().toLowerCase();
                 if (nodeURI.length() > 28) {
@@ -195,14 +169,13 @@ public class DBPediaLoader extends GraphLoader {
      * This method will load DBPedia graph file
      * @param dataGraphFilePath Path to the graph file
      */
-    private void loadDataGraph(String dataGraphFilePath) {
+    private void loadDataGraphFromPath(String dataGraphFilePath) {
 
         if (dataGraphFilePath == null || dataGraphFilePath.length() == 0) {
             System.out.println("No Input Graph Data File Path!");
             return;
         }
         System.out.println("Loading DBPedia Graph: "+dataGraphFilePath);
-        int numberOfObjectsNotFound=0,numberOfSubjectsNotFound=0;
 
         S3Object fullObject = null;
         BufferedReader br=null;
@@ -232,6 +205,27 @@ public class DBPediaLoader extends GraphLoader {
                 model.read(input.toUri().toString());
             }
 
+            loadDataGraphFromModel(model);
+
+            if (fullObject != null) {
+                fullObject.close();
+            }
+            if (br != null) {
+                br.close();
+            }
+            model.close();
+        }
+        catch (Exception e)
+        {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private void loadDataGraphFromModel(Model model) {
+
+        int numberOfObjectsNotFound = 0, numberOfSubjectsNotFound = 0;
+
+        try {
             StmtIterator dataTriples = model.listStatements();
 
             while (dataTriples.hasNext()) {
@@ -252,12 +246,12 @@ public class DBPediaLoader extends GraphLoader {
                 if (object.isLiteral()) {
                     objectNodeURI = object.asLiteral().getString().toLowerCase();
                 } else {
-                    objectNodeURI = object.toString().substring(object.toString().lastIndexOf("/")+1).toLowerCase();
+                    objectNodeURI = object.toString().substring(object.toString().lastIndexOf("/") + 1).toLowerCase();
                 }
 
-                DataVertex subjVertex= (DataVertex) graph.getNode(subjectNodeURI);
+                DataVertex subjVertex = (DataVertex) graph.getNode(subjectNodeURI);
 
-                if (subjVertex==null) {
+                if (subjVertex == null) {
 
                     //System.out.println("Subject node not found: " + subjectNodeURI);
                     numberOfSubjectsNotFound++;
@@ -265,107 +259,26 @@ public class DBPediaLoader extends GraphLoader {
                 }
 
                 if (!object.isLiteral()) {
-                    DataVertex objVertex= (DataVertex) graph.getNode(objectNodeURI);
-                    if(objVertex==null)
-                    {
+                    DataVertex objVertex = (DataVertex) graph.getNode(objectNodeURI);
+                    if (objVertex == null) {
                         //System.out.println("Object node not found: " + subjectNodeURI + "  ->  " + predicate + "  ->  " + objectNodeURI);
                         numberOfObjectsNotFound++;
                         continue;
-                    }
-                    else if (subjectNodeURI.equals(objectNodeURI)) {
+                    } else if (subjectNodeURI.equals(objectNodeURI)) {
                         //System.out.println("Loop found: " + subjectNodeURI + " -> " + objectNodeURI);
                         continue;
                     }
                     graph.addEdge(subjVertex, objVertex, new RelationshipEdge(predicate));
                     graphSize++;
-                }
-                else
-                {
-//                    if(!Config.optimizedLoadingBasedOnTGFD || validAttributes.contains(predicate))
-//                    {
-                        subjVertex.addAttribute(new Attribute(predicate,objectNodeURI));
-                        graphSize++;
-//                    }
-                }
-            }
-            System.out.println("Subjects and Objects not found: " + numberOfSubjectsNotFound + " ** " + numberOfObjectsNotFound);
-            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " +graph.getGraph().edgeSet().size());
-            //System.out.println("Number of subjects not found: " + numberOfSubjectsNotFound);
-            //System.out.println("Number of loops found: " + numberOfLoops);
-
-            if (fullObject != null) {
-                fullObject.close();
-            }
-            if (br != null) {
-                br.close();
-            }
-        }
-        catch (Exception e)
-        {
-            System.out.println(e.getMessage());
-        }
-    }
-
-    private void loadDataGraph2(Model model) {
-
-        int numberOfObjectsNotFound = 0, numberOfSubjectsNotFound = 0;
-
-        try {
-            StmtIterator dataTriples = model.listStatements();
-
-            while (dataTriples.hasNext()) {
-
-                Statement stmt = dataTriples.nextStatement();
-                String subjectNodeURI = stmt.getSubject().getURI().toLowerCase();
-                if (subjectNodeURI.length() > 28) {
-                    subjectNodeURI = subjectNodeURI.substring(28);
-                }
-
-                String predicate = stmt.getPredicate().getLocalName().toLowerCase();
-                RDFNode object = stmt.getObject();
-                String objectNodeURI;
-
-                if (object.isLiteral()) {
-                    objectNodeURI = object.asLiteral().getString().toLowerCase();
                 } else {
-                    objectNodeURI = object.toString().substring(object.toString().lastIndexOf("/")+1).toLowerCase();
-                }
-
-                DataVertex subjVertex= (DataVertex) graph.getNode(subjectNodeURI);
-
-                if (subjVertex==null) {
-
-                    //System.out.println("Subject node not found: " + subjectNodeURI);
-                    numberOfSubjectsNotFound++;
-                    continue;
-                }
-
-                if (!object.isLiteral()) {
-                    DataVertex objVertex= (DataVertex) graph.getNode(objectNodeURI);
-                    if(objVertex==null)
-                    {
-                        //System.out.println("Object node not found: " + subjectNodeURI + "  ->  " + predicate + "  ->  " + objectNodeURI);
-                        numberOfObjectsNotFound++;
-                        continue;
-                    }
-                    else if (subjectNodeURI.equals(objectNodeURI)) {
-                        //System.out.println("Loop found: " + subjectNodeURI + " -> " + objectNodeURI);
-                        continue;
-                    }
-                    graph.addEdge(subjVertex, objVertex, new RelationshipEdge(predicate));
-                    graphSize++;
-                }
-                else
-                {
-                    if(!Config.optimizedLoadingBasedOnTGFD || validAttributes.contains(predicate))
-                    {
-                        subjVertex.addAttribute(new Attribute(predicate,objectNodeURI));
+                    if (!Config.optimizedLoadingBasedOnTGFD || validAttributes.contains(predicate)) {
+                        subjVertex.addAttribute(new Attribute(predicate, objectNodeURI));
                         graphSize++;
                     }
                 }
             }
             System.out.println("Subjects and Objects not found: " + numberOfSubjectsNotFound + " ** " + numberOfObjectsNotFound);
-            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " +graph.getGraph().edgeSet().size());
+            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " + graph.getGraph().edgeSet().size());
             //System.out.println("Number of subjects not found: " + numberOfSubjectsNotFound);
             //System.out.println("Number of loops found: " + numberOfLoops);
 
