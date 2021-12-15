@@ -25,24 +25,26 @@ public class TestChangeFile {
     public static void main(String[] args) {
         String overallTimeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
         ArrayList<Long> runtimes = new ArrayList<>();
-        for (int index = 0; index < 4; index++) {
+        for (int index = 0; index <= 4; index++) {
 
             TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(args);
 
             tgfdDiscovery.setUseChangeFile(false);
             tgfdDiscovery.setReUseMatches(false);
-            tgfdDiscovery.setValidationSearch(false);
+            tgfdDiscovery.setSupportPruning(false);
+            tgfdDiscovery.setMinimalityPruning(false);
             if (index == 0) {
-                tgfdDiscovery.setUseChangeFile(true);
+                tgfdDiscovery.setReUseMatches(true);
             } else if (index == 1) {
                 tgfdDiscovery.setUseChangeFile(true);
-                tgfdDiscovery.setReUseMatches(true);
             } else if (index == 2) {
-                tgfdDiscovery.setReUseMatches(true);
+                tgfdDiscovery.setSupportPruning(true);
+            } else if (index == 3) {
+                tgfdDiscovery.setMinimalityPruning(true);
             }
 
             List<GraphLoader> graphs;
-            if (!tgfdDiscovery.isUseChangeFile()) {
+            if (!tgfdDiscovery.useChangeFile()) {
                 tgfdDiscovery.setUseChangeFile(true);
                 graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(tgfdDiscovery.getPath());
                 tgfdDiscovery.setUseChangeFile(false);
@@ -52,13 +54,11 @@ public class TestChangeFile {
 
             // Had to compute histogram using only first snapshot because we need dummy TGFDs to build the other graphs
             // TO-DO: Is there a better way?
-            final long histogramTime = System.currentTimeMillis();
-            if (tgfdDiscovery.isUseChangeFile()) {
+            if (tgfdDiscovery.useChangeFile()) {
                 tgfdDiscovery.histogram(tgfdDiscovery.getTimestampToFilesMap().subList(0,1));
             } else {
                 tgfdDiscovery.histogram(graphs);
             }
-            TgfdDiscovery.printWithTime("histogramTime", (System.currentTimeMillis() - histogramTime));
 
             if (graphs.size() == 1) {
                 for (int i = 0; i < 2; i++) {
@@ -128,7 +128,7 @@ public class TestChangeFile {
                     TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
-                else if (tgfdDiscovery.isUseChangeFile()) {
+                else if (tgfdDiscovery.useChangeFile()) {
                     tgfdDiscovery.getMatchesUsingChangefiles(graphs, patternTreeNode, matches);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("getMatchesUsingChangefiles", (matchingTime));
@@ -143,7 +143,7 @@ public class TestChangeFile {
 
                 if (patternTreeNode.getPatternSupport() < tgfdDiscovery.getTheta()) {
                     System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
-                    if (!tgfdDiscovery.hasNoSupportPruning()) patternTreeNode.setIsPruned();
+                    if (tgfdDiscovery.hasSupportPruning()) patternTreeNode.setIsPruned();
                     continue;
                 }
 
