@@ -11,6 +11,7 @@ import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
 import graphLoader.IMDBLoader;
 import org.apache.commons.cli.*;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jgrapht.Graph;
 import org.jgrapht.GraphMapping;
@@ -969,8 +970,7 @@ public class TgfdDiscovery {
 		// Add dependency attributes to pattern
 		// TO-DO: Fix - when multiple vertices in a pattern have the same type, attribute values get overwritten
 		VF2PatternGraph patternForDependency = patternNode.getPattern().copy();
-		Set<ConstantLiteral> attributesSetForDependency = new HashSet<>();
-		attributesSetForDependency.addAll(literalPath.getLhs());
+		Set<ConstantLiteral> attributesSetForDependency = new HashSet<>(literalPath.getLhs());
 		attributesSetForDependency.add(literalPath.getRhs());
 		for (Vertex v : patternForDependency.getPattern().vertexSet()) {
 			String vType = new ArrayList<>(v.getTypes()).get(0);
@@ -1126,13 +1126,13 @@ public class TgfdDiscovery {
 			System.out.println("Calculating support for candidate general TGFD candidate delta: " + intersection.getKey());
 
 			// Compute general support
-			double denominator = 2 * entitiesSize * this.getNumOfSnapshots();
+			double denominator = entitiesSize * CombinatoricsUtils.binomialCoefficient(this.getNumOfSnapshots()+2-1,2);
 
 			int numberOfSatisfyingPairs = intersection.getValue().size();
 
 			System.out.println("Number of satisfying pairs: " + numberOfSatisfyingPairs);
 			System.out.println("Satisfying pairs: " + intersection.getValue());
-
+			assert numberOfSatisfyingPairs <= denominator;
 			double support = numberOfSatisfyingPairs / denominator;
 			System.out.println("Candidate general TGFD support = " + numberOfSatisfyingPairs + "/" + denominator);
 			System.out.println("Candidate general TGFD support: " + support);
@@ -1271,7 +1271,7 @@ public class TgfdDiscovery {
 			double candidateTGFDsupport = 0;
 			Pair mostSupportedDelta = null;
 			TreeSet<Pair> mostSupportedSatisfyingPairs = null;
-			double denominator = 2 * entities.size() * this.getNumOfSnapshots();
+			double denominator = entities.size() * CombinatoricsUtils.binomialCoefficient(this.getNumOfSnapshots()+2-1,2);
 			for (Pair candidateDelta : candidateDeltas) {
 				int minDistance = candidateDelta.min();
 				int maxDistance = candidateDelta.max();
@@ -1291,6 +1291,7 @@ public class TgfdDiscovery {
 					System.out.println("Satisfying pairs: " + satisfyingPairs);
 
 					numerator = satisfyingPairs.size();
+					assert numerator <= denominator;
 					double candidateSupport = numerator / denominator;
 
 					if (candidateSupport > candidateTGFDsupport) {
