@@ -1,13 +1,13 @@
 package graphLoader;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
 import Infra.Attribute;
 import Infra.DataVertex;
 import Infra.RelationshipEdge;
 import Infra.TGFD;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
 import org.apache.jena.rdf.model.*;
 import util.Config;
 
@@ -17,19 +17,115 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class IMDBLoader extends GraphLoader{
 
-    public IMDBLoader(List <TGFD> alltgfd, List<String> paths) {
+    public IMDBLoader(List <TGFD> alltgfd, List<?> paths) {
 
         super(alltgfd);
-        for (String path:paths) {
-            loadIMDBGraph(path);
+        for (Object obj:paths) {
+            if (obj instanceof String) {
+                loadIMDBGraphFromPath((String) obj);
+            } else if (obj instanceof Model) {
+                loadIMDBGraphFromModel((Model) obj);
+            }
         }
     }
 
-    private void loadIMDBGraph(String dataGraphFilePath) {
+    private void loadIMDBGraphFromModel(Model model) {
+        try {
+            HashSet<String> types = new HashSet<>();
+            StmtIterator dataTriples = model.listStatements();
+            while (dataTriples.hasNext()) {
+
+                Statement stmt = dataTriples.nextStatement();
+                String subjectNodeURI = stmt.getSubject().getURI().toLowerCase();
+                if (subjectNodeURI.length() > 16) {
+                    subjectNodeURI = subjectNodeURI.substring(16);
+                }
+
+                var temp = subjectNodeURI.split("/");
+                if (temp.length != 2) {
+                    // Error!
+                    continue;
+                }
+                String subjectType = temp[0];
+                String subjectID = temp[1];
+
+                // ignore the node if the type is not in the validTypes and
+                // optimizedLoadingBasedOnTGFD is true
+                if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType))
+                    continue;
+
+                types.add(subjectType);
+                //int nodeId = subject.hashCode();
+                DataVertex subjectVertex = (DataVertex) graph.getNode(subjectID);
+
+                if (subjectVertex == null) {
+                    subjectVertex = new DataVertex(subjectID, subjectType);
+                    graph.addVertex(subjectVertex);
+                } else {
+                    subjectVertex.addType(subjectType);
+                }
+
+                String predicate = stmt.getPredicate().getLocalName().toLowerCase();
+                RDFNode object = stmt.getObject();
+                String objectNodeURI;
+                if (object.isLiteral()) {
+                    objectNodeURI = object.asLiteral().getString().toLowerCase();
+                    subjectVertex.addAttribute(new Attribute(predicate, objectNodeURI));
+                    graphSize++;
+                } else {
+                    objectNodeURI = object.toString().toLowerCase();
+                    if (objectNodeURI.length() > 16)
+                        objectNodeURI = objectNodeURI.substring(16);
+
+                    temp = objectNodeURI.split("/");
+                    if (temp.length != 2) {
+                        // Error!
+                        continue;
+                    }
+
+                    String objectType = temp[0];
+                    String objectID = temp[1];
+
+                    // ignore the node if the type is not in the validTypes and
+                    // optimizedLoadingBasedOnTGFD is true
+                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(objectType))
+                        continue;
+
+                    types.add(objectType);
+                    DataVertex objectVertex = (DataVertex) graph.getNode(objectID);
+                    if (objectVertex == null) {
+                        objectVertex = new DataVertex(objectID, objectType);
+                        graph.addVertex(objectVertex);
+                    } else {
+                        objectVertex.addType(objectType);
+                    }
+                    if (!objectType.equals("country") && !objectType.equals("genre")
+                            && !subjectType.equals("country") && !subjectType.equals("genre")) {
+                        graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge(predicate));
+                    } else {
+                        if (objectType.equals("country") || objectType.equals("genre")) {
+                            subjectVertex.addAttribute(new Attribute(objectType + "value", objectNodeURI));
+                        } else {
+                            objectVertex.addAttribute(new Attribute(subjectType + "value", subjectNodeURI));
+                        }
+                    }
+                    graphSize++;
+                }
+            }
+            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " + graph.getGraph().edgeSet().size());
+            System.out.println("Number of types: " + types.size());
+            System.out.println(String.join(" - ", types));
+        }
+        catch (Exception e)
+        {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private void loadIMDBGraphFromPath(String dataGraphFilePath) {
 
         if (dataGraphFilePath == null || dataGraphFilePath.length() == 0) {
             System.out.println("No Input Graph Data File Path!");
@@ -41,7 +137,6 @@ public class IMDBLoader extends GraphLoader{
         BufferedReader br=null;
         try
         {
-            HashSet<String> types=new HashSet <>();
             Model model = ModelFactory.createDefaultModel();
 
             if(Config.Amazon)
@@ -66,92 +161,7 @@ public class IMDBLoader extends GraphLoader{
                 model.read(input.toUri().toString());
             }
 
-            StmtIterator dataTriples = model.listStatements();
-            while (dataTriples.hasNext()) {
-
-                Statement stmt = dataTriples.nextStatement();
-                String subjectNodeURL = stmt.getSubject().getURI().toLowerCase();
-                if (subjectNodeURL.length() > 16) {
-                    subjectNodeURL = subjectNodeURL.substring(16);
-                }
-
-                var temp=subjectNodeURL.split("/");
-                if(temp.length!=2)
-                {
-                    // Error!
-                    continue;
-                }
-                String subjectType=temp[0];
-                String subjectID=temp[1];
-
-                // ignore the node if the type is not in the validTypes and
-                // optimizedLoadingBasedOnTGFD is true
-                if(Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType))
-                    continue;
-
-                types.add(subjectType);
-                //int nodeId = subject.hashCode();
-                DataVertex subjectVertex= (DataVertex) graph.getNode(subjectID);
-
-                if (subjectVertex==null) {
-                    subjectVertex=new DataVertex(subjectID,subjectType);
-                    graph.addVertex(subjectVertex);
-                }
-                else {
-                    subjectVertex.addType(subjectType);
-                }
-
-                String predicate = stmt.getPredicate().getLocalName().toLowerCase();
-                RDFNode object = stmt.getObject();
-                String objectNodeURI;
-                if (object.isLiteral())
-                {
-                    objectNodeURI = object.asLiteral().getString().toLowerCase();
-                    if(Config.optimizedLoadingBasedOnTGFD && validAttributes.contains(predicate)) {
-                        subjectVertex.addAttribute(new Attribute(predicate, objectNodeURI));
-                        graphSize++;
-                    }
-                }
-                else
-                {
-                    objectNodeURI = object.toString().toLowerCase();
-                    if (objectNodeURI.length() > 16)
-                        objectNodeURI = objectNodeURI.substring(16);
-
-                    temp=objectNodeURI.split("/");
-                    if(temp.length!=2)
-                    {
-                        // Error!
-                        continue;
-                    }
-
-                    String objectType=temp[0];
-                    String objectID=temp[1];
-
-                    // ignore the node if the type is not in the validTypes and
-                    // optimizedLoadingBasedOnTGFD is true
-                    if(Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(objectType))
-                        continue;
-
-                    types.add(objectType);
-                    DataVertex objectVertex= (DataVertex) graph.getNode(objectID);
-                    if (objectVertex==null) {
-                        objectVertex=new DataVertex(objectID,objectType);
-                        graph.addVertex(objectVertex);
-                    }
-                    else {
-                        objectVertex.addType(objectType);
-                    }
-                    graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge(predicate));
-                    graphSize++;
-                }
-            }
-            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " +graph.getGraph().edgeSet().size());
-            System.out.println("Number of types: " + types.size() + "\n");
-            types.forEach(type -> System.out.print(type + " - "));
-            //System.out.println("Done Loading DBPedia Graph.");
-            //System.out.println("Number of subjects not found: " + numberOfSubjectsNotFound);
-            //System.out.println("Number of loops found: " + numberOfLoops);
+           loadIMDBGraphFromModel(model);
 
             if (fullObject != null) {
                 fullObject.close();
@@ -167,10 +177,4 @@ public class IMDBLoader extends GraphLoader{
         }
     }
 
-    private static void printWithTime(String message, long runTimeInMS)
-    {
-        System.out.println(message + " time: " + runTimeInMS + "(ms) ** " +
-                TimeUnit.MILLISECONDS.toSeconds(runTimeInMS) + "(sec) ** " +
-                TimeUnit.MILLISECONDS.toMinutes(runTimeInMS) +  "(min)");
-    }
 }
