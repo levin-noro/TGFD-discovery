@@ -51,6 +51,7 @@ public class PatternTreeNode {
     }
 
     public void setIsPruned() {
+        System.out.println("Marking "+this.pattern+" as pruned.");
         this.isPruned = true;
     }
 

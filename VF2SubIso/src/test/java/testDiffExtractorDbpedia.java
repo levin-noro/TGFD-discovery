@@ -105,6 +105,10 @@ public class testDiffExtractorDbpedia {
         Object[] ids = dataModelHashMap.keySet().toArray();
         Arrays.sort(ids);
         DBPediaLoader first, second = null;
+        TgfdDiscovery tgfdDiscovery = new TgfdDiscovery();
+        tgfdDiscovery.setLoader("dbpedia");
+        tgfdDiscovery.setDBpediaTimestampsAndFilePaths(path);
+        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
         List<Change> allChanges;
         int t1, t2 = 0;
         for (int i = 0; i < ids.length; i += 2) {

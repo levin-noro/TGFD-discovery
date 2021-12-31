@@ -1,18 +1,16 @@
 import Infra.*;
 import TgfdDiscovery.TgfdDiscovery;
-import graphLoader.GraphLoader;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 
 public class testSubgraph {
     public static void main(String[] args) {
 
         TgfdDiscovery tgfdDiscovery = new TgfdDiscovery(args);
 
-        List<GraphLoader> graphs = tgfdDiscovery.loadDBpediaSnapshotsFromPath(tgfdDiscovery.getPath());
-        tgfdDiscovery.histogram(graphs);
+        tgfdDiscovery.setDBpediaTimestampsAndFilePaths(tgfdDiscovery.getPath());
+        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
 
         ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
         for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
@@ -38,7 +36,7 @@ public class testSubgraph {
         System.out.println();
         System.out.println(patternTreeNode.getPattern().getCenterVertexType());
         System.out.println(patternTreeNode.getPattern().getDiameter());
-        tgfdDiscovery.findMatchesUsingCenterVertices(graphs, patternTreeNode, matchesPerTimestamps);
+        tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode, matchesPerTimestamps);
 
         matchesPerTimestamps = new ArrayList<>();
         for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
@@ -49,14 +47,14 @@ public class testSubgraph {
         System.out.println();
         System.out.println(patternTreeNode.getPattern().getCenterVertexType());
         System.out.println(patternTreeNode.getPattern().getDiameter());
-        tgfdDiscovery.findMatchesUsingCenterVertices(graphs, patternTreeNode, matchesPerTimestamps);
+        tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode, matchesPerTimestamps);
 
         matchesPerTimestamps = new ArrayList<>();
         for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
             matchesPerTimestamps.add(new ArrayList<>());
         }
         System.out.println();
-        tgfdDiscovery.getMatchesForPattern(graphs, patternTreeNode, matchesPerTimestamps);
+        tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode, matchesPerTimestamps);
     }
 
 }
