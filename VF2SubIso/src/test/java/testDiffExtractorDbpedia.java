@@ -214,7 +214,9 @@ public class testDiffExtractorDbpedia {
         System.out.println("Number of changes: " + allChanges.size());
         int numOfChangesToConsider = (int) (allChanges.size() * PERCENT);
         System.out.println("Number of changes considered: " + numOfChangesToConsider);
-        Collections.shuffle(allChanges);
+        if (PERCENT < 1.0) {
+            Collections.shuffle(allChanges);
+        }
         List<Change> changesToConsider = allChanges.subList(0, numOfChangesToConsider);
 
         System.out.println("Printing the changes: " + t1 + " -> " + t2);
