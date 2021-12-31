@@ -41,7 +41,7 @@ public class TestChangeFile extends TgfdDiscovery{
                 System.out.println(Path.of(this.getPath()) + " is not a valid directory.");
                 return;
             }
-            this.graphSize = Path.of(this.getPath()).getFileName().toString();
+            this.setGraphSize(Path.of(this.getPath()).getFileName().toString());
         }
 
         if (!cmd.hasOption("loader")) {
@@ -87,7 +87,7 @@ public class TestChangeFile extends TgfdDiscovery{
 
         switch (this.getLoader().toLowerCase()) {
             case "dbpedia" -> this.setDBpediaTimestampsAndFilePaths(this.getPath());
-            case "citation" -> this.setCitationTimestampsAndFilePaths(this.getPath());
+            case "citation" -> this.setCitationTimestampsAndFilePaths();
             case "imdb" -> this.setImdbTimestampToFilesMapFromPath(this.getPath());
             default -> {
                 System.out.println("No loader is specified.");
@@ -98,8 +98,8 @@ public class TestChangeFile extends TgfdDiscovery{
 //        this.loadChangeFilesIntoMemory();
 
         String[] info = {
-                String.join("=", "loader", this.graphSize),
-                String.join("=", "|G|", this.graphSize),
+                String.join("=", "loader", this.getGraphSize()),
+                String.join("=", "|G|", this.getGraphSize()),
                 String.join("=", "k", Integer.toString(this.getK())),
                 String.join("=", "theta", Double.toString(this.getTheta())),
                 String.join("=", "gamma", Double.toString(this.getGamma())),
@@ -137,7 +137,7 @@ public class TestChangeFile extends TgfdDiscovery{
                 HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
                 for (int i = 0; i < 2; i++) {
                     List<HashMap<Integer, HashSet<Change>>> changes = new ArrayList<>();
-                    String changefilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + tgfdDiscovery.graphSize + ".json";
+                    String changefilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + tgfdDiscovery.getGraphSize() + ".json";
                     JSONParser parser = new JSONParser();
                     Object json;
                     org.json.simple.JSONArray jsonArray = new JSONArray();
@@ -153,7 +153,7 @@ public class TestChangeFile extends TgfdDiscovery{
                     HashMap<Integer, HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
                     System.out.println("Total number of changes in changefile: " + newChanges.size());
                     changes.add(newChanges);
-                    ArrayList<TGFD> tgfds = tgfdDiscovery.getDummyTGFDs();
+                    ArrayList<TGFD> tgfds = tgfdDiscovery.getDummyEdgeTypeTGFDs();
                     IncUpdates incUpdatesOnDBpedia = new IncUpdates(tgfdDiscovery.getGraphs().get(0).getGraph(), tgfds);
                     incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
                     HashMap<String, TGFD> tgfdsByName = new HashMap<>();
@@ -200,13 +200,13 @@ public class TestChangeFile extends TgfdDiscovery{
                 if (tgfdDiscovery.isValidationSearch()) {
                     tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
                     matchingTime = System.currentTimeMillis() - matchingTime;
-                    TgfdDiscovery.printWithTime("getMatchesUsingChangeFiles", (matchingTime));
+                    TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
                 else if (tgfdDiscovery.useChangeFile()) {
                     tgfdDiscovery.getMatchesUsingChangeFiles(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
                     matchingTime = System.currentTimeMillis() - matchingTime;
-                    TgfdDiscovery.printWithTime("getMatchesUsingChangeFiles", (matchingTime));
+                    TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
                 else {
