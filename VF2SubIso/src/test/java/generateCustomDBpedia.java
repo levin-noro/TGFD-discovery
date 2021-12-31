@@ -5,6 +5,7 @@ import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -259,10 +260,12 @@ public class generateCustomDBpedia {
                     }
                     System.out.println("Number of statements = " + counter);
                     try {
-                        String newFileName = "dbpedia-"+size+"/201"+i+ "/201"+i+fileType+"-"+size+".ttl";
+                        String directoryStructure = "dbpedia-"+size+"/201"+i+"/";
+                        Files.createDirectories(Paths.get(directoryStructure));
+                        String newFileName = directoryStructure+"201"+i+fileType+"-"+size+".ttl";
                         newModel.write(new PrintStream(newFileName), "N3");
                         System.out.println("Wrote to " + newFileName);
-                    } catch (FileNotFoundException e) {
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
