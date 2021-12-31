@@ -9,6 +9,7 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import org.apache.jena.rdf.model.*;
+import org.jetbrains.annotations.NotNull;
 import util.Config;
 
 import java.io.BufferedReader;
@@ -19,6 +20,8 @@ import java.util.HashSet;
 import java.util.List;
 
 public class IMDBLoader extends GraphLoader{
+
+    private final HashSet<String> types = new HashSet<>();
 
     public IMDBLoader(List <TGFD> alltgfd, List<?> paths) {
 
@@ -34,7 +37,6 @@ public class IMDBLoader extends GraphLoader{
 
     private void loadIMDBGraphFromModel(Model model) {
         try {
-            HashSet<String> types = new HashSet<>();
             StmtIterator dataTriples = model.listStatements();
             while (dataTriples.hasNext()) {
 
@@ -54,28 +56,24 @@ public class IMDBLoader extends GraphLoader{
 
                 // ignore the node if the type is not in the validTypes and
                 // optimizedLoadingBasedOnTGFD is true
-                if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType))
-                    continue;
+//                if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType))
+//                    continue;
 
-                types.add(subjectType);
                 //int nodeId = subject.hashCode();
-                DataVertex subjectVertex = (DataVertex) graph.getNode(subjectID);
-
-                if (subjectVertex == null) {
-                    subjectVertex = new DataVertex(subjectID, subjectType);
-                    graph.addVertex(subjectVertex);
-                } else {
-                    subjectVertex.addType(subjectType);
-                }
+//                DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
 
                 String predicate = stmt.getPredicate().getLocalName().toLowerCase();
                 RDFNode object = stmt.getObject();
                 String objectNodeURI;
                 if (object.isLiteral()) {
+                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType))
+                        continue;
+                    DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
                     objectNodeURI = object.asLiteral().getString().toLowerCase();
                     subjectVertex.addAttribute(new Attribute(predicate, objectNodeURI));
                     graphSize++;
                 } else {
+
                     objectNodeURI = object.toString().toLowerCase();
                     if (objectNodeURI.length() > 16)
                         objectNodeURI = objectNodeURI.substring(16);
@@ -91,24 +89,22 @@ public class IMDBLoader extends GraphLoader{
 
                     // ignore the node if the type is not in the validTypes and
                     // optimizedLoadingBasedOnTGFD is true
-                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(objectType))
+//                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(objectType))
+//                        continue;
+                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType) && !validTypes.contains(objectType))
                         continue;
 
-                    types.add(objectType);
-                    DataVertex objectVertex = (DataVertex) graph.getNode(objectID);
-                    if (objectVertex == null) {
-                        objectVertex = new DataVertex(objectID, objectType);
-                        graph.addVertex(objectVertex);
-                    } else {
-                        objectVertex.addType(objectType);
-                    }
                     if (!objectType.equals("country") && !objectType.equals("genre")
                             && !subjectType.equals("country") && !subjectType.equals("genre")) {
+                        DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
+                        DataVertex objectVertex = getDataVertex(objectType, objectID);
                         graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge(predicate));
                     } else {
                         if (objectType.equals("country") || objectType.equals("genre")) {
+                            DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
                             subjectVertex.addAttribute(new Attribute(objectType + "value", objectNodeURI));
                         } else {
+                            DataVertex objectVertex = getDataVertex(objectType, objectID);
                             objectVertex.addAttribute(new Attribute(subjectType + "value", subjectNodeURI));
                         }
                     }
@@ -123,6 +119,21 @@ public class IMDBLoader extends GraphLoader{
         {
             System.out.println(e.getMessage());
         }
+    }
+
+    @NotNull
+    private DataVertex getDataVertex(String vertexType, String vertexID) {
+        this.types.add(vertexType);
+
+        DataVertex subjectVertex = (DataVertex) graph.getNode(vertexID);
+
+        if (subjectVertex == null) {
+            subjectVertex = new DataVertex(vertexID, vertexType);
+            graph.addVertex(subjectVertex);
+        } else {
+            subjectVertex.addType(vertexType);
+        }
+        return subjectVertex;
     }
 
     private void loadIMDBGraphFromPath(String dataGraphFilePath) {

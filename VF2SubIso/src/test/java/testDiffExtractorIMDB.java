@@ -22,6 +22,7 @@ public class testDiffExtractorIMDB {
     public static void main(String[] args) throws FileNotFoundException {
 
         Options options = TgfdDiscovery.initializeCmdOptions();
+        options.addOption("type", false,"generate changefiles based on frequent types");
         CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
 
         String path = null;
@@ -32,16 +33,18 @@ public class testDiffExtractorIMDB {
                 return;
             }
         }
+        boolean basedOnType = cmd.hasOption("type");
 
         assert path != null;
 
         TgfdDiscovery tgfdDiscovery = new TgfdDiscovery();
-        List<Map.Entry<String, List<String>>> timestampToFilesMap = tgfdDiscovery.extractTimestampToFilesMapFromPath(path);
+        tgfdDiscovery.setImdbTimestampToFilesMapFromPath(path);
         tgfdDiscovery.setLoader("imdb");
+        tgfdDiscovery.setStoreInMemory(false);
 
-        tgfdDiscovery.histogram(timestampToFilesMap);
+        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
 
-        ArrayList<TGFD> dummyTGFDs = tgfdDiscovery.getDummyTGFDs();
+        ArrayList<TGFD> dummyTGFDs = tgfdDiscovery.getDummyVertexTypeTGFDs();
 
         System.out.println("Searching for IMDB snapshots in path: "+path);
         List<File> allFilesInDirectory = new ArrayList<>(List.of(Objects.requireNonNull(new File(path).listFiles(File::isFile))));
@@ -115,53 +118,62 @@ public class testDiffExtractorIMDB {
         System.out.println("Generating the diff files for snapshots in: " + path);
         System.out.println("Diff files:");
         System.out.println(Config.getAllDataPaths());
+        Config.optimizedLoadingBasedOnTGFD = true;
+        if (basedOnType) {
+            for (TGFD dummyTGFD : dummyTGFDs) {
+                String tgfdName = dummyTGFD.getName();
+                System.out.println("===========Dummy TGFD (" + tgfdName + ")===========");
+                String fileNameSuffix = tgfdName.replaceAll(" ", "_");
+                List<TGFD> alltgfd = Collections.singletonList(dummyTGFD);
+
+                generateChangeFiles(fileNameSuffix, alltgfd);
+            }
+        } else {
+            generateChangeFiles(tgfdDiscovery.getGraphSize(), dummyTGFDs);
+        }
+    }
+
+    private static void generateChangeFiles(String fileNameSuffix, List<TGFD> alltgfd) {
+        final long dummyTgfdChangeFileGenerationTime = System.currentTimeMillis();
         Object[] ids= Config.getAllDataPaths().keySet().toArray();
         Arrays.sort(ids);
-        Config.optimizedLoadingBasedOnTGFD = true;
-        for (TGFD dummyTGFD: dummyTGFDs) {
-            final long dummyTgfdChangeFileGenerationTime = System.currentTimeMillis();
-            String tgfdName = dummyTGFD.getName();
-            System.out.println("===========Dummy TGFD (" + tgfdName + ")===========");
-            String fileNameSuffix = tgfdName.replaceAll(" ","_");
-            List<TGFD> alltgfd = Collections.singletonList(dummyTGFD);
 
-            GraphLoader first, second = null;
-            List<Change> allChanges;
-            int t1, t2 = 0;
-            for (int i = 0; i < ids.length; i += 2) {
+        GraphLoader first, second = null;
+        List<Change> allChanges;
+        int t1, t2 = 0;
+        for (int i = 0; i < ids.length; i += 2) {
 
-                System.out.println("===========Snapshot (" + ids[i] + ")===========");
-                long startTime = System.currentTimeMillis();
+            System.out.println("===========Snapshot (" + ids[i] + ")===========");
+            long startTime = System.currentTimeMillis();
 
-                t1 = (int) ids[i];
-                first = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i]));
+            t1 = (int) ids[i];
+            first = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i]));
 
-                printWithTime("Load graph " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - startTime);
+            printWithTime("Load graph " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - startTime);
 
-                if (second != null) {
-                    ChangeFinder cFinder = new ChangeFinder(second, first, new ArrayList<>());
-                    allChanges = cFinder.findAllChanged();
-                    analyzeChanges(allChanges, alltgfd, second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps());
-                }
-
-                if (i + 1 >= ids.length)
-                    break;
-
-                System.out.println("===========Snapshot (" + ids[i + 1] + ")===========");
-                startTime = System.currentTimeMillis();
-
-                t2 = (int) ids[i + 1];
-                second = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i + 1]));
-
-                printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - startTime);
-
-                ChangeFinder cFinder = new ChangeFinder(first, second, new ArrayList<>());
+            if (second != null) {
+                ChangeFinder cFinder = new ChangeFinder(second, first, alltgfd);
                 allChanges = cFinder.findAllChanged();
-                analyzeChanges(allChanges, alltgfd, first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps());
-
+                analyzeChanges(allChanges, alltgfd, second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps());
             }
-            printWithTime("Changefile generation time for one edge", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
+
+            if (i + 1 >= ids.length)
+                break;
+
+            System.out.println("===========Snapshot (" + ids[i + 1] + ")===========");
+            startTime = System.currentTimeMillis();
+
+            t2 = (int) ids[i + 1];
+            second = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i + 1]));
+
+            printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - startTime);
+
+            ChangeFinder cFinder = new ChangeFinder(first, second, alltgfd);
+            allChanges = cFinder.findAllChanged();
+            analyzeChanges(allChanges, alltgfd, first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps());
+
         }
+        printWithTime("Changefile generation time for one edge", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
     }
 
     private static void analyzeChanges(List<Change> allChanges, List<TGFD> allTGFDs, int graphSize,
@@ -177,7 +189,7 @@ public class testDiffExtractorIMDB {
 //            }
 //            else
 //            {
-        saveChanges(allChanges, timestamp1, timestamp2, TGFDsName);
+                saveChanges(allChanges, timestamp1, timestamp2, TGFDsName);
 //                return;
 //            }
 //        }
