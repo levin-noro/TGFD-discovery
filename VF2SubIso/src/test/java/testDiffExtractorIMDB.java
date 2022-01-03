@@ -1,4 +1,6 @@
 import Infra.TGFD;
+import Infra.VF2DataGraph;
+import Infra.Vertex;
 import TgfdDiscovery.TgfdDiscovery;
 import changeExploration.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -108,7 +110,7 @@ public class testDiffExtractorIMDB {
             e.printStackTrace();
         }
 
-        System.out.println("Test extract diffs over DBPedia graph");
+        System.out.println("Test extract diffs over DBpedia graph");
 
         Config.parse("conf.txt");
 
@@ -118,7 +120,6 @@ public class testDiffExtractorIMDB {
         System.out.println("Generating the diff files for snapshots in: " + path);
         System.out.println("Diff files:");
         System.out.println(Config.getAllDataPaths());
-        Config.optimizedLoadingBasedOnTGFD = true;
         if (basedOnType) {
             for (TGFD dummyTGFD : dummyTGFDs) {
                 String tgfdName = dummyTGFD.getName();
@@ -147,14 +148,17 @@ public class testDiffExtractorIMDB {
             long startTime = System.currentTimeMillis();
 
             t1 = (int) ids[i];
+            Config.optimizedLoadingBasedOnTGFD = true;
             first = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i]));
+//            removeDisconnectedVertices(first.getGraph());
+            Config.optimizedLoadingBasedOnTGFD = false;
 
             printWithTime("Load graph " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - startTime);
 
             if (second != null) {
-                ChangeFinder cFinder = new ChangeFinder(second, first, alltgfd);
+                ChangeFinder cFinder = new ChangeFinder(second, first, new ArrayList<>());
                 allChanges = cFinder.findAllChanged();
-                analyzeChanges(allChanges, alltgfd, second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps());
+                analyzeChanges(allChanges, new ArrayList<>(), second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps());
             }
 
             if (i + 1 >= ids.length)
@@ -164,16 +168,36 @@ public class testDiffExtractorIMDB {
             startTime = System.currentTimeMillis();
 
             t2 = (int) ids[i + 1];
+            Config.optimizedLoadingBasedOnTGFD = true;
             second = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i + 1]));
+//            removeDisconnectedVertices(second.getGraph());
+            Config.optimizedLoadingBasedOnTGFD = false;
 
             printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - startTime);
 
-            ChangeFinder cFinder = new ChangeFinder(first, second, alltgfd);
+            ChangeFinder cFinder = new ChangeFinder(first, second, new ArrayList<>());
             allChanges = cFinder.findAllChanged();
-            analyzeChanges(allChanges, alltgfd, first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps());
+            analyzeChanges(allChanges, new ArrayList<>(), first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps());
 
         }
         printWithTime("Changefile generation time for one edge", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
+    }
+
+    private static void removeDisconnectedVertices(VF2DataGraph vf2DataGraph) {
+        Set<Vertex> verticesToDelete = new HashSet<>();
+        for (Vertex v: vf2DataGraph.getGraph().vertexSet()) {
+            if (vf2DataGraph.getGraph().edgesOf(v).size() == 0) {
+                verticesToDelete.add(v);
+            }
+        }
+        System.out.println("Number of vertices marked for deletion: " + verticesToDelete.size());
+        int numOfVerticesDeleted = 0;
+        for (Vertex v: verticesToDelete) {
+            if (vf2DataGraph.getGraph().removeVertex(v)) {
+                numOfVerticesDeleted++;
+            }
+        }
+        System.out.println("Number of vertices successfully deleted: " + numOfVerticesDeleted);
     }
 
     private static void analyzeChanges(List<Change> allChanges, List<TGFD> allTGFDs, int graphSize,
@@ -240,6 +264,7 @@ public class testDiffExtractorIMDB {
 
         System.out.println("Number of changes: " + allChanges.size());
 
+        final long printTime = System.currentTimeMillis();
         System.out.println("Printing the changes: " + t1 + " -> " + t2);
 
         HashMap<ChangeType, Integer> map = new HashMap<>();
@@ -276,6 +301,7 @@ public class testDiffExtractorIMDB {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        printWithTime("Printing", System.currentTimeMillis()-printTime);
         printStatistics(allChanges);
     }
 }
