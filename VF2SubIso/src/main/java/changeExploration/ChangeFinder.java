@@ -20,7 +20,7 @@ public class ChangeFinder {
     private List<Change> allChanges=new ArrayList<>();
 
     /** Unique id to assign to a change log. */
-    private int changeID=1;
+    private static int changeID=1;
 
     /** number of changes except the vertex change  */
     private int numberOfEffectiveChanges=0;

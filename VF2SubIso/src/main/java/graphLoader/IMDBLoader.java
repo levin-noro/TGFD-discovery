@@ -66,12 +66,15 @@ public class IMDBLoader extends GraphLoader{
                 RDFNode object = stmt.getObject();
                 String objectNodeURI;
                 if (object.isLiteral()) {
-                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType))
-                        continue;
+                    if (Config.optimizedLoadingBasedOnTGFD) {
+                        if (validTypes.size() > 1) {
+                            if (!validTypes.contains(subjectType))
+                                continue;
+                        }
+                    }
                     DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
                     objectNodeURI = object.asLiteral().getString().toLowerCase();
                     subjectVertex.addAttribute(new Attribute(predicate, objectNodeURI));
-                    graphSize++;
                 } else {
 
                     objectNodeURI = object.toString().toLowerCase();
@@ -91,9 +94,15 @@ public class IMDBLoader extends GraphLoader{
                     // optimizedLoadingBasedOnTGFD is true
 //                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(objectType))
 //                        continue;
-                    if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subjectType) && !validTypes.contains(objectType))
-                        continue;
-
+                    if (Config.optimizedLoadingBasedOnTGFD) {
+                        if (validTypes.size() == 1) {
+                            if (!validTypes.contains(subjectType))
+                                continue;
+                        } else if (validTypes.size() > 1) {
+                            if (!validTypes.contains(subjectType) || !validTypes.contains(objectType))
+                                continue;
+                        }
+                    }
                     if (!objectType.equals("country") && !objectType.equals("genre")
                             && !subjectType.equals("country") && !subjectType.equals("genre")) {
                         DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
@@ -108,8 +117,8 @@ public class IMDBLoader extends GraphLoader{
                             objectVertex.addAttribute(new Attribute(subjectType + "value", subjectNodeURI));
                         }
                     }
-                    graphSize++;
                 }
+                graphSize++;
             }
             System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " + graph.getGraph().edgeSet().size());
             System.out.println("Number of types: " + types.size());
