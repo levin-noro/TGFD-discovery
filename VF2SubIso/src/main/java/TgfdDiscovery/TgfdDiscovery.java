@@ -40,12 +40,14 @@ public class TgfdDiscovery {
 	public static final int DEFAULT_NUM_OF_SNAPSHOTS = 3;
 	public static final String NO_REUSE_MATCHES_PARAMETER_TEXT = "noReuseMatches";
 	public static final String CHANGEFILE_PARAMETER_TEXT = "changefile";
-	public static final double DEFAULT_MEDIAN_SUPER_VERTEX_DEGREE = 25.0;
+	protected static Integer INDIVIDUAL_VERTEX_INDEGREE_FLOOR = 25;
+	public static double MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = 25.0;
 	public static final double DEFAULT_MAX_SUPER_VERTEX_DEGREE = 1500.0;
 	public static final double DEFAULT_AVG_SUPER_VERTEX_DEGREE = 30.0;
-	private double superVertexDegree = DEFAULT_MEDIAN_SUPER_VERTEX_DEGREE;
+	private boolean dissolveSuperVerticesBasedOnCount = false;
+	private double superVertexDegree = MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR;
 	private boolean useTypeChangeFile = false;
-	private boolean keepSuperVertex;
+	private boolean dissolveSuperVertexTypes = false;
 	private boolean validationSearch = false;
 	private String path = ".";
 	private int numOfSnapshots;
@@ -197,14 +199,20 @@ public class TgfdDiscovery {
 
 		if (cmd.hasOption("K")) this.markAsKexperiment();
 
-		this.keepSuperVertex = !cmd.hasOption("simplifyGraph");
+		if (cmd.hasOption("simplifySuperVertexTypes")) {
+			MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = Double.parseDouble(cmd.getOptionValue("simplifySuperVertexTypes"));
+			this.setDissolveSuperVertexTypes(true);
+		} else if (cmd.hasOption("simplifySuperVertex")) {
+			INDIVIDUAL_VERTEX_INDEGREE_FLOOR = Integer.valueOf(cmd.getOptionValue("simplifySuperVertex"));
+			this.setDissolveSuperVerticesBasedOnCount(true);
+		}
 
 		switch (this.getLoader().toLowerCase()) {
 			case "dbpedia" -> this.setDBpediaTimestampsAndFilePaths(this.getPath());
 			case "citation" -> this.setCitationTimestampsAndFilePaths();
 			case "imdb" -> this.setImdbTimestampToFilesMapFromPath(this.getPath());
 			default -> {
-				System.out.println("No loader is specified.");
+				System.out.println("No valid loader specified.");
 				System.exit(1);
 			}
 		}
@@ -245,7 +253,8 @@ public class TgfdDiscovery {
 		options.addOption("path", true, "path to dataset");
 		options.addOption("skipK1", false, "run experiment and generate tgfds for k > 1");
 		options.addOption("validation", false, "run experiment to test effectiveness of using changefiles");
-		options.addOption("simplifyGraph", false, "run experiment without collapsing super vertices");
+		options.addOption("simplifySuperVertex", true, "run experiment by collapsing super vertices");
+		options.addOption("simplifySuperVertexTypes", true, "run experiment by collapsing super vertex types");
 		options.addOption("dontStore", false, "run experiment without storing changefiles in memory, read from disk");
 		return options;
 	}
@@ -280,7 +289,7 @@ public class TgfdDiscovery {
 				"-a" + this.getGamma() +
 				"-freqSet" + (this.getFrequentSetSize() == Integer.MAX_VALUE ? "All" : this.getFrequentSetSize()) +
 				(this.isValidationSearch() ? "-validation" : "") +
-				(this.useChangeFile() ? "-changefile" : "") +
+				(this.useChangeFile() ? "-changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "") +
 				(!this.reUseMatches() ? "-noMatchesReUsed" : "") +
 				(!this.isOnlyInterestingTGFDs() ? "-uninteresting" : "") +
 				(!this.hasMinimalityPruning() ? "-noMinimalityPruning" : "") +
@@ -632,7 +641,7 @@ public class TgfdDiscovery {
 //			medianInDegree = medianInDegrees.get(medianInDegrees.size()/2);
 //		}
         double medianInDegree = this.getHighOutlierThreshold(medianInDegrees);
-		this.setSuperVertexDegree(Math.max(medianInDegree, DEFAULT_MEDIAN_SUPER_VERTEX_DEGREE));
+		this.setSuperVertexDegree(Math.max(medianInDegree, MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR));
 		System.out.println("Super vertex degree is "+ this.getSuperVertexDegree());
 	}
 
@@ -749,7 +758,12 @@ public class TgfdDiscovery {
 		System.out.println("Number of super vertices collapsed: "+numOfCollapsedSuperVertices);
 	}
 
-	private int readVertexTypesAndAttributeNamesFromGraph(Map<String, Integer> vertexTypesHistogram, Map<String, Set<String>> tempVertexAttrFreqMap, Map<String, Set<String>> attrDistributionMap, Map<String, List<Integer>> vertexTypesToInDegreesMap, GraphLoader graph) {
+	private int readVertexTypesAndAttributeNamesFromGraph(Map<String, Integer> vertexTypesHistogram, Map<String, Set<String>> tempVertexAttrFreqMap, Map<String, Set<String>> attrDistributionMap, Map<String, List<Integer>> vertexTypesToInDegreesMap, GraphLoader graph, Map<String, Integer> edgeTypesHistogram) {
+		int initialEdgeCount = graph.getGraph().getGraph().edgeSet().size();
+		System.out.println("Initial count of edges in graph: " + initialEdgeCount);
+
+		int numOfAttributesAdded = 0;
+		int numOfEdgesDeleted = 0;
 		int numOfVerticesInGraph = 0;
 		int numOfAttributesInGraph = 0;
 		for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
@@ -772,12 +786,52 @@ public class TgfdDiscovery {
 			}
 
 			int inDegree = graph.getGraph().getGraph().incomingEdgesOf(v).size();
-			for (String vertexType: v.getTypes()) {
-				if (!vertexTypesToInDegreesMap.containsKey(vertexType)) {
-					vertexTypesToInDegreesMap.put(vertexType, new ArrayList<>());
+			if (this.isDissolveSuperVerticesBasedOnCount() && inDegree > INDIVIDUAL_VERTEX_INDEGREE_FLOOR) {
+				List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.getGraph().getGraph().incomingEdgesOf(v));
+				for (RelationshipEdge e: edgesToDelete) {
+					Vertex sourceVertex = e.getSource();
+					Map<String, Attribute> sourceVertexAttrMap = sourceVertex.getAllAttributesHashMap();
+					String newAttrName = e.getLabel();
+					if (sourceVertexAttrMap.containsKey(newAttrName)) {
+						newAttrName = e.getLabel() + "value";
+						if (!sourceVertexAttrMap.containsKey(newAttrName)) {
+							sourceVertex.addAttribute(newAttrName, v.getAttributeValueByName("uri"));
+							numOfAttributesAdded++;
+						}
+					}
+					if (graph.getGraph().getGraph().removeEdge(e)) {
+						numOfEdgesDeleted++;
+					}
+					for (String subjectVertexType: sourceVertex.getTypes()) {
+						for (String objectVertexType : e.getTarget().getTypes()) {
+							String uniqueEdge = subjectVertexType + " " + e.getLabel() + " " + objectVertexType;
+							edgeTypesHistogram.merge(uniqueEdge, 1, Integer::sum);
+						}
+					}
 				}
-				if (inDegree > 0) {
-					vertexTypesToInDegreesMap.get(vertexType).add(inDegree);
+				// Update all attribute related histograms
+				for (String vertexType : v.getTypes()) {
+					tempVertexAttrFreqMap.putIfAbsent(vertexType, new HashSet<>());
+					for (String attrName: v.getAllAttributesNames()) {
+						if (attrName.equals("uri")) continue;
+						if (tempVertexAttrFreqMap.containsKey(vertexType)) {
+							tempVertexAttrFreqMap.get(vertexType).add(attrName);
+						}
+						if (!attrDistributionMap.containsKey(attrName)) {
+							attrDistributionMap.put(attrName, new HashSet<>());
+						}
+						attrDistributionMap.get(attrName).add(vertexType);
+					}
+				}
+			}
+			if (this.isDissolveSuperVertexTypes()) {
+				for (String vertexType : v.getTypes()) {
+					if (!vertexTypesToInDegreesMap.containsKey(vertexType)) {
+						vertexTypesToInDegreesMap.put(vertexType, new ArrayList<>());
+					}
+					if (inDegree > 0) {
+						vertexTypesToInDegreesMap.get(vertexType).add(inDegree);
+					}
 				}
 			}
 		}
@@ -786,6 +840,14 @@ public class TgfdDiscovery {
 		}
 		System.out.println("Number of vertices in graph: " + numOfVerticesInGraph);
 		System.out.println("Number of attributes in graph: " + numOfAttributesInGraph);
+
+		System.out.println("Number of attributes added to graph: " + numOfAttributesAdded);
+		System.out.println("Updated count of attributes in graph: " + (numOfAttributesInGraph+numOfAttributesAdded));
+
+		System.out.println("Number of edges deleted from graph: " + numOfEdgesDeleted);
+		int newEdgeCount = graph.getGraph().getGraph().edgeSet().size();
+		System.out.println("Updated count of edges in graph: " + newEdgeCount);
+
 		return numOfVerticesInGraph;
 	}
 
@@ -910,7 +972,7 @@ public class TgfdDiscovery {
 			}
 			printWithTime("Single graph load", (System.currentTimeMillis() - graphLoadTime));
 			final long graphReadTime = System.currentTimeMillis();
-			numOfVerticesAcrossAllGraphs += readVertexTypesAndAttributeNamesFromGraph(vertexTypesHistogram, tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, graphLoader);
+			numOfVerticesAcrossAllGraphs += readVertexTypesAndAttributeNamesFromGraph(vertexTypesHistogram, tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, graphLoader, edgeTypesHistogram);
 			numOfEdgesAcrossAllGraphs += readEdgesInfoFromGraph(edgeTypesHistogram, graphLoader);
 			printWithTime("Single graph read", (System.currentTimeMillis() - graphReadTime));
 		}
@@ -922,16 +984,16 @@ public class TgfdDiscovery {
 
 		this.setSortedFrequentVertexTypesHistogram(vertexTypesHistogram);
 
-		if (!this.keepSuperVertex) {
+		if (this.isDissolveSuperVertexTypes()) {
 			if (this.getGraphs().size() > 0) {
 				// TO-DO: What is the best way to estimate a good value for SUPER_VERTEX_DEGREE for each run?
 				final long superVertexHandlingTime = System.currentTimeMillis();
 //				this.calculateAverageInDegree(vertexTypesToInDegreesMap);
-//				this.calculateMedianInDegree(vertexTypesToInDegreesMap);
-				this.calculateMaxInDegree(vertexTypesToInDegreesMap);
+				this.calculateMedianInDegree(vertexTypesToInDegreesMap);
+//				this.calculateMaxInDegree(vertexTypesToInDegreesMap);
 				System.out.println("Collapsing vertices with an in-degree above " + this.getSuperVertexDegree());
 				this.dissolveSuperVerticesAndUpdateHistograms(tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, edgeTypesHistogram);
-				printWithTime("Super vertex handling", (System.currentTimeMillis() - superVertexHandlingTime));
+				printWithTime("Super vertex dissolution", (System.currentTimeMillis() - superVertexHandlingTime));
 			}
 		}
 
@@ -1542,7 +1604,7 @@ public class TgfdDiscovery {
 
 	protected void loadChangeFilesIntoMemory() {
 		HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
-		if (this.useTypeChangeFile) {
+		if (this.isUseTypeChangeFile()) {
 			for (Map.Entry<String,Integer> frequentVertexTypeEntry : this.vertexHistogram.entrySet()) {
 				for (int i = 0; i < this.getTimestampToFilesMap().size() - 1; i++) {
 					System.out.println("-----------Snapshot (" + (i + 2) + ")-----------");
@@ -1845,12 +1907,12 @@ public class TgfdDiscovery {
 		this.startTime = startTime;
 	}
 
-	public boolean isKeepSuperVertex() {
-		return keepSuperVertex;
+	public boolean isDissolveSuperVertexTypes() {
+		return dissolveSuperVertexTypes;
 	}
 
-	public void setKeepSuperVertex(boolean keepSuperVertex) {
-		this.keepSuperVertex = keepSuperVertex;
+	public void setDissolveSuperVertexTypes(boolean dissolveSuperVertexTypes) {
+		this.dissolveSuperVertexTypes = dissolveSuperVertexTypes;
 	}
 
 	public boolean hasMinimalityPruning() {
@@ -2011,6 +2073,14 @@ public class TgfdDiscovery {
 
 	public void setVertexTypesToAvgInDegreeMap(Map<String, Double> vertexTypesToAvgInDegreeMap) {
 		this.vertexTypesToAvgInDegreeMap = vertexTypesToAvgInDegreeMap;
+	}
+
+	public boolean isDissolveSuperVerticesBasedOnCount() {
+		return dissolveSuperVerticesBasedOnCount;
+	}
+
+	public void setDissolveSuperVerticesBasedOnCount(boolean dissolveSuperVerticesBasedOnCount) {
+		this.dissolveSuperVerticesBasedOnCount = dissolveSuperVerticesBasedOnCount;
 	}
 
 	public static class Pair implements Comparable<Pair> {
@@ -2612,7 +2682,7 @@ public class TgfdDiscovery {
 
 			startTime = System.currentTimeMillis();
 			JSONArray changesJsonArray;
-			if (this.useTypeChangeFile) {
+			if (this.isUseTypeChangeFile()) {
 				changesJsonArray = new JSONArray();
 				for (Vertex v: patternTreeNode.getGraph().vertexSet()) {
 					for (String type: v.getTypes()) {

@@ -83,7 +83,13 @@ public class TestChangeFile extends TgfdDiscovery{
 
         if (cmd.hasOption("K")) this.markAsKexperiment();
 
-        this.setKeepSuperVertex(cmd.hasOption("keepSuperVertex"));
+        if (cmd.hasOption("simplifySuperVertexTypes")) {
+            MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = Double.parseDouble(cmd.getOptionValue("simplifySuperVertexTypes"));
+            this.setDissolveSuperVertexTypes(true);
+        } else if (cmd.hasOption("simplifySuperVertex")) {
+            INDIVIDUAL_VERTEX_INDEGREE_FLOOR = Integer.valueOf(cmd.getOptionValue("simplifySuperVertex"));
+            this.setDissolveSuperVerticesBasedOnCount(true);
+        }
 
         switch (this.getLoader().toLowerCase()) {
             case "dbpedia" -> this.setDBpediaTimestampsAndFilePaths(this.getPath());
