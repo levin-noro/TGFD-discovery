@@ -21,9 +21,12 @@ import java.util.stream.Collectors;
 
 public class testDiffExtractorIMDB {
 
+    private static double PERCENT = 0.05;
+
     public static void main(String[] args) throws FileNotFoundException {
 
         Options options = TgfdDiscovery.initializeCmdOptions();
+        options.addOption("percent", true, "percentage of changes to keep");
         options.addOption("type", false,"generate changefiles based on frequent types");
         CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
 
@@ -36,6 +39,10 @@ public class testDiffExtractorIMDB {
             }
         }
         boolean basedOnType = cmd.hasOption("type");
+
+        if (cmd.hasOption("percent")) {
+            PERCENT = Double.parseDouble(cmd.getOptionValue("percent"));
+        }
 
         assert path != null;
 
@@ -156,9 +163,11 @@ public class testDiffExtractorIMDB {
             printWithTime("Load graph " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - startTime);
 
             if (second != null) {
+                long changeDiscoveryTime = System.currentTimeMillis();
                 ChangeFinder cFinder = new ChangeFinder(second, first, new ArrayList<>());
                 allChanges = cFinder.findAllChanged();
                 analyzeChanges(allChanges, new ArrayList<>(), second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps());
+                printWithTime("Change discovery " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - changeDiscoveryTime);
             }
 
             if (i + 1 >= ids.length)
@@ -175,10 +184,11 @@ public class testDiffExtractorIMDB {
 
             printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - startTime);
 
+            long changeDiscoveryTime = System.currentTimeMillis();
             ChangeFinder cFinder = new ChangeFinder(first, second, new ArrayList<>());
             allChanges = cFinder.findAllChanged();
             analyzeChanges(allChanges, new ArrayList<>(), first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps());
-
+            printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - changeDiscoveryTime);
         }
         printWithTime("Changefile generation time for one edge", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
     }
@@ -264,6 +274,13 @@ public class testDiffExtractorIMDB {
 
         System.out.println("Number of changes: " + allChanges.size());
 
+        int numOfChangesToConsider = (int) (allChanges.size() * PERCENT);
+        System.out.println("Number of changes considered: " + numOfChangesToConsider);
+        if (PERCENT < 1.0) {
+            Collections.shuffle(allChanges);
+        }
+        List<Change> changesToConsider = allChanges.subList(0, numOfChangesToConsider);
+
         final long printTime = System.currentTimeMillis();
         System.out.println("Printing the changes: " + t1 + " -> " + t2);
 
@@ -275,7 +292,7 @@ public class testDiffExtractorIMDB {
         map.put(ChangeType.insertEdge, 4);
         map.put(ChangeType.deleteVertex, 5);
         map.put(ChangeType.insertVertex, 5);
-        allChanges.sort(new Comparator<Change>() {
+        changesToConsider.sort(new Comparator<Change>() {
             @Override
             public int compare(Change o1, Change o2) {
                 return map.get(o1.getTypeOfChange()).compareTo(map.get(o2.getTypeOfChange()));
@@ -284,13 +301,13 @@ public class testDiffExtractorIMDB {
         try {
             FileWriter file = new FileWriter("./changes_t" + t1 + "_t" + t2 + "_" + tgfdName + ".json");
             file.write("[");
-            for (int index = 0; index < allChanges.size(); index++) {
-                Change change = allChanges.get(index);
+            for (int index = 0; index < changesToConsider.size(); index++) {
+                Change change = changesToConsider.get(index);
                 final StringWriter sw = new StringWriter();
                 final ObjectMapper mapper = new ObjectMapper();
                 mapper.writeValue(sw, change);
                 file.write(sw.toString());
-                if (index < allChanges.size() - 1) {
+                if (index < changesToConsider.size() - 1) {
                     file.write(",");
                 }
                 sw.close();
@@ -302,6 +319,6 @@ public class testDiffExtractorIMDB {
             e.printStackTrace();
         }
         printWithTime("Printing", System.currentTimeMillis()-printTime);
-        printStatistics(allChanges);
+        printStatistics(changesToConsider);
     }
 }
