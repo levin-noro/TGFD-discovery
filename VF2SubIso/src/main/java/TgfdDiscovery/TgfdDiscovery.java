@@ -44,6 +44,7 @@ public class TgfdDiscovery {
 	public static double MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = 25.0;
 	public static final double DEFAULT_MAX_SUPER_VERTEX_DEGREE = 1500.0;
 	public static final double DEFAULT_AVG_SUPER_VERTEX_DEGREE = 30.0;
+	private int t = DEFAULT_NUM_OF_SNAPSHOTS;
 	private boolean dissolveSuperVerticesBasedOnCount = false;
 	private double superVertexDegree = MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR;
 	private boolean useTypeChangeFile = false;
@@ -190,6 +191,7 @@ public class TgfdDiscovery {
 		this.setGeneratek0Tgfds(cmd.hasOption("k0"));
 		this.setSkipK1(cmd.hasOption("skipK1"));
 
+		this.setT(cmd.getOptionValue("t") == null ? TgfdDiscovery.DEFAULT_NUM_OF_SNAPSHOTS : Integer.parseInt(cmd.getOptionValue("t")));
 		this.setGamma(cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a")));
 		this.setTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
 		this.setK(cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k")));
@@ -241,6 +243,7 @@ public class TgfdDiscovery {
 		options.addOption("noSupportPruning", false, "run algorithm without support pruning");
 		options.addOption("uninteresting", false, "run algorithm and also consider uninteresting TGFDs");
 		options.addOption("g", true, "run experiment on a specific graph size");
+		options.addOption("t", true, "run experiment using t number of snapshots");
 		options.addOption("k", true, "run experiment for k iterations");
 		options.addOption("a", true, "run experiment for specified active attribute set size");
 		options.addOption("theta", true, "run experiment using a specific support threshold");
@@ -284,6 +287,7 @@ public class TgfdDiscovery {
 	@Override
 	public String toString() {
 		return (this.getGraphSize() == null ? "" : "-G"+ this.getGraphSize()) +
+				"-t" + this.getT() +
 				"-k" + this.getCurrentVSpawnLevel() +
 				"-theta" + this.getTheta() +
 				"-a" + this.getGamma() +
@@ -1878,6 +1882,15 @@ public class TgfdDiscovery {
 	public void setTimestampToFilesMap(List<Entry<String, List<String>>> timestampToFilesMap) {
 		this.timestampToFilesMap = timestampToFilesMap;
 	}
+
+	public int getT() {
+		return t;
+	}
+
+	public void setT(int t) {
+		this.t = t;
+	}
+
 
 	public boolean isValidationSearch() {
 		return validationSearch;
