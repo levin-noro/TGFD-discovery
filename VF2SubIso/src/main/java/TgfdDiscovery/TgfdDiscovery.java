@@ -11,12 +11,15 @@ import graphLoader.GraphLoader;
 import graphLoader.IMDBLoader;
 import org.apache.commons.cli.*;
 import org.apache.commons.math3.util.CombinatoricsUtils;
+import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.ModelFactory;
 import org.jetbrains.annotations.NotNull;
 import org.jgrapht.Graph;
 import org.jgrapht.GraphMapping;
 import org.jgrapht.alg.isomorphism.VF2AbstractIsomorphismInspector;
 import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
+import util.Config;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -24,6 +27,7 @@ import java.io.FileReader;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Period;
 import java.time.ZoneId;
@@ -103,6 +107,8 @@ public class TgfdDiscovery {
 	private List<GraphLoader> graphs;
 	private boolean isStoreInMemory = true;
 	private Map<String, Double> vertexTypesToAvgInDegreeMap = new HashMap<>();
+	private Model firstSnapshotTypeModel = null;
+	private Model firstSnapshotDataModel = null;
 
 	public TgfdDiscovery() {
 		this.setStartTime(System.currentTimeMillis());
@@ -150,7 +156,7 @@ public class TgfdDiscovery {
 		}
 
 		// TO-DO: this is useless
-		this.setUseChangeFile(this.loader.equalsIgnoreCase("imdb"));
+//		this.setUseChangeFile(this.loader.equalsIgnoreCase("imdb"));
 
 		this.setStoreInMemory(!cmd.hasOption("dontStore"));
 
@@ -181,12 +187,13 @@ public class TgfdDiscovery {
 			reUseMatchesTemp = false;
 		} else if (cmd.hasOption(CHANGEFILE_PARAMETER_TEXT)) {
 			this.setUseChangeFile(true);
+			reUseMatchesTemp = false;
 			if (cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT).equalsIgnoreCase("type")) {
 				this.setUseTypeChangeFile(true);
 			}
 		}
 		this.setReUseMatches(reUseMatchesTemp);
-		this.validationSearch = validationSearchTemp;
+		this.setValidationSearch(validationSearchTemp);
 
 		this.setGeneratek0Tgfds(cmd.hasOption("k0"));
 		this.setSkipK1(cmd.hasOption("skipK1"));
@@ -298,6 +305,8 @@ public class TgfdDiscovery {
 				(!this.isOnlyInterestingTGFDs() ? "-uninteresting" : "") +
 				(!this.hasMinimalityPruning() ? "-noMinimalityPruning" : "") +
 				(!this.hasSupportPruning() ? "-noSupportPruning" : "") +
+				(this.isDissolveSuperVertexTypes() ? "-simplifySuperTypes"+(this.getSuperVertexDegree()) : "") +
+				(this.isDissolveSuperVerticesBasedOnCount() ? "-simplifySuperNodes"+(INDIVIDUAL_VERTEX_INDEGREE_FLOOR) : "") +
 				(this.getTimeAndDateStamp() == null ? "" : ("-"+ this.getTimeAndDateStamp()));
 	}
 
@@ -355,9 +364,9 @@ public class TgfdDiscovery {
 			TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
 			tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
 			if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK()) break;
-			ArrayList<ArrayList<HashSet<ConstantLiteral>>> matches = new ArrayList<>();
+			List<Set<Set<ConstantLiteral>>> matches = new ArrayList<>();
 			for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
-				matches.add(new ArrayList<>());
+				matches.add(new HashSet<>());
 			}
 			long matchingTime = System.currentTimeMillis();
 
@@ -369,7 +378,7 @@ public class TgfdDiscovery {
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 			}
 			else if (tgfdDiscovery.useChangeFile()) {
-				tgfdDiscovery.getMatchesUsingChangeFiles(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
+				tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode, matches);
 				matchingTime = System.currentTimeMillis() - matchingTime;
 				TgfdDiscovery.printWithTime("getMatchesUsingChangeFiles", (matchingTime));
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
@@ -445,9 +454,9 @@ public class TgfdDiscovery {
 		return numOfMatchesFound;
 	}
 
-	private void countTotalNumberOfMatchesFound(ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	private void countTotalNumberOfMatchesFound(List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		int numberOfMatchesFound = 0;
-		for (ArrayList<HashSet<ConstantLiteral>> matchesInOneTimestamp : matchesPerTimestamps) {
+		for (Set<Set<ConstantLiteral>> matchesInOneTimestamp : matchesPerTimestamps) {
 			numberOfMatchesFound += matchesInOneTimestamp.size();
 		}
 		System.out.println("Total number of matches found across all snapshots:" + numberOfMatchesFound);
@@ -466,7 +475,7 @@ public class TgfdDiscovery {
 		return matchesOfCenterVertex;
 	}
 
-	public void findMatchesUsingCenterVertices(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public void findMatchesUsingCenterVertices(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 
 		HashSet<String> entityURIs = new HashSet<>();
 
@@ -477,7 +486,7 @@ public class TgfdDiscovery {
 		this.setPatternSupport(entityURIs.size(), patternTreeNode);
 	}
 
-	private void extractMatchesAcrossSnapshots(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps, HashSet<String> entityURIs) {
+	private void extractMatchesAcrossSnapshots(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps, HashSet<String> entityURIs) {
 
 		ArrayList<ArrayList<DataVertex>> matchesOfCenterVertex = getListOfMatchesOfCenterVerticesOfThisPattern(graphs, patternTreeNode);
 
@@ -958,7 +967,7 @@ public class TgfdDiscovery {
 			} else {
 				graphLoader = new DBPediaLoader(new ArrayList<>(), timestampToPathEntry.getValue());
 			}
-			if (this.isStoreInMemory()) {
+			if (this.isStoreInMemory() || this.getLoader().equalsIgnoreCase("dbpedia")) {
 				if (this.useChangeFile()) {
 					if (this.getGraphs().size() == 0) {
 						this.getGraphs().add(graphLoader);
@@ -967,13 +976,14 @@ public class TgfdDiscovery {
 				} else {
 					this.getGraphs().add(graphLoader);
 				}
-			} else {
-				if (this.useChangeFile()) {
-					if (this.getGraphs().size() == 0) {
-						this.getGraphs().add(graphLoader);
-					}
-				}
 			}
+//			else {
+//				if (this.useChangeFile()) {
+//					if (this.getGraphs().size() == 0) {
+//						this.getGraphs().add(graphLoader);
+//					}
+//				}
+//			}
 			printWithTime("Single graph load", (System.currentTimeMillis() - graphLoadTime));
 			final long graphReadTime = System.currentTimeMillis();
 			numOfVerticesAcrossAllGraphs += readVertexTypesAndAttributeNamesFromGraph(vertexTypesHistogram, tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, graphLoader, edgeTypesHistogram);
@@ -1041,17 +1051,17 @@ public class TgfdDiscovery {
 		System.out.println();
 	}
 
-	public static Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> findEntities(AttributeDependency attributes, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public static Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> findEntities(AttributeDependency attributes, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		String yVertexType = attributes.getRhs().getVertexType();
 		String yAttrName = attributes.getRhs().getAttrName();
 		Set<ConstantLiteral> xAttributes = attributes.getLhs();
 		Map<Set<ConstantLiteral>, Map<ConstantLiteral, List<Integer>>> entitiesWithRHSvalues = new HashMap<>();
 		int t = 2015;
-		for (ArrayList<HashSet<ConstantLiteral>> matchesInOneTimeStamp : matchesPerTimestamps) {
+		for (Set<Set<ConstantLiteral>> matchesInOneTimeStamp : matchesPerTimestamps) {
 			System.out.println("---------- Attribute values in " + t + " ---------- ");
 			int numOfMatches = 0;
 			if (matchesInOneTimeStamp.size() > 0) {
-				for(HashSet<ConstantLiteral> match : matchesInOneTimeStamp) {
+				for(Set<ConstantLiteral> match : matchesInOneTimeStamp) {
 					if (match.size() < attributes.size()) continue;
 					Set<ConstantLiteral> entity = new HashSet<>();
 					ConstantLiteral rhs = null;
@@ -1154,7 +1164,7 @@ public class TgfdDiscovery {
 		return isPruned;
 	}
 
-	public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
 		// Add dependency attributes to pattern
@@ -1596,14 +1606,7 @@ public class TgfdDiscovery {
 				timestampToFilesMap.get(timestamp).add(ntFile.getPath());
 			}
 		}
-		List<Entry<String, List<String>>> sortedTimestampToFilesMap = new ArrayList<>(timestampToFilesMap.entrySet());
-		sortedTimestampToFilesMap.sort(new Comparator<Entry<String, List<String>>>() {
-			@Override
-			public int compare(Entry<String, List<String>> o1, Entry<String, List<String>> o2) {
-				return o1.getKey().compareTo(o2.getKey());
-			}
-		});
-		this.timestampToFilesMap = sortedTimestampToFilesMap;
+		this.setTimestampToFilesMap(new ArrayList<>(timestampToFilesMap.entrySet()));
 	}
 
 	protected void loadChangeFilesIntoMemory() {
@@ -1654,7 +1657,6 @@ public class TgfdDiscovery {
 			timestampToFilesMap.put(directory.getName(),paths);
 		}
 		this.setTimestampToFilesMap(new ArrayList<>(timestampToFilesMap.entrySet()));
-		this.getTimestampToFilesMap().sort(Entry.comparingByKey());
 	}
 
 	public void setCitationTimestampsAndFilePaths() {
@@ -1667,12 +1669,10 @@ public class TgfdDiscovery {
 		for (String filePath: filePaths) {
 			timestampstoFilePathsMap.put(String.valueOf(timestampName), Collections.singletonList(filePath));
 		}
-		List<Map.Entry<String,List<String>>> sortedtimestampstoFilePathsMap = new ArrayList<>(timestampstoFilePathsMap.entrySet());
-		sortedtimestampstoFilePathsMap.sort(Map.Entry.comparingByKey());
-		this.setTimestampToFilesMap(sortedtimestampstoFilePathsMap);
+		this.setTimestampToFilesMap(new ArrayList<>(timestampstoFilePathsMap.entrySet()));
 	}
 
-	public ArrayList<TGFD> hSpawn(PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public ArrayList<TGFD> hSpawn(PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
 		System.out.println("Performing HSpawn for " + patternTreeNode.getPattern());
@@ -1880,7 +1880,8 @@ public class TgfdDiscovery {
 	}
 
 	public void setTimestampToFilesMap(List<Entry<String, List<String>>> timestampToFilesMap) {
-		this.timestampToFilesMap = timestampToFilesMap;
+		timestampToFilesMap.sort(Entry.comparingByKey());
+		this.timestampToFilesMap = timestampToFilesMap.subList(0,Math.min(timestampToFilesMap.size(),this.getT()));
 	}
 
 	public int getT() {
@@ -2096,6 +2097,22 @@ public class TgfdDiscovery {
 		this.dissolveSuperVerticesBasedOnCount = dissolveSuperVerticesBasedOnCount;
 	}
 
+	public Model getFirstSnapshotTypeModel() {
+		return firstSnapshotTypeModel;
+	}
+
+	public void setFirstSnapshotTypeModel(Model firstSnapshotTypeModel) {
+		this.firstSnapshotTypeModel = firstSnapshotTypeModel;
+	}
+
+	public Model getFirstSnapshotDataModel() {
+		return firstSnapshotDataModel;
+	}
+
+	public void setFirstSnapshotDataModel(Model firstSnapshotDataModel) {
+		this.firstSnapshotDataModel = firstSnapshotDataModel;
+	}
+
 	public static class Pair implements Comparable<Pair> {
 		private final Integer min;
 		private final Integer max;
@@ -2173,16 +2190,17 @@ public class TgfdDiscovery {
 
 //			if (!this.isGeneratek0Tgfds()) {
 			final long extractListOfCenterVerticesTime = System.currentTimeMillis();
-			ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertexPerTimestamp = extractListOfCenterVertices(graphs, vertexType);
+			ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertexPerTimestamp;
 			if (this.reUseMatches()) {
+				matchesOfThisCenterVertexPerTimestamp = extractListOfCenterVertices(graphs, vertexType);
 				patternTreeNode.setListOfCenterVertices(matchesOfThisCenterVertexPerTimestamp);
+				printWithTime("extractListOfCenterVerticesTime", (System.currentTimeMillis() - extractListOfCenterVerticesTime));
+				int numOfMatches = 0;
+				for (ArrayList<DataVertex> matchesOfThisCenterVertex: matchesOfThisCenterVertexPerTimestamp) {
+					numOfMatches += matchesOfThisCenterVertex.size();
+				}
+				System.out.println("Number of center vertex matches found containing active attributes: " + numOfMatches);
 			}
-			printWithTime("extractListOfCenterVerticesTime", (System.currentTimeMillis() - extractListOfCenterVerticesTime));
-			int numOfMatches = 0;
-			for (ArrayList<DataVertex> matchesOfThisCenterVertex: matchesOfThisCenterVertexPerTimestamp) {
-				numOfMatches += matchesOfThisCenterVertex.size();
-			}
-			System.out.println("Number of center vertex matches found containing active attributes: " + numOfMatches);
 
 //			this.setPatternSupport(numOfMatches, patternTreeNode);
 //			if (doesNotSatisfyTheta(patternTreeNode)) {
@@ -2480,7 +2498,7 @@ public class TgfdDiscovery {
 	}
 
 	public ArrayList<ArrayList<DataVertex>> extractListOfCenterVertices(List<GraphLoader> graphs, String patternVertexType) {
-		ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertex = new ArrayList<>(3);
+		ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertex = new ArrayList<>(graphs.size());
 		for (GraphLoader graph : graphs) {
 			ArrayList<DataVertex> matchesInThisTimestamp = new ArrayList<>();
 			for (Vertex vertex : graph.getGraph().getGraph().vertexSet()) {
@@ -2548,7 +2566,7 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesForPattern(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public void getMatchesForPattern(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		// TO-DO: Potential speed up for single-edge/single-node patterns. Iterate through all edges/nodes in graph.
 		HashSet<String> entityURIs = new HashSet<>();
 		patternTreeNode.getPattern().getCenterVertexType();
@@ -2575,7 +2593,7 @@ public class TgfdDiscovery {
 		// Is there an ideal pattern support threshold after which very few TGFDs are discovered?
 		// How much does the real pattern differ from the estimate?
 		int numberOfMatchesFound = 0;
-		for (ArrayList<HashSet<ConstantLiteral>> matchesInOneTimestamp : matchesPerTimestamps) {
+		for (Set<Set<ConstantLiteral>> matchesInOneTimestamp : matchesPerTimestamps) {
 			numberOfMatchesFound += matchesInOneTimestamp.size();
 		}
 		System.out.println("Total number of matches found across all snapshots:" + numberOfMatchesFound);
@@ -2657,7 +2675,7 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesUsingChangeFiles(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, ArrayList<ArrayList<HashSet<ConstantLiteral>>> matchesPerTimestamps) {
+	public void getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		// TO-DO: Should we use changefiles based on freq types??
 
 		patternTreeNode.getPattern().setDiameter(this.getCurrentVSpawnLevel());
@@ -2671,7 +2689,32 @@ public class TgfdDiscovery {
 		List<TGFD> tgfds = Collections.singletonList(dummyTgfd);
 		int numberOfMatchesFound = 0;
 
-		GraphLoader graph = graphs.get(0);
+		GraphLoader graph;
+		if (this.getFirstSnapshotTypeModel() == null && this.getFirstSnapshotDataModel() == null) {
+			for (String path : this.getTimestampToFilesMap().get(0).getValue()) {
+				if (!path.toLowerCase().contains("types")) continue;
+				Path input= Paths.get(path);
+				Model model = ModelFactory.createDefaultModel();
+				System.out.println("Loading Node Types: " + path);
+				model.read(input.toUri().toString());
+				this.setFirstSnapshotTypeModel(model);
+			}
+			Model dataModel = ModelFactory.createDefaultModel();
+			for (String path: this.getTimestampToFilesMap().get(0).getValue()) {
+				if (path.toLowerCase().contains("types")) continue;
+				Path input= Paths.get(path);
+				System.out.println("Loading DBpedia Graph: "+path);
+				dataModel.read(input.toUri().toString());
+				this.setFirstSnapshotDataModel(dataModel);
+			}
+		}
+		Config.optimizedLoadingBasedOnTGFD = true;
+		if (this.getLoader().equals("dbpedia")) {
+			graph = new DBPediaLoader(tgfds, Collections.singletonList(this.getFirstSnapshotTypeModel()), Collections.singletonList(this.getFirstSnapshotDataModel()));
+		} else {
+			graph = new IMDBLoader(tgfds, Collections.singletonList(this.getFirstSnapshotDataModel()));
+		}
+		Config.optimizedLoadingBasedOnTGFD = false;
 
 		printWithTime("Load graph (1)", System.currentTimeMillis()-startTime);
 
@@ -2684,7 +2727,7 @@ public class TgfdDiscovery {
 
 			//Retrieving and storing the matches of each timestamp.
 			final long searchStartTime = System.currentTimeMillis();
-			this.extractMatchesAcrossSnapshots(graphs.subList(0,1), patternTreeNode, matchesPerTimestamps, entityURIs);
+			this.extractMatchesAcrossSnapshots(Collections.singletonList(graph), patternTreeNode, matchesPerTimestamps, entityURIs);
 			printWithTime("Search Cost", (System.currentTimeMillis() - searchStartTime));
 			numberOfMatchesFound += matchesPerTimestamps.get(0).size();
 		}
@@ -2697,8 +2740,8 @@ public class TgfdDiscovery {
 			JSONArray changesJsonArray;
 			if (this.isUseTypeChangeFile()) {
 				changesJsonArray = new JSONArray();
-				for (Vertex v: patternTreeNode.getGraph().vertexSet()) {
-					for (String type: v.getTypes()) {
+				for (RelationshipEdge e: patternTreeNode.getGraph().edgeSet()) {
+					for (String type: e.getSource().getTypes()) {
 						String changeFilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + type + ".json";
 						JSONArray changesJsonArrayForType;
 						if (this.isStoreInMemory()) {
@@ -2731,6 +2774,7 @@ public class TgfdDiscovery {
 
 			startTime=System.currentTimeMillis();
 			System.out.println("Updating the graph");
+			// TO-DO: Do we need to update the subgraphWithinDiameter method used in IncUpdates?
 			IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), tgfds);
 			incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
 
@@ -2772,7 +2816,7 @@ public class TgfdDiscovery {
 			matchesPerTimestamps.get(i+1).addAll(newMatches);
 
 			int numOfOldMatchesFoundInSnapshot = 0;
-			for (HashSet<ConstantLiteral> previousMatch : matchesPerTimestamps.get(i)) {
+			for (Set<ConstantLiteral> previousMatch : matchesPerTimestamps.get(i)) {
 				boolean skip = false;
 				for (HashSet<ConstantLiteral> removedMatch : removedMatches) {
 					if (equalsLiteral(removedMatch, previousMatch)) {
@@ -2780,7 +2824,7 @@ public class TgfdDiscovery {
 					}
 				}
 				if (skip) continue;
-				for (HashSet<ConstantLiteral> newMatch : newMatches) {
+				for (Set<ConstantLiteral> newMatch : newMatches) {
 					if (equalsLiteral(newMatch, previousMatch)) {
 						skip = true;
 					}
@@ -2794,12 +2838,12 @@ public class TgfdDiscovery {
 
 			numberOfMatchesFound += matchesPerTimestamps.get(i+1).size();
 
-			matchesPerTimestamps.get(i+1).sort(new Comparator<HashSet<ConstantLiteral>>() {
-				@Override
-				public int compare(HashSet<ConstantLiteral> o1, HashSet<ConstantLiteral> o2) {
-					return o1.size() - o2.size();
-				}
-			});
+//			matchesPerTimestamps.get(i+1).sort(new Comparator<HashSet<ConstantLiteral>>() {
+//				@Override
+//				public int compare(HashSet<ConstantLiteral> o1, HashSet<ConstantLiteral> o2) {
+//					return o1.size() - o2.size();
+//				}
+//			});
 
 			printWithTime("Update and retrieve matches", System.currentTimeMillis()-startTime);
 		}
@@ -2809,14 +2853,14 @@ public class TgfdDiscovery {
 		this.setPatternSupport(entityURIs.size(), patternTreeNode);
 	}
 
-	private boolean equalsLiteral(HashSet<ConstantLiteral> match1, HashSet<ConstantLiteral> match2) {
-		HashSet<String> uris1 = new HashSet<>();
+	private boolean equalsLiteral(Set<ConstantLiteral> match1, Set<ConstantLiteral> match2) {
+		Set<String> uris1 = new HashSet<>();
 		for (ConstantLiteral match1Attr : match1) {
 			if (match1Attr.getAttrName().equals("uri")) {
 				uris1.add(match1Attr.getAttrValue());
 			}
 		}
-		HashSet<String> uris2 = new HashSet<>();
+		Set<String> uris2 = new HashSet<>();
 		for (ConstantLiteral match2Attr: match2) {
 			if (match2Attr.getAttrName().equals("uri")) {
 				uris2.add(match2Attr.getAttrValue());
