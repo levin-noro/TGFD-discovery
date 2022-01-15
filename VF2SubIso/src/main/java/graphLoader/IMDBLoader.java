@@ -16,6 +16,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -68,11 +69,13 @@ public class IMDBLoader extends GraphLoader{
                 if (object.isLiteral()) {
                     if (Config.optimizedLoadingBasedOnTGFD) {
                         if (validTypes.size() > 1) {
-                            if (!validTypes.contains(subjectType))
+                            if (!validTypes.contains(subjectType)) {
+//                                System.out.println(stmt);
                                 continue;
+                            }
                         }
                     }
-                    DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
+                    DataVertex subjectVertex = getDataVertex(subjectType, subjectNodeURI);
                     objectNodeURI = object.asLiteral().getString().toLowerCase();
                     subjectVertex.addAttribute(new Attribute(predicate, objectNodeURI));
                 } else {
@@ -96,26 +99,25 @@ public class IMDBLoader extends GraphLoader{
 //                        continue;
                     if (Config.optimizedLoadingBasedOnTGFD) {
                         if (validTypes.size() == 1) {
-                            if (!validTypes.contains(subjectType))
+                            if (!validTypes.contains(subjectType)) {
+//                                System.out.println(stmt);
                                 continue;
+                            }
                         } else if (validTypes.size() > 1) {
-                            if (!validTypes.contains(subjectType) || !validTypes.contains(objectType))
+                            if (!validTypes.contains(subjectType) || !validTypes.contains(objectType)) {
+//                                System.out.println(stmt);
+                                dissolveIntoAttributeIfSuperNode(subjectType, subjectNodeURI, objectType, objectNodeURI);
                                 continue;
+                            }
                         }
                     }
                     if (!objectType.equals("country") && !objectType.equals("genre")
                             && !subjectType.equals("country") && !subjectType.equals("genre")) {
-                        DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
-                        DataVertex objectVertex = getDataVertex(objectType, objectID);
+                        DataVertex subjectVertex = getDataVertex(subjectType, subjectNodeURI);
+                        DataVertex objectVertex = getDataVertex(objectType, objectNodeURI);
                         graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge(predicate));
                     } else {
-                        if (objectType.equals("country") || objectType.equals("genre")) {
-                            DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
-                            subjectVertex.addAttribute(new Attribute(objectType + "value", objectNodeURI));
-                        } else {
-                            DataVertex objectVertex = getDataVertex(objectType, objectID);
-                            objectVertex.addAttribute(new Attribute(subjectType + "value", subjectNodeURI));
-                        }
+                        dissolveIntoAttributeIfSuperNode(subjectType, subjectNodeURI, objectType, objectNodeURI);
                     }
                 }
                 graphSize++;
@@ -130,6 +132,16 @@ public class IMDBLoader extends GraphLoader{
         }
     }
 
+    private void dissolveIntoAttributeIfSuperNode(String subjectType, String subjectID, String objectType, String objectID) {
+        if (objectType.equals("country") || objectType.equals("genre")) {
+            DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
+            subjectVertex.addAttribute(new Attribute(objectType + "value", objectID));
+        } else if (subjectType.equals("country") || subjectType.equals("genre")) {
+            DataVertex objectVertex = getDataVertex(objectType, objectID);
+            objectVertex.addAttribute(new Attribute(subjectType + "value", subjectID));
+        }
+    }
+
     @NotNull
     private DataVertex getDataVertex(String vertexType, String vertexID) {
         this.types.add(vertexType);
@@ -140,7 +152,7 @@ public class IMDBLoader extends GraphLoader{
             subjectVertex = new DataVertex(vertexID, vertexType);
             graph.addVertex(subjectVertex);
         } else {
-            subjectVertex.addType(vertexType);
+            subjectVertex.addType(vertexType); // TO-DO: Should multiple types be disabled? It impacts optimized loading.
         }
         return subjectVertex;
     }

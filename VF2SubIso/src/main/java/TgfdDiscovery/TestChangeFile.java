@@ -20,10 +20,7 @@ import java.nio.file.Path;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
 
 public class TestChangeFile extends TgfdDiscovery{
     public TestChangeFile(String[] args) {
@@ -196,9 +193,9 @@ public class TestChangeFile extends TgfdDiscovery{
                 TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
                 tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
                 if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK()) break;
-                ArrayList<ArrayList<HashSet<ConstantLiteral>>> matches = new ArrayList<>();
+                List<Set<Set<ConstantLiteral>>> matches = new ArrayList<>();
                 for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
-                    matches.add(new ArrayList<>());
+                    matches.add(new HashSet<>());
                 }
                 long matchingTime = System.currentTimeMillis();
 
@@ -210,7 +207,7 @@ public class TestChangeFile extends TgfdDiscovery{
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
                 else if (tgfdDiscovery.useChangeFile()) {
-                    tgfdDiscovery.getMatchesUsingChangeFiles(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
+                    tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode, matches);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
