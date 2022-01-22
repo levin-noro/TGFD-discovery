@@ -1,3 +1,4 @@
+import graphLoader.DBPediaLoader;
 import org.apache.commons.cli.*;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
@@ -11,6 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+
+import static TgfdDiscovery.TgfdDiscovery.generateTimestampToFilesMap;
 
 public class generateCustomDBpedia {
 
@@ -39,13 +42,15 @@ public class generateCustomDBpedia {
                 return;
             }
         }
+        List<Map.Entry<String, List<String>>> timestampToFilesMap = new ArrayList<>(generateTimestampToFilesMap(path).entrySet());
+        timestampToFilesMap.sort(Map.Entry.comparingByKey());
         if (cmd.hasOption("type")) {
             String[] numOfTypes = cmd.getOptionValue("type").split(",");
             generateCustomDBpediaBasedOnType(numOfTypes);
         }
         if (cmd.hasOption("count")) {
             String[] sizes = cmd.getOptionValue("count").split(",");
-            generateCustomDBpediaBasedOnSize(sizes, path);
+            generateCustomDBpediaBasedOnSize2(sizes, timestampToFilesMap);
         }
     }
 
@@ -210,6 +215,7 @@ public class generateCustomDBpedia {
             sizes[index] = Long.parseLong(args[index]);
         }
         Set<String> allURIsInData = new HashSet<>();
+        Map<String, Set<Statement>> edgeToStmtMap = new HashMap<>();
         System.out.println("Gathering set of unique URIs in data...");
         for (int i = 5; i < 8; i++) {
             Model model = ModelFactory.createDefaultModel();
@@ -250,6 +256,10 @@ public class generateCustomDBpedia {
                             case OBJECTS -> {
                                 String subjectURI = stmt.getSubject().getURI().toLowerCase();
                                 String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
+                                String predicateName = stmt.getPredicate().getLocalName();
+                                String edgeType = String.join(",",Arrays.asList(subjectURI, predicateName, objectURI));
+                                edgeToStmtMap.putIfAbsent(edgeType, new HashSet<>());
+                                edgeToStmtMap.get(edgeType).add(stmt);
                                 if (!allURIsInData.contains(subjectURI) || !allURIsInData.contains(objectURI)) continue;
                                 verticesConnectedByEdgesSet.get(size).add(subjectURI);
                                 verticesConnectedByEdgesSet.get(size).add(objectURI);
@@ -268,6 +278,176 @@ public class generateCustomDBpedia {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
+                }
+            }
+        }
+    }
+
+    public static void generateCustomDBpediaBasedOnSize2(String[] args, List<Map.Entry<String, List<String>>> timestampToFilesMap) {
+        String[] fileTypes = {TYPES, OBJECTS, LITERALS};
+        long[] sizes = new long[args.length];
+        for (int index = 0; index < sizes.length; index++) {
+            sizes[index] = Long.parseLong(args[index]);
+        }
+        List<Map<String,Set<String>>> vertexURIToTypesMapList = new ArrayList<>();
+        List<Map<String,Set<Statement>>> edgeTypeToStmtsMapList = new ArrayList<>();
+        List<Map<String,Set<Statement>>> vertexURIToStmtsMapList = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            vertexURIToStmtsMapList.add(new HashMap<>());
+        }
+        for (int i = 0; i < 3; i++) {
+            Model model = ModelFactory.createDefaultModel();
+            Map.Entry<String, List<String>> timestampToFilesEntry = timestampToFilesMap.get(i);
+            for (String fileType : fileTypes) {
+                String filePath = "";
+                for (String filename: timestampToFilesEntry.getValue()) {
+                    if (filename.contains(fileType)) {
+                        filePath = filename;
+                    }
+                }
+//                final String filePath = path + "/201" + (i + 5) + "/201" + (i + 5) + fileType + ".ttl";
+                System.out.print("Processing "+filePath+". ");
+                Path input = Paths.get(filePath);
+                model.read(input.toAbsolutePath().toString());
+                StmtIterator stmtIterator = model.listStatements();
+                switch(fileType) {
+                    case TYPES -> {
+                        Map<String, Set<Statement>> vertexURIToStmtsMap = vertexURIToStmtsMapList.get(i);
+                        Map<String, Set<String>> vertexURIToTypesMap = new HashMap<>();
+                        while (stmtIterator.hasNext()) {
+                            Statement stmt = stmtIterator.nextStatement();
+                            if (!stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
+                            String subjectURI = stmt.getSubject().getURI().toLowerCase();
+                            String nodeType = stmt.getObject().asResource().getLocalName().toLowerCase();
+                            vertexURIToTypesMap.putIfAbsent(subjectURI, new HashSet<>());
+                            vertexURIToTypesMap.get(subjectURI).add(nodeType);
+                            vertexURIToStmtsMap.putIfAbsent(subjectURI, new HashSet<>());
+                            vertexURIToStmtsMap.get(subjectURI).add(stmt);
+                        }
+                        vertexURIToTypesMapList.add(vertexURIToTypesMap);
+                    }
+                    case LITERALS -> {
+                        Map<String, Set<Statement>> vertexURIToStmtsMap = vertexURIToStmtsMapList.get(i);
+                        while (stmtIterator.hasNext()) {
+                            Statement stmt = stmtIterator.nextStatement();
+                            if (!stmt.getObject().isLiteral()) continue;
+                            if (stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
+                            String subjectURI = stmt.getSubject().getURI().toLowerCase();
+                            vertexURIToStmtsMap.putIfAbsent(subjectURI, new HashSet<>());
+                            vertexURIToStmtsMap.get(subjectURI).add(stmt);
+                        }
+                    }
+                    case OBJECTS -> {
+                        Map<String, Set<Statement>> edgeTypeToStmtsMap = new HashMap<>();
+                        while (stmtIterator.hasNext()) {
+                            Statement stmt = stmtIterator.nextStatement();
+                            if (stmt.getObject().isLiteral()) continue;
+                            String subjectURI = stmt.getSubject().getURI().toLowerCase();
+                            Set<String> subjectTypes = vertexURIToTypesMapList.get(i).get(subjectURI);
+                            String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
+                            Set<String> objectTypes = vertexURIToTypesMapList.get(i).get(objectURI);
+                            String predicateName = stmt.getPredicate().getLocalName();
+                            if (subjectTypes == null || objectTypes == null) continue;
+                            for (String subjectType: subjectTypes) {
+                                for (String objectType: objectTypes) {
+                                    String edgeType = String.join(",", Arrays.asList(subjectType, predicateName, objectType));
+                                    edgeTypeToStmtsMap.putIfAbsent(edgeType, new HashSet<>());
+                                    edgeTypeToStmtsMap.get(edgeType).add(stmt);
+                                }
+                            }
+                        }
+                        edgeTypeToStmtsMapList.add(edgeTypeToStmtsMap);
+                    }
+                }
+                System.out.println("Done");
+            }
+        }
+        List<List<Double>> listsForAllTimestamps = new ArrayList<>();
+        for (Map<String, Set<Statement>> edgeTypeToStmtsMap : edgeTypeToStmtsMapList) {
+            ArrayList<Map.Entry<String, Set<Statement>>> sortedList = new ArrayList<>(edgeTypeToStmtsMap.entrySet());
+            sortedList.sort(new Comparator<Map.Entry<String, Set<Statement>>>() {
+                @Override
+                public int compare(Map.Entry<String, Set<Statement>> o1, Map.Entry<String, Set<Statement>> o2) {
+                    return o1.getValue().size() - o2.getValue().size();
+                }
+            });
+            List<Double> percentagesForThisTimestamp = new ArrayList<>();
+            for (long size : sizes) {
+                int total = 0;
+                double percent = 0.00;
+                while (total < size) {
+                    total = 0;
+                    percent += 0.01;
+                    for (Map.Entry<String, Set<Statement>> entry: sortedList) {
+                        total += (entry.getValue().size() * percent);
+                    }
+                }
+                percentagesForThisTimestamp.add(percent);
+            }
+            System.out.println(percentagesForThisTimestamp);
+            listsForAllTimestamps.add(percentagesForThisTimestamp);
+        }
+        for (int i = 0; i < 3; i++) {
+            Map<String, Set<Statement>> edgeTypeToStmtsMapForThisTimestamp = edgeTypeToStmtsMapList.get(i);
+            Map<String, Set<Statement>> vertexURIToStmtsMapForThisTimestamp = vertexURIToStmtsMapList.get(i);
+            List<Double> percentagesForThisTimestamp = listsForAllTimestamps.get(i);
+            for (int j = 0; j < sizes.length; j++) {
+                long size = sizes[j];
+                String directoryStructure = "dbpedia-"+size+"/201"+(i+5)+"/";
+                String newFileName = directoryStructure+"201"+(i+5)+"-"+size+".ttl";
+                System.out.println("Creating model for "+newFileName);
+                double percentage = percentagesForThisTimestamp.get(j);
+                Model model = ModelFactory.createDefaultModel();
+                int totalEdgeCount = 0;
+                int totalAttributeCount = 0;
+                for(Map.Entry<String, Set<Statement>> edgeTypeToStmtsMapEntry: edgeTypeToStmtsMapForThisTimestamp.entrySet()) {
+                    Iterator<Statement> stmtIterator = edgeTypeToStmtsMapEntry.getValue().iterator();
+                    int singleEdgeTypeCount = 0;
+                    while (singleEdgeTypeCount < (edgeTypeToStmtsMapEntry.getValue().size()*percentage) && stmtIterator.hasNext()) {
+                        Statement stmt = stmtIterator.next();
+                        String subjectURI = stmt.getSubject().getURI().toLowerCase();
+                        String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
+                        model.add(stmt);
+                        if (vertexURIToStmtsMapForThisTimestamp.containsKey(subjectURI)) {
+                            Set<Statement> subjectStmts = vertexURIToStmtsMapForThisTimestamp.get(subjectURI);
+                            for (Statement subjStmt : subjectStmts) {
+                                if (subjStmt.getObject().isLiteral() || subjStmt.getPredicate().getLocalName().contains("type")) {
+                                    model.add(subjStmt);
+                                    if (!subjStmt.getPredicate().getLocalName().contains("type")) {
+                                        totalAttributeCount++;
+                                    }
+                                } else {
+                                    System.out.print("");
+                                }
+                            }
+                        }
+                        if (vertexURIToStmtsMapForThisTimestamp.containsKey(objectURI)) {
+                            Set<Statement> objectStmts = vertexURIToStmtsMapForThisTimestamp.get(objectURI);
+                            for (Statement objStmt : objectStmts) {
+                                if (objStmt.getObject().isLiteral() || objStmt.getPredicate().getLocalName().contains("type")) {
+                                    model.add(objStmt);
+                                    if (!objStmt.getPredicate().getLocalName().contains("type")) {
+                                        totalAttributeCount++;
+                                    }
+                                } else {
+                                    System.out.print("");
+                                }
+                            }
+                        }
+                        singleEdgeTypeCount++;
+                    }
+                    totalEdgeCount += singleEdgeTypeCount;
+                }
+                System.out.println("Edge count = "+totalEdgeCount);
+                System.out.println("Attribute count = "+totalAttributeCount);
+                try {
+                    System.out.print("Writing to "+newFileName+". ");
+                    Files.createDirectories(Paths.get(directoryStructure));
+                    model.write(new PrintStream(newFileName), "N3");
+                    System.out.println("Done.");
+                    DBPediaLoader dbPediaLoader = new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(model));
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
         }
