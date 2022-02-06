@@ -56,11 +56,11 @@ public class DBPediaLoader extends GraphLoader {
     public DBPediaLoader(List<TGFD> dummyTGFDs, List<String> paths) {
         super(dummyTGFDs);
         for (String path : paths) {
-            if (path.toLowerCase().contains("literal") || path.toLowerCase().contains("object")) continue;
+            if (path.toLowerCase().contains("literal") || path.toLowerCase().contains("object") || !path.toLowerCase().contains(".ttl")) continue;
             loadNodeMapFromPath(path);
         }
         for (String path: paths) {
-            if (path.toLowerCase().contains("types")) continue;
+            if (path.toLowerCase().contains("types") || !path.toLowerCase().contains(".ttl")) continue;
             loadDataGraphFromPath(path);
         }
     }
@@ -142,6 +142,7 @@ public class DBPediaLoader extends GraphLoader {
                     nodeURI = nodeURI.substring(28);
                 }
                 String nodeType = stmt.getObject().asResource().getLocalName().toLowerCase();
+                if (nodeType.trim().length() == 0) continue;
 
                 // ignore the node if the type is not in the validTypes and
                 // optimizedLoadingBasedOnTGFD is true
@@ -268,13 +269,13 @@ public class DBPediaLoader extends GraphLoader {
                         //System.out.println("Loop found: " + subjectNodeURI + " -> " + objectNodeURI);
                         continue;
                     }
-                    graph.addEdge(subjVertex, objVertex, new RelationshipEdge(predicate));
-                    graphSize++;
+                    boolean edgeAdded = graph.addEdge(subjVertex, objVertex, new RelationshipEdge(predicate));
+                    if (edgeAdded) graphSize++;
                 } else {
-                    if (!Config.optimizedLoadingBasedOnTGFD || validAttributes.contains(predicate)) {
+//                    if (!Config.optimizedLoadingBasedOnTGFD || validAttributes.contains(predicate)) {
                         subjVertex.addAttribute(new Attribute(predicate, objectNodeURI));
                         graphSize++;
-                    }
+//                    }
                 }
             }
             System.out.println("Subjects and Objects not found: " + numberOfSubjectsNotFound + " ** " + numberOfObjectsNotFound);
