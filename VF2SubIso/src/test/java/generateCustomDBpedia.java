@@ -13,13 +13,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
-import static TgfdDiscovery.TgfdDiscovery.generateTimestampToFilesMap;
+import static TgfdDiscovery.TgfdDiscovery.generateDbpediaTimestampToFilesMap;
 
 public class generateCustomDBpedia {
 
     public static final String TYPES = "types";
     public static final String LITERALS = "literals";
     public static final String OBJECTS = "objects";
+    public static final double LOWER_THRESHOLD = 0.05;
+    public static final double UPPER_THRESHOLD = 0.1;
 
     public static void main(String[] args) {
         Options options = new Options();
@@ -42,7 +44,7 @@ public class generateCustomDBpedia {
                 return;
             }
         }
-        List<Map.Entry<String, List<String>>> timestampToFilesMap = new ArrayList<>(generateTimestampToFilesMap(path).entrySet());
+        List<Map.Entry<String, List<String>>> timestampToFilesMap = new ArrayList<>(generateDbpediaTimestampToFilesMap(path).entrySet());
         timestampToFilesMap.sort(Map.Entry.comparingByKey());
         if (cmd.hasOption("type")) {
             String[] numOfTypes = cmd.getOptionValue("type").split(",");
@@ -290,7 +292,7 @@ public class generateCustomDBpedia {
             sizes[index] = Long.parseLong(args[index]);
         }
         List<Map<String,Set<String>>> vertexURIToTypesMapList = new ArrayList<>();
-        List<Map<String,Set<Statement>>> edgeTypeToStmtsMapList = new ArrayList<>();
+        List<Map<String,List<Statement>>> edgeTypeToStmtsMapList = new ArrayList<>();
         List<Map<String,Set<Statement>>> vertexURIToStmtsMapList = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             vertexURIToStmtsMapList.add(new HashMap<>());
@@ -338,7 +340,7 @@ public class generateCustomDBpedia {
                         }
                     }
                     case OBJECTS -> {
-                        Map<String, Set<Statement>> edgeTypeToStmtsMap = new HashMap<>();
+                        Map<String, List<Statement>> edgeTypeToStmtsMap = new HashMap<>();
                         while (stmtIterator.hasNext()) {
                             Statement stmt = stmtIterator.nextStatement();
                             if (stmt.getObject().isLiteral()) continue;
@@ -351,7 +353,7 @@ public class generateCustomDBpedia {
                             for (String subjectType: subjectTypes) {
                                 for (String objectType: objectTypes) {
                                     String edgeType = String.join(",", Arrays.asList(subjectType, predicateName, objectType));
-                                    edgeTypeToStmtsMap.putIfAbsent(edgeType, new HashSet<>());
+                                    edgeTypeToStmtsMap.putIfAbsent(edgeType, new ArrayList<>());
                                     edgeTypeToStmtsMap.get(edgeType).add(stmt);
                                 }
                             }
@@ -362,25 +364,63 @@ public class generateCustomDBpedia {
                 System.out.println("Done");
             }
         }
+        // TO-DO: Verify if this helps make snapshots consistent
+        for (Map<String, List<Statement>> edgeTypeToStmtsMap : edgeTypeToStmtsMapList) {
+            for (Map.Entry<String, List<Statement>> entry: edgeTypeToStmtsMap.entrySet()) {
+                entry.getValue().sort(new Comparator<Statement>() {
+                    @Override
+                    public int compare(Statement o1, Statement o2) {
+                        int result = o1.getSubject().getURI().toLowerCase().compareTo(o2.getSubject().getURI().toLowerCase());
+                        if (result == 0) {
+                            result = o1.getPredicate().getLocalName().compareTo(o2.getPredicate().getLocalName());
+                        }
+                        if (result == 0) {
+                            result = o1.getObject().asResource().getURI().toLowerCase().compareTo(o2.getObject().asResource().getURI().toLowerCase());
+                        }
+                        return result;
+                    }
+                });
+            }
+        }
         List<List<Double>> listsForAllTimestamps = new ArrayList<>();
-        for (Map<String, Set<Statement>> edgeTypeToStmtsMap : edgeTypeToStmtsMapList) {
-            ArrayList<Map.Entry<String, Set<Statement>>> sortedList = new ArrayList<>(edgeTypeToStmtsMap.entrySet());
-            sortedList.sort(new Comparator<Map.Entry<String, Set<Statement>>>() {
+        for (Map<String, List<Statement>> edgeTypeToStmtsMap : edgeTypeToStmtsMapList) {
+            ArrayList<Map.Entry<String, List<Statement>>> sortedList = new ArrayList<>(edgeTypeToStmtsMap.entrySet());
+            sortedList.sort(new Comparator<Map.Entry<String, List<Statement>>>() {
                 @Override
-                public int compare(Map.Entry<String, Set<Statement>> o1, Map.Entry<String, Set<Statement>> o2) {
+                public int compare(Map.Entry<String, List<Statement>> o1, Map.Entry<String, List<Statement>> o2) {
                     return o1.getValue().size() - o2.getValue().size();
                 }
             });
             List<Double> percentagesForThisTimestamp = new ArrayList<>();
             for (long size : sizes) {
-                int total = 0;
+                System.out.println("Size: "+size);
+                double total = 0;
                 double percent = 0.00;
-                while (total < size) {
-                    total = 0;
-                    percent += 0.01;
-                    for (Map.Entry<String, Set<Statement>> entry: sortedList) {
-                        total += (entry.getValue().size() * percent);
+                double increment = 0.01;
+                while ((total < (size-(size*LOWER_THRESHOLD)) || total > (size+(size*UPPER_THRESHOLD))) && percent<=1.0) {
+                    if (total < (size-(size*LOWER_THRESHOLD))) {
+                        System.out.println("Not enough edges");
+                        percent += increment;
+                    } else if (total > (size+(size*UPPER_THRESHOLD))) {
+                        System.out.println("Too many edges");
+                        percent -= increment;
+                        increment /= 10;
+                        percent += increment;
                     }
+//                    percent += 0.01;
+                    System.out.println("Trying percent: "+percent);
+                    total = 0;
+                    for (Map.Entry<String, List<Statement>> entry: sortedList) {
+                        Iterator<Statement> stmtIterator = entry.getValue().iterator();
+                        int singleEdgeTypeCount = 0;
+                        while (singleEdgeTypeCount+1 < (entry.getValue().size()*percent) && stmtIterator.hasNext()) {
+                            stmtIterator.next();
+                            singleEdgeTypeCount++;
+                        }
+//                        total += (entry.getValue().size() * percent);
+                        total += singleEdgeTypeCount;
+                    }
+                    System.out.println("Total: "+total);
                 }
                 percentagesForThisTimestamp.add(percent);
             }
@@ -388,7 +428,7 @@ public class generateCustomDBpedia {
             listsForAllTimestamps.add(percentagesForThisTimestamp);
         }
         for (int i = 0; i < 3; i++) {
-            Map<String, Set<Statement>> edgeTypeToStmtsMapForThisTimestamp = edgeTypeToStmtsMapList.get(i);
+            Map<String, List<Statement>> edgeTypeToStmtsMapForThisTimestamp = edgeTypeToStmtsMapList.get(i);
             Map<String, Set<Statement>> vertexURIToStmtsMapForThisTimestamp = vertexURIToStmtsMapList.get(i);
             List<Double> percentagesForThisTimestamp = listsForAllTimestamps.get(i);
             for (int j = 0; j < sizes.length; j++) {
@@ -400,10 +440,10 @@ public class generateCustomDBpedia {
                 Model model = ModelFactory.createDefaultModel();
                 int totalEdgeCount = 0;
                 int totalAttributeCount = 0;
-                for(Map.Entry<String, Set<Statement>> edgeTypeToStmtsMapEntry: edgeTypeToStmtsMapForThisTimestamp.entrySet()) {
+                for(Map.Entry<String, List<Statement>> edgeTypeToStmtsMapEntry: edgeTypeToStmtsMapForThisTimestamp.entrySet()) {
                     Iterator<Statement> stmtIterator = edgeTypeToStmtsMapEntry.getValue().iterator();
                     int singleEdgeTypeCount = 0;
-                    while (singleEdgeTypeCount < (edgeTypeToStmtsMapEntry.getValue().size()*percentage) && stmtIterator.hasNext()) {
+                    while (singleEdgeTypeCount+1 < (edgeTypeToStmtsMapEntry.getValue().size()*percentage) && stmtIterator.hasNext()) {
                         Statement stmt = stmtIterator.next();
                         String subjectURI = stmt.getSubject().getURI().toLowerCase();
                         String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
@@ -416,8 +456,6 @@ public class generateCustomDBpedia {
                                     if (!subjStmt.getPredicate().getLocalName().contains("type")) {
                                         totalAttributeCount++;
                                     }
-                                } else {
-                                    System.out.print("");
                                 }
                             }
                         }
@@ -429,8 +467,6 @@ public class generateCustomDBpedia {
                                     if (!objStmt.getPredicate().getLocalName().contains("type")) {
                                         totalAttributeCount++;
                                     }
-                                } else {
-                                    System.out.print("");
                                 }
                             }
                         }
@@ -445,7 +481,7 @@ public class generateCustomDBpedia {
                     Files.createDirectories(Paths.get(directoryStructure));
                     model.write(new PrintStream(newFileName), "N3");
                     System.out.println("Done.");
-                    DBPediaLoader dbPediaLoader = new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(model));
+                    new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(model));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
