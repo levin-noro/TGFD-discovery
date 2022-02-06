@@ -71,7 +71,7 @@ public class generateCustomImdb {
             }
             Map<String, Set<Statement>> vertexURIToStmtsMap = new HashMap<>();
             Map<String, Set<String>> vertexURIToTypesMap = new HashMap<>();
-            Map<String, Set<Statement>> edgeTypeToStmtsMap = new HashMap<>();
+            Map<String, List<Statement>> edgeTypeToStmtsMap = new HashMap<>();
             for (int j = 0; j < 2; j++) {
 //                final String filePath = path + "/201" + (i + 5) + "/201" + (i + 5) + fileType + ".ttl";
                 System.out.print("Processing " + filePath + ". ");
@@ -132,7 +132,7 @@ public class generateCustomImdb {
                                 for (String subjectType : subjectTypes) {
                                     for (String objectType : objectTypes) {
                                         String edgeType = String.join(",", Arrays.asList(subjectType, predicateName, objectType));
-                                        edgeTypeToStmtsMap.putIfAbsent(edgeType, new HashSet<>());
+                                        edgeTypeToStmtsMap.putIfAbsent(edgeType, new ArrayList<>());
                                         edgeTypeToStmtsMap.get(edgeType).add(stmt);
                                     }
                                 }
@@ -146,10 +146,26 @@ public class generateCustomImdb {
                 }
             }
             System.out.println("Done");
-            ArrayList<Map.Entry<String, Set<Statement>>> sortedList = new ArrayList<>(edgeTypeToStmtsMap.entrySet());
-            sortedList.sort(new Comparator<Map.Entry<String, Set<Statement>>>() {
+            // TO-DO: Verify if this helps make snapshots consistent
+            for (Map.Entry<String, List<Statement>> entry: edgeTypeToStmtsMap.entrySet()) {
+                entry.getValue().sort(new Comparator<Statement>() {
+                    @Override
+                    public int compare(Statement o1, Statement o2) {
+                        int result = o1.getSubject().getURI().toLowerCase().compareTo(o2.getSubject().getURI().toLowerCase());
+                        if (result == 0) {
+                            result = o1.getPredicate().getLocalName().compareTo(o2.getPredicate().getLocalName());
+                        }
+                        if (result == 0) {
+                            result = o1.getObject().asResource().getURI().toLowerCase().compareTo(o2.getObject().asResource().getURI().toLowerCase());
+                        }
+                        return result;
+                    }
+                });
+            }
+            ArrayList<Map.Entry<String, List<Statement>>> sortedList = new ArrayList<>(edgeTypeToStmtsMap.entrySet());
+            sortedList.sort(new Comparator<Map.Entry<String, List<Statement>>>() {
                 @Override
-                public int compare(Map.Entry<String, Set<Statement>> o1, Map.Entry<String, Set<Statement>> o2) {
+                public int compare(Map.Entry<String, List<Statement>> o1, Map.Entry<String, List<Statement>> o2) {
                     return o1.getValue().size() - o2.getValue().size();
                 }
             });
@@ -172,7 +188,7 @@ public class generateCustomImdb {
 //                    percent += 0.01;
                     System.out.println("Trying percent: " + percent);
                     total = 0;
-                    for (Map.Entry<String, Set<Statement>> entry : sortedList) {
+                    for (Map.Entry<String, List<Statement>> entry : sortedList) {
                         Iterator<Statement> stmtIterator = entry.getValue().iterator();
                         int singleEdgeTypeCount = 0;
                         while (singleEdgeTypeCount + 1 < (entry.getValue().size() * percent) && stmtIterator.hasNext()) {
@@ -196,7 +212,7 @@ public class generateCustomImdb {
                 Model newModel = ModelFactory.createDefaultModel();
                 int totalEdgeCount = 0;
                 int totalAttributeCount = 0;
-                for (Map.Entry<String, Set<Statement>> edgeTypeToStmtsMapEntry : edgeTypeToStmtsMap.entrySet()) {
+                for (Map.Entry<String, List<Statement>> edgeTypeToStmtsMapEntry : edgeTypeToStmtsMap.entrySet()) {
                     Iterator<Statement> stmtIterator = edgeTypeToStmtsMapEntry.getValue().iterator();
                     int singleEdgeTypeCount = 0;
                     while (singleEdgeTypeCount + 1 < (edgeTypeToStmtsMapEntry.getValue().size() * percentage) && stmtIterator.hasNext()) {
