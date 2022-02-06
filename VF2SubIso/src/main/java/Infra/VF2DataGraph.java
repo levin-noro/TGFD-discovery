@@ -51,9 +51,9 @@ public class VF2DataGraph implements Serializable {
         return nodeMap.getOrDefault(vertexURI.toLowerCase(), null);
     }
 
-    public void addEdge(DataVertex v1, DataVertex v2, RelationshipEdge edge)
+    public boolean addEdge(DataVertex v1, DataVertex v2, RelationshipEdge edge)
     {
-        graph.addEdge(v1,v2,edge);
+        return graph.addEdge(v1,v2,edge);
     }
 
     public void removeEdge(DataVertex v1, DataVertex v2, RelationshipEdge edge)
