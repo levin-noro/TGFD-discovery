@@ -291,13 +291,11 @@ public class generateCustomDBpedia {
         for (int index = 0; index < sizes.length; index++) {
             sizes[index] = Long.parseLong(args[index]);
         }
-        List<Map<String,Set<String>>> vertexURIToTypesMapList = new ArrayList<>();
-        List<Map<String,List<Statement>>> edgeTypeToStmtsMapList = new ArrayList<>();
-        List<Map<String,Set<Statement>>> vertexURIToStmtsMapList = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
-            vertexURIToStmtsMapList.add(new HashMap<>());
-        }
-        for (int i = 0; i < 3; i++) {
+            Map<String, Set<String>> vertexURIToTypesMap = new HashMap<>();
+            Map<String, List<Statement>> edgeTypeToStmtsMap = new HashMap<>();
+            Map<String, Set<Statement>> vertexURIToStmtsMap = new HashMap<>();
+
             Model model = ModelFactory.createDefaultModel();
             Map.Entry<String, List<String>> timestampToFilesEntry = timestampToFilesMap.get(i);
             for (String fileType : fileTypes) {
@@ -314,8 +312,6 @@ public class generateCustomDBpedia {
                 StmtIterator stmtIterator = model.listStatements();
                 switch(fileType) {
                     case TYPES -> {
-                        Map<String, Set<Statement>> vertexURIToStmtsMap = vertexURIToStmtsMapList.get(i);
-                        Map<String, Set<String>> vertexURIToTypesMap = new HashMap<>();
                         while (stmtIterator.hasNext()) {
                             Statement stmt = stmtIterator.nextStatement();
                             if (!stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
@@ -326,10 +322,8 @@ public class generateCustomDBpedia {
                             vertexURIToStmtsMap.putIfAbsent(subjectURI, new HashSet<>());
                             vertexURIToStmtsMap.get(subjectURI).add(stmt);
                         }
-                        vertexURIToTypesMapList.add(vertexURIToTypesMap);
                     }
                     case LITERALS -> {
-                        Map<String, Set<Statement>> vertexURIToStmtsMap = vertexURIToStmtsMapList.get(i);
                         while (stmtIterator.hasNext()) {
                             Statement stmt = stmtIterator.nextStatement();
                             if (!stmt.getObject().isLiteral()) continue;
@@ -340,14 +334,13 @@ public class generateCustomDBpedia {
                         }
                     }
                     case OBJECTS -> {
-                        Map<String, List<Statement>> edgeTypeToStmtsMap = new HashMap<>();
                         while (stmtIterator.hasNext()) {
                             Statement stmt = stmtIterator.nextStatement();
                             if (stmt.getObject().isLiteral()) continue;
                             String subjectURI = stmt.getSubject().getURI().toLowerCase();
-                            Set<String> subjectTypes = vertexURIToTypesMapList.get(i).get(subjectURI);
+                            Set<String> subjectTypes = vertexURIToTypesMap.get(subjectURI);
                             String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
-                            Set<String> objectTypes = vertexURIToTypesMapList.get(i).get(objectURI);
+                            Set<String> objectTypes = vertexURIToTypesMap.get(objectURI);
                             String predicateName = stmt.getPredicate().getLocalName();
                             if (subjectTypes == null || objectTypes == null) continue;
                             for (String subjectType: subjectTypes) {
@@ -358,14 +351,10 @@ public class generateCustomDBpedia {
                                 }
                             }
                         }
-                        edgeTypeToStmtsMapList.add(edgeTypeToStmtsMap);
                     }
                 }
                 System.out.println("Done");
             }
-        }
-        // TO-DO: Verify if this helps make snapshots consistent
-        for (Map<String, List<Statement>> edgeTypeToStmtsMap : edgeTypeToStmtsMapList) {
             for (Map.Entry<String, List<Statement>> entry: edgeTypeToStmtsMap.entrySet()) {
                 entry.getValue().sort(new Comparator<Statement>() {
                     @Override
@@ -381,9 +370,6 @@ public class generateCustomDBpedia {
                     }
                 });
             }
-        }
-        List<List<Double>> listsForAllTimestamps = new ArrayList<>();
-        for (Map<String, List<Statement>> edgeTypeToStmtsMap : edgeTypeToStmtsMapList) {
             ArrayList<Map.Entry<String, List<Statement>>> sortedList = new ArrayList<>(edgeTypeToStmtsMap.entrySet());
             sortedList.sort(new Comparator<Map.Entry<String, List<Statement>>>() {
                 @Override
@@ -425,45 +411,39 @@ public class generateCustomDBpedia {
                 percentagesForThisTimestamp.add(percent);
             }
             System.out.println(percentagesForThisTimestamp);
-            listsForAllTimestamps.add(percentagesForThisTimestamp);
-        }
-        for (int i = 0; i < 3; i++) {
-            Map<String, List<Statement>> edgeTypeToStmtsMapForThisTimestamp = edgeTypeToStmtsMapList.get(i);
-            Map<String, Set<Statement>> vertexURIToStmtsMapForThisTimestamp = vertexURIToStmtsMapList.get(i);
-            List<Double> percentagesForThisTimestamp = listsForAllTimestamps.get(i);
             for (int j = 0; j < sizes.length; j++) {
                 long size = sizes[j];
                 String directoryStructure = "dbpedia-"+size+"/201"+(i+5)+"/";
                 String newFileName = directoryStructure+"201"+(i+5)+"-"+size+".ttl";
                 System.out.println("Creating model for "+newFileName);
                 double percentage = percentagesForThisTimestamp.get(j);
-                Model model = ModelFactory.createDefaultModel();
+                Model newModel = ModelFactory.createDefaultModel();
                 int totalEdgeCount = 0;
                 int totalAttributeCount = 0;
-                for(Map.Entry<String, List<Statement>> edgeTypeToStmtsMapEntry: edgeTypeToStmtsMapForThisTimestamp.entrySet()) {
+                for(Map.Entry<String, List<Statement>> edgeTypeToStmtsMapEntry: edgeTypeToStmtsMap.entrySet()) {
                     Iterator<Statement> stmtIterator = edgeTypeToStmtsMapEntry.getValue().iterator();
                     int singleEdgeTypeCount = 0;
                     while (singleEdgeTypeCount+1 < (edgeTypeToStmtsMapEntry.getValue().size()*percentage) && stmtIterator.hasNext()) {
                         Statement stmt = stmtIterator.next();
                         String subjectURI = stmt.getSubject().getURI().toLowerCase();
                         String objectURI = stmt.getObject().asResource().getURI().toLowerCase();
-                        model.add(stmt);
-                        if (vertexURIToStmtsMapForThisTimestamp.containsKey(subjectURI)) {
-                            Set<Statement> subjectStmts = vertexURIToStmtsMapForThisTimestamp.get(subjectURI);
+                        newModel.add(stmt);
+                        if (vertexURIToStmtsMap.containsKey(subjectURI)) {
+                            Set<Statement> subjectStmts = vertexURIToStmtsMap.get(subjectURI);
                             for (Statement subjStmt : subjectStmts) {
                                 if (subjStmt.getObject().isLiteral() || subjStmt.getPredicate().getLocalName().contains("type")) {
-                                    model.add(subjStmt);
+                                    newModel.add(subjStmt);
                                     if (!subjStmt.getPredicate().getLocalName().contains("type")) {
                                         totalAttributeCount++;
                                     }
                                 }
                             }
                         }
-                        if (vertexURIToStmtsMapForThisTimestamp.containsKey(objectURI)) {
-                            Set<Statement> objectStmts = vertexURIToStmtsMapForThisTimestamp.get(objectURI);
+                        if (vertexURIToStmtsMap.containsKey(objectURI)) {
+                            Set<Statement> objectStmts = vertexURIToStmtsMap.get(objectURI);
                             for (Statement objStmt : objectStmts) {
                                 if (objStmt.getObject().isLiteral() || objStmt.getPredicate().getLocalName().contains("type")) {
-                                    model.add(objStmt);
+                                    newModel.add(objStmt);
                                     if (!objStmt.getPredicate().getLocalName().contains("type")) {
                                         totalAttributeCount++;
                                     }
@@ -479,9 +459,9 @@ public class generateCustomDBpedia {
                 try {
                     System.out.print("Writing to "+newFileName+". ");
                     Files.createDirectories(Paths.get(directoryStructure));
-                    model.write(new PrintStream(newFileName), "N3");
+                    newModel.write(new PrintStream(newFileName), "N3");
                     System.out.println("Done.");
-                    new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(model));
+                    new DBPediaLoader(new ArrayList<>(), Collections.singletonList(newModel), Collections.singletonList(newModel));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
