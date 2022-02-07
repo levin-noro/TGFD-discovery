@@ -6,9 +6,13 @@ import Infra.PatternTreeNode;
 import Infra.TGFD;
 import changeExploration.Change;
 import changeExploration.ChangeLoader;
+import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
+import graphLoader.IMDBLoader;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
+import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.ModelFactory;
 import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
 
@@ -17,6 +21,7 @@ import java.io.FileReader;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -138,39 +143,59 @@ public class TestChangeFile extends TgfdDiscovery{
 
             if (tgfdDiscovery.getGraphs().size() == 1) {
                 HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
-                for (int i = 0; i < 2; i++) {
-                    List<HashMap<Integer, HashSet<Change>>> changes = new ArrayList<>();
-                    String changefilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + tgfdDiscovery.getGraphSize() + ".json";
-                    JSONParser parser = new JSONParser();
-                    Object json;
-                    org.json.simple.JSONArray jsonArray = new JSONArray();
-                    try {
-                        json = parser.parse(new FileReader(changefilePath));
-                        jsonArray = (org.json.simple.JSONArray) json;
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                for (int i = 1; i < 3; i++) {
+                    GraphLoader graph;
+                    Model model = ModelFactory.createDefaultModel();
+                    for (String path : tgfdDiscovery.getTimestampToFilesMap().get(0).getValue()) {
+                        if (path.toLowerCase().contains("literals") || path.toLowerCase().contains("objects") || !path.toLowerCase().contains(".ttl"))
+                            continue;
+                        Path input = Paths.get(path);
+                        model.read(input.toUri().toString());
                     }
-                    System.out.println("Storing " + changefilePath + " in memory");
-                    changeFilesMap.put(changefilePath, jsonArray);
-                    ChangeLoader changeLoader = new ChangeLoader(changeFilesMap.get(changefilePath));
-                    HashMap<Integer, HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
-                    System.out.println("Total number of changes in changefile: " + newChanges.size());
-                    changes.add(newChanges);
-                    ArrayList<TGFD> tgfds = tgfdDiscovery.getDummyEdgeTypeTGFDs();
-                    IncUpdates incUpdatesOnDBpedia = new IncUpdates(tgfdDiscovery.getGraphs().get(0).getGraph(), tgfds);
-                    incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
-                    HashMap<String, TGFD> tgfdsByName = new HashMap<>();
-                    for (TGFD tgfd : tgfds) {
-                        tgfdsByName.put(tgfd.getName(), tgfd);
+                    Model dataModel = ModelFactory.createDefaultModel();
+                    for (String path : tgfdDiscovery.getTimestampToFilesMap().get(0).getValue()) {
+                        if (path.toLowerCase().contains("types") || !path.toLowerCase().contains(".ttl")) continue;
+                        Path input = Paths.get(path);
+                        System.out.println("Reading data graph: " + path);
+                        dataModel.read(input.toUri().toString());
                     }
-                    for (HashMap<Integer, HashSet<Change>> changesByFile : changes) {
-                        for (int changeID : changesByFile.keySet()) {
-                            incUpdatesOnDBpedia.updateGraphByGroupOfChanges(changesByFile.get(changeID), tgfdsByName);
+                    if (tgfdDiscovery.getLoader().equals("dbpedia")) {
+                        graph = new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(dataModel));
+                    } else {
+                        graph = new IMDBLoader(new ArrayList<>(), Collections.singletonList(dataModel));
+                    }
+                    tgfdDiscovery.getGraphs().add(graph);
+                    for (int j = 0; j < i; j++) {
+                        List<HashMap<Integer, HashSet<Change>>> changes = new ArrayList<>();
+                        String changefilePath = "changes_t" + (j+1) + "_t" + (j+2) + "_" + tgfdDiscovery.getGraphSize() + ".json";
+                        JSONParser parser = new JSONParser();
+                        Object json;
+                        org.json.simple.JSONArray jsonArray = new JSONArray();
+                        try {
+                            json = parser.parse(new FileReader(changefilePath));
+                            jsonArray = (org.json.simple.JSONArray) json;
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        System.out.println("Storing " + changefilePath + " in memory");
+                        changeFilesMap.put(changefilePath, jsonArray);
+                        ChangeLoader changeLoader = new ChangeLoader(changeFilesMap.get(changefilePath));
+                        HashMap<Integer, HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
+                        System.out.println("Total number of changes in changefile: " + newChanges.size());
+                        changes.add(newChanges);
+                        ArrayList<TGFD> tgfds = tgfdDiscovery.getDummyEdgeTypeTGFDs();
+                        IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), tgfds);
+                        incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
+                        HashMap<String, TGFD> tgfdsByName = new HashMap<>();
+                        for (TGFD tgfd : tgfds) {
+                            tgfdsByName.put(tgfd.getName(), tgfd);
+                        }
+                        for (HashMap<Integer, HashSet<Change>> changesByFile : changes) {
+                            for (int changeID : changesByFile.keySet()) {
+                                incUpdatesOnDBpedia.updateGraphByGroupOfChanges(changesByFile.get(changeID), tgfdsByName);
+                            }
                         }
                     }
-                    GraphLoader graphLoader = new GraphLoader();
-                    graphLoader.setGraph(incUpdatesOnDBpedia.getBaseGraph());
-                    tgfdDiscovery.getGraphs().add(graphLoader);
                 }
                 tgfdDiscovery.setChangeFilesMap(changeFilesMap);
             }
@@ -193,27 +218,24 @@ public class TestChangeFile extends TgfdDiscovery{
                 TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
                 tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
                 if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK()) break;
-                List<Set<Set<ConstantLiteral>>> matches = new ArrayList<>();
-                for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
-                    matches.add(new HashSet<>());
-                }
                 long matchingTime = System.currentTimeMillis();
 
                 assert patternTreeNode != null;
+                List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
                 if (tgfdDiscovery.isValidationSearch()) {
-                    tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
+                    matchesPerTimestamps = tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
                 else if (tgfdDiscovery.useChangeFile()) {
-                    tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode, matches);
+                    matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
                 else {
-                    tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
+                    matchesPerTimestamps = tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingCenterVertices", (matchingTime));
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
@@ -228,7 +250,7 @@ public class TestChangeFile extends TgfdDiscovery{
                 if (tgfdDiscovery.isSkipK1() && tgfdDiscovery.getCurrentVSpawnLevel() == 1) continue;
 
                 final long hSpawnStartTime = System.currentTimeMillis();
-                ArrayList<TGFD> tgfds = tgfdDiscovery.hSpawn(patternTreeNode, matches);
+                ArrayList<TGFD> tgfds = tgfdDiscovery.hSpawn(patternTreeNode, matchesPerTimestamps);
                 TgfdDiscovery.printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
                 tgfdDiscovery.getTgfds().get(tgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
             }
@@ -244,8 +266,14 @@ public class TestChangeFile extends TgfdDiscovery{
             e.printStackTrace();
         }
         System.setOut(logStream);
+        int i = 1;
         for (Long runtime: runtimes) {
-            System.out.println(runtime);
+            if (i < 5) {
+                printWithTime("Opt" + i, runtime);
+            } else {
+                printWithTime("Naive", runtime);
+            }
+            i++;
         }
     }
 }
