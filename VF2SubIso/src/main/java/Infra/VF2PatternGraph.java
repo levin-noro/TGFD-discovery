@@ -14,6 +14,7 @@ public class VF2PatternGraph {
     private int diameter;
 
     public String centerVertexType="";
+    private int radius;
 
     public VF2PatternGraph(int diameter)
     {
@@ -63,6 +64,10 @@ public class VF2PatternGraph {
         return centerVertexType;
     }
 
+    public void setCenterVertexType(String centerVertexType) {
+        this.centerVertexType = centerVertexType;
+    }
+
     public int getSize()
     {
         return this.pattern.edgeSet().size();
@@ -79,66 +84,8 @@ public class VF2PatternGraph {
         int patternRadius = this.pattern.vertexSet().size();
         Vertex centerNode=null;
         for (Vertex v:this.pattern.vertexSet()) {
-            // Define a HashMap to store visited vertices
-            HashMap <Vertex,Integer> visited=new HashMap<>();
-
-            // Create a queue for BFS
-            LinkedList <Vertex> queue = new LinkedList<>();
-            int d=Integer.MAX_VALUE;
-            // Mark the current node as visited with distance 0 and then enqueue it
-            visited.put(v,0);
-            queue.add(v);
-
-            //temp variables
-            Vertex x,w;
-            while (queue.size() != 0)
-            {
-                // Dequeue a vertex from queue and get its distance
-                x = queue.poll();
-                int distance = visited.get(x);
-                for (RelationshipEdge edge : pattern.edgesOf(x)) {
-                    w = edge.getSource();
-                    if (w.equals(x)) w = edge.getTarget();
-                    // Check if the vertex is not visited
-                    if (!visited.containsKey(w)) {
-                        // Check if the vertex is within the diameter
-                        d = distance + 1;
-                        //Enqueue the vertex and add it to the visited set
-                        visited.put(w, distance + 1);
-                        queue.add(w);
-                    }
-                }
-//                // Outgoing edges
-//                for (RelationshipEdge edge : pattern.outgoingEdgesOf(v)) {
-//                    w = edge.getTarget();
-//                    // Check if the vertex is not visited
-//                    if (!visited.containsKey(w)) {
-//                        // Check if the vertex is within the diameter
-//                        if (distance + 1 < d) {
-//                            d = distance + 1;
-//                        }
-//                        //Enqueue the vertex and add it to the visited set
-//                        visited.put(w, distance + 1);
-//                        queue.add(w);
-//                    }
-//                }
-//                // Incoming edges
-//                for (RelationshipEdge edge : pattern.incomingEdgesOf(v)) {
-//                    w = edge.getSource();
-//                    // Check if the vertex is not visited
-//                    if (!visited.containsKey(w)) {
-//                        // Check if the vertex is within the diameter
-//                        if (distance + 1 < d) {
-//                            d = distance + 1;
-//                        }
-//                        //Enqueue the vertex and add it to the visited set
-//                        visited.put(w, distance + 1);
-//                        queue.add(w);
-//                    }
-//                }
-            }
-            if(d>patternDiameter)
-            {
+            int d = calculateRadiusForGivenVertex(v);
+            if(d>patternDiameter) {
                 patternDiameter=d;
             }
             if (d < patternRadius) {
@@ -151,6 +98,41 @@ public class VF2PatternGraph {
         else
             this.centerVertexType="NoType";
         this.diameter=patternDiameter;
+        this.setRadius(patternRadius);
+    }
+
+    public int calculateRadiusForGivenVertex(Vertex v) {
+        // Define a HashMap to store visited vertices
+        HashMap <Vertex,Integer> visited=new HashMap<>();
+
+        // Create a queue for BFS
+        LinkedList <Vertex> queue = new LinkedList<>();
+        int d=Integer.MAX_VALUE;
+        // Mark the current node as visited with distance 0 and then enqueue it
+        visited.put(v,0);
+        queue.add(v);
+
+        //temp variables
+        Vertex x,w;
+        while (queue.size() != 0)
+        {
+            // Dequeue a vertex from queue and get its distance
+            x = queue.poll();
+            int distance = visited.get(x);
+            for (RelationshipEdge edge : pattern.edgesOf(x)) {
+                w = edge.getSource();
+                if (w.equals(x)) w = edge.getTarget();
+                // Check if the vertex is not visited
+                if (!visited.containsKey(w)) {
+                    // Check if the vertex is within the diameter
+                    d = distance + 1;
+                    //Enqueue the vertex and add it to the visited set
+                    visited.put(w, distance + 1);
+                    queue.add(w);
+                }
+            }
+        }
+        return d;
     }
 
     public VF2PatternGraph copy() {
@@ -194,4 +176,11 @@ public class VF2PatternGraph {
         return res.toString();
     }
 
+    public int getRadius() {
+        return radius;
+    }
+
+    public void setRadius(int radius) {
+        this.radius = radius;
+    }
 }

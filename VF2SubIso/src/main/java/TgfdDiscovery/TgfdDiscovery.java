@@ -539,7 +539,7 @@ public class TgfdDiscovery {
 
 	private int findAllMatchesOfPatternInThisSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, HashSet<String> entityURIs, GraphLoader currentSnapshot, HashSet<HashSet<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex) {
 		Set<String> edgeLabels = patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
-		int diameter = patternTreeNode.getPattern().getDiameter();
+		int diameter = patternTreeNode.getPattern().getRadius();
 		Graph<Vertex, RelationshipEdge> subgraph = currentSnapshot.getGraph().getSubGraphWithinDiameter(dataVertex, diameter, edgeLabels, patternTreeNode.getGraph().edgeSet());
 		VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(subgraph, patternTreeNode.getPattern(), false);
 
@@ -2497,7 +2497,44 @@ public class TgfdDiscovery {
 				System.out.println("Skip. Candidate pattern is a supergraph of pruned pattern");
 				continue;
 			}
-			patternTreeNode = this.patternTree.createNodeAtLevel(this.getCurrentVSpawnLevel(), newPattern, previousLevelNode, candidateEdgeString);
+			if (this.getCurrentVSpawnLevel() == 1) {
+				patternTreeNode = new PatternTreeNode(newPattern, previousLevelNode, candidateEdgeString);
+				for (RelationshipEdge e : newPattern.getPattern().edgeSet()) {
+					String sourceType = e.getSource().getTypes().iterator().next();
+					String targetType = e.getTarget().getTypes().iterator().next();
+					String centerVertexType = this.getVertexTypesToAvgInDegreeMap().get(sourceType) > this.getVertexTypesToAvgInDegreeMap().get(targetType) ? sourceType : targetType;
+					newPattern.setCenterVertexType(centerVertexType);
+					newPattern.setRadius(1);
+					newPattern.setDiameter(1);
+				}
+				this.patternTree.getTree().get(this.getCurrentVSpawnLevel()).add(patternTreeNode);
+				this.patternTree.findSubgraphParents(this.getCurrentVSpawnLevel()-1, patternTreeNode);
+				this.patternTree.findCenterVertexParent(this.getCurrentVSpawnLevel()-1, patternTreeNode);
+			} else {
+				int minRadius = newPattern.getPattern().vertexSet().size();
+				for (Vertex newV: newPattern.getPattern().vertexSet()) {
+					minRadius = Math.min(minRadius, newPattern.calculateRadiusForGivenVertex(newV));
+				}
+				Map<String, Double> maxDegreeTypes = new HashMap<>();
+				for (Vertex newV: newPattern.getPattern().vertexSet()) {
+					if (minRadius == newPattern.calculateRadiusForGivenVertex(newV)) {
+						String type = newV.getTypes().iterator().next();
+						maxDegreeTypes.put(type, this.getVertexTypesToAvgInDegreeMap().get(type));
+					}
+				}
+				assert maxDegreeTypes.size() > 0;
+				List<Entry<String, Double>> entries = new ArrayList<>(maxDegreeTypes.entrySet());
+				entries.sort(new Comparator<Entry<String, Double>>() {
+					@Override
+					public int compare(Entry<String, Double> o1, Entry<String, Double> o2) {
+						return o2.getValue().compareTo(o1.getValue());
+					}
+				});
+				String centerVertexType = entries.get(0).getKey();
+				newPattern.getCenterVertexType();
+				newPattern.setCenterVertexType(centerVertexType);
+				patternTreeNode = this.patternTree.createNodeAtLevel(this.getCurrentVSpawnLevel(), newPattern, previousLevelNode, candidateEdgeString);
+			}
 			System.out.println("Marking vertex " + v.getTypes() + "as expanded.");
 			break;
 		}
@@ -2570,6 +2607,7 @@ public class TgfdDiscovery {
 	}
 
 	public ArrayList<ArrayList<DataVertex>> extractListOfCenterVertices(List<GraphLoader> graphs, String patternVertexType) {
+		System.out.println("Extracting list of center vertices for vertex type "+patternVertexType);
 		ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertex = new ArrayList<>(graphs.size());
 		for (GraphLoader graph : graphs) {
 			ArrayList<DataVertex> matchesInThisTimestamp = new ArrayList<>();
