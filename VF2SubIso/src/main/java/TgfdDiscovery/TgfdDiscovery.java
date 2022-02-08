@@ -971,10 +971,29 @@ public class TgfdDiscovery {
 		for (Map.Entry<String, List<String>> timestampToPathEntry: timestampToPathsMap) {
 			final long graphLoadTime = System.currentTimeMillis();
 			GraphLoader graphLoader;
-			if (this.getLoader().equalsIgnoreCase("imdb")) {
-				graphLoader = new IMDBLoader(new ArrayList<>(), timestampToPathEntry.getValue());
+			Model model = ModelFactory.createDefaultModel();
+			for (String path : timestampToPathEntry.getValue()) {
+				if (!path.toLowerCase().endsWith(".ttl") && !path.toLowerCase().endsWith(".nt"))
+					continue;
+				if (path.toLowerCase().contains("literals") || path.toLowerCase().contains("objects"))
+					continue;
+				Path input = Paths.get(path);
+				model.read(input.toUri().toString());
+			}
+			Model dataModel = ModelFactory.createDefaultModel();
+			for (String path : timestampToPathEntry.getValue()) {
+				if (!path.toLowerCase().endsWith(".ttl") && !path.toLowerCase().endsWith(".nt"))
+					continue;
+				if (path.toLowerCase().contains("types"))
+					continue;
+				Path input = Paths.get(path);
+				System.out.println("Reading data graph: " + path);
+				dataModel.read(input.toUri().toString());
+			}
+			if (this.getLoader().equals("dbpedia")) {
+				graphLoader = new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(dataModel));
 			} else {
-				graphLoader = new DBPediaLoader(new ArrayList<>(), timestampToPathEntry.getValue());
+				graphLoader = new IMDBLoader(new ArrayList<>(), Collections.singletonList(dataModel));
 			}
 			if (this.isStoreInMemory() || this.getLoader().equalsIgnoreCase("dbpedia")) {
 				if (this.useChangeFile()) {
