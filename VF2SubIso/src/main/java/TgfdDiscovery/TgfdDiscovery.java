@@ -44,10 +44,12 @@ public class TgfdDiscovery {
 	public static final int DEFAULT_NUM_OF_SNAPSHOTS = 3;
 	public static final String NO_REUSE_MATCHES_PARAMETER_TEXT = "noReuseMatches";
 	public static final String CHANGEFILE_PARAMETER_TEXT = "changefile";
+	private static final int DEFAULT_NUM_OF_EXTRA_LITERALS = 0;
 	protected static Integer INDIVIDUAL_VERTEX_INDEGREE_FLOOR = 25;
 	public static double MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = 25.0;
 	public static final double DEFAULT_MAX_SUPER_VERTEX_DEGREE = 1500.0;
 	public static final double DEFAULT_AVG_SUPER_VERTEX_DEGREE = 30.0;
+	private int numOfExtraLiterals = DEFAULT_NUM_OF_EXTRA_LITERALS;
 	private int t = DEFAULT_NUM_OF_SNAPSHOTS;
 	private boolean dissolveSuperVerticesBasedOnCount = false;
 	private double superVertexDegree = MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR;
@@ -200,6 +202,7 @@ public class TgfdDiscovery {
 
 		this.setT(cmd.getOptionValue("t") == null ? TgfdDiscovery.DEFAULT_NUM_OF_SNAPSHOTS : Integer.parseInt(cmd.getOptionValue("t")));
 		this.setGamma(cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a")));
+		this.setNumOfExtraLiterals(cmd.getOptionValue("extraLit") == null ? TgfdDiscovery.DEFAULT_NUM_OF_EXTRA_LITERALS : Integer.parseInt(cmd.getOptionValue("extraLit")));
 		this.setTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
 		this.setK(cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k")));
 		this.setFrequentSetSize(cmd.getOptionValue("p") == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue("p")));
@@ -230,11 +233,13 @@ public class TgfdDiscovery {
 		String[] info = {
 				String.join("=", "loader", this.getGraphSize()),
 				String.join("=", "|G|", this.getGraphSize()),
+				String.join("=", "t", Integer.toString(this.getT())),
 				String.join("=", "k", Integer.toString(this.getK())),
 				String.join("=", "theta", Double.toString(this.getTheta())),
 				String.join("=", "gamma", Double.toString(this.getGamma())),
 				String.join("=", "frequentSetSize", Double.toString(this.getFrequentSetSize())),
 				String.join("=", "interesting", Boolean.toString(this.isOnlyInterestingTGFDs())),
+				String.join("=", "literalMax", Integer.toString(this.getNumOfExtraLiterals())),
 				String.join("=", "noMinimalityPruning", Boolean.toString(!this.hasMinimalityPruning())),
 				String.join("=", "noSupportPruning", Boolean.toString(!this.hasSupportPruning())),
 		};
@@ -266,6 +271,7 @@ public class TgfdDiscovery {
 		options.addOption("simplifySuperVertex", true, "run experiment by collapsing super vertices");
 		options.addOption("simplifySuperVertexTypes", true, "run experiment by collapsing super vertex types");
 		options.addOption("dontStore", false, "run experiment without storing changefiles in memory, read from disk");
+		options.addOption("extraLit", true, "run experiment that outputs TGFDs with up n literals");
 		return options;
 	}
 
@@ -293,21 +299,24 @@ public class TgfdDiscovery {
 
 	@Override
 	public String toString() {
-		return (this.getGraphSize() == null ? "" : "-G"+ this.getGraphSize()) +
-				"-t" + this.getT() +
-				"-k" + this.getCurrentVSpawnLevel() +
-				"-theta" + this.getTheta() +
-				"-a" + this.getGamma() +
-				"-freqSet" + (this.getFrequentSetSize() == Integer.MAX_VALUE ? "All" : this.getFrequentSetSize()) +
-				(this.isValidationSearch() ? "-validation" : "") +
-				(this.useChangeFile() ? "-changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "") +
-				(!this.reUseMatches() ? "-noMatchesReUsed" : "") +
-				(!this.isOnlyInterestingTGFDs() ? "-uninteresting" : "") +
-				(!this.hasMinimalityPruning() ? "-noMinimalityPruning" : "") +
-				(!this.hasSupportPruning() ? "-noSupportPruning" : "") +
-				(this.isDissolveSuperVertexTypes() ? "-simplifySuperTypes"+(this.getSuperVertexDegree()) : "") +
-				(this.isDissolveSuperVerticesBasedOnCount() ? "-simplifySuperNodes"+(INDIVIDUAL_VERTEX_INDEGREE_FLOOR) : "") +
-				(this.getTimeAndDateStamp() == null ? "" : ("-"+ this.getTimeAndDateStamp()));
+		String[] info = {"G"+this.getGraphSize()
+				, "t" + this.getT()
+				,"k" + this.getCurrentVSpawnLevel()
+				, "theta" + this.getTheta()
+				, "gamma" + this.getGamma()
+				, "extraLit" + this.getNumOfExtraLiterals()
+				, "freqSet" + (this.getFrequentSetSize() == Integer.MAX_VALUE ? "All" : this.getFrequentSetSize())
+				, (this.isValidationSearch() ? "-validation" : "")
+				, (this.useChangeFile() ? "-changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "")
+				, (!this.reUseMatches() ? "-noMatchesReUsed" : "")
+				, (!this.isOnlyInterestingTGFDs() ? "-uninteresting" : "")
+				, (!this.hasMinimalityPruning() ? "-noMinimalityPruning" : "")
+				, (!this.hasSupportPruning() ? "-noSupportPruning" : "")
+				, (this.isDissolveSuperVertexTypes() ? "-simplifySuperTypes"+(this.getSuperVertexDegree()) : "")
+				, (this.isDissolveSuperVerticesBasedOnCount() ? "-simplifySuperNodes"+(INDIVIDUAL_VERTEX_INDEGREE_FLOOR) : "")
+				, (this.getTimeAndDateStamp() == null ? "" : ("-"+ this.getTimeAndDateStamp()))
+		};
+		return String.join("-", info);
 	}
 
 	public void printTgfdsToFile(String experimentName, ArrayList<TGFD> tgfds) {
@@ -1680,34 +1689,38 @@ public class TgfdDiscovery {
 		HashSet<ConstantLiteral> activeAttributes = getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), false);
 
 		LiteralTree literalTree = new LiteralTree();
-		for (int j = 0; j < activeAttributes.size(); j++) {
+		int hSpawnLimit = patternTreeNode.getGraph().vertexSet().size() + this.getNumOfExtraLiterals();
+		for (int j = 0; j < hSpawnLimit; j++) {
 
-			System.out.println("HSpawn level " + j + "/" + activeAttributes.size());
+			System.out.println("HSpawn level " + j + "/" + hSpawnLimit);
 
 			if (j == 0) {
 				literalTree.addLevel();
 				for (ConstantLiteral literal: activeAttributes) {
 					literalTree.createNodeAtLevel(j, literal, null);
 				}
-			} else if ((j + 1) <= patternTreeNode.getGraph().vertexSet().size()) { // Ensures # of literals in dependency equals number of vertices in graph
+			} else {
 				ArrayList<LiteralTreeNode> literalTreePreviousLevel = literalTree.getLevel(j - 1);
 				if (literalTreePreviousLevel.size() == 0) {
 					System.out.println("Previous level of literal tree is empty. Nothing to expand. End HSpawn");
 					break;
 				}
 				literalTree.addLevel();
-				ArrayList<AttributeDependency> visitedPaths = new ArrayList<>(); //TO-DO: Can this be implemented as HashSet to improve performance?
+				HashSet<AttributeDependency> visitedPaths = new HashSet<>(); //TO-DO: Can this be implemented as HashSet to improve performance?
 				ArrayList<TGFD> currentLevelTGFDs = new ArrayList<>();
 				for (LiteralTreeNode previousLevelLiteral : literalTreePreviousLevel) {
 					System.out.println("Creating literal tree node " + literalTree.getLevel(j).size() + "/" + (literalTreePreviousLevel.size() * (literalTreePreviousLevel.size()-1)));
-					if (previousLevelLiteral.isPruned()) continue;
-					ArrayList<ConstantLiteral> parentsPathToRoot = previousLevelLiteral.getPathToRoot(); //TO-DO: Can this be implemented as HashSet to improve performance?
+					if (previousLevelLiteral.isPruned()) {
+						System.out.println("Could not expand pruned literal path "+previousLevelLiteral.getPathToRoot());
+						continue;
+					}
 					for (ConstantLiteral literal: activeAttributes) {
-						if (this.isOnlyInterestingTGFDs()) { // Ensures all vertices are involved in dependency
+						ArrayList<ConstantLiteral> parentsPathToRoot = previousLevelLiteral.getPathToRoot(); //TO-DO: Can this be implemented as HashSet to improve performance?
+						if (this.isOnlyInterestingTGFDs() && j < patternTreeNode.getGraph().vertexSet().size()) { // Ensures all vertices are involved in dependency
 							if (isUsedVertexType(literal.getVertexType(), parentsPathToRoot)) continue;
-						} else { // Check if leaf node exists in path already
-							if (parentsPathToRoot.contains(literal)) continue;
 						}
+
+						if (parentsPathToRoot.contains(literal)) continue;
 
 						// Check if path to candidate leaf node is unique
 						AttributeDependency newPath = new AttributeDependency(previousLevelLiteral.getPathToRoot(),literal);
@@ -1730,12 +1743,12 @@ public class TgfdDiscovery {
 						// Add leaf node to tree
 						LiteralTreeNode literalTreeNode = literalTree.createNodeAtLevel(j, literal, previousLevelLiteral);
 
-						// Ensures delta discovery only occurs when # of literals in dependency equals number of vertices in graph
-						if (this.isOnlyInterestingTGFDs() && (j + 1) != patternTreeNode.getGraph().vertexSet().size()) {
-							System.out.println("|LHS|+|RHS| != |Q|. Skip performing Delta Discovery HSpawn level " + j);
-							continue;
-						}
 						visitedPaths.add(newPath);
+
+						if (this.isOnlyInterestingTGFDs()) { // Ensures all vertices are involved in dependency
+                            if (literalPathIsMissingTypesInPattern(literalTreeNode.getPathToRoot(), patternTreeNode.getGraph().vertexSet()))
+								continue;
+						}
 
 						System.out.println("Performing Delta Discovery at HSpawn level " + j);
 						final long deltaDiscoveryTime = System.currentTimeMillis();
@@ -1744,12 +1757,10 @@ public class TgfdDiscovery {
 						currentLevelTGFDs.addAll(discoveredTGFDs);
 					}
 				}
+				System.out.println("TGFDs generated at HSpawn level " + j + ": " + currentLevelTGFDs.size());
 				if (currentLevelTGFDs.size() > 0) {
-					System.out.println("TGFDs generated at HSpawn level " + j + ": " + currentLevelTGFDs.size());
 					tgfds.addAll(currentLevelTGFDs);
 				}
-			} else {
-				break;
 			}
 			System.out.println("Generated new literal tree nodes: "+ literalTree.getLevel(j).size());
 		}
@@ -1763,6 +1774,19 @@ public class TgfdDiscovery {
 			if (literal.getVertexType().equals(vertexType)) {
 				return true;
 			}
+		}
+		return false;
+	}
+
+	private static boolean literalPathIsMissingTypesInPattern(ArrayList<ConstantLiteral> parentsPathToRoot, Set<Vertex> patternVertexSet) {
+		for (Vertex v : patternVertexSet) {
+			boolean missingType = true;
+			for (ConstantLiteral literal : parentsPathToRoot) {
+				if (literal.getVertexType().equals(v.getTypes().iterator().next())) {
+					missingType = false;
+				}
+			}
+			if (missingType) return true;
 		}
 		return false;
 	}
@@ -2111,6 +2135,54 @@ public class TgfdDiscovery {
 
 	public void setFirstSnapshotDataModel(Model firstSnapshotDataModel) {
 		this.firstSnapshotDataModel = firstSnapshotDataModel;
+	}
+
+	public int getNumOfExtraLiterals() {
+		return numOfExtraLiterals;
+	}
+
+	public void setNumOfExtraLiterals(int numOfExtraLiterals) {
+		this.numOfExtraLiterals = numOfExtraLiterals;
+	}
+
+	public long getTotalVisitedPathCheckingTime() {
+		return totalVisitedPathCheckingTime;
+	}
+
+	public void setTotalVisitedPathCheckingTime(long totalVisitedPathCheckingTime) {
+		this.totalVisitedPathCheckingTime = totalVisitedPathCheckingTime;
+	}
+
+	public long getTotalSupersetPathCheckingTime() {
+		return totalSupersetPathCheckingTime;
+	}
+
+	public void setTotalSupersetPathCheckingTime(long totalSupersetPathCheckingTime) {
+		this.totalSupersetPathCheckingTime = totalSupersetPathCheckingTime;
+	}
+
+	public long getTotalFindEntitiesTime() {
+		return totalFindEntitiesTime;
+	}
+
+	public void setTotalFindEntitiesTime(long totalFindEntitiesTime) {
+		this.totalFindEntitiesTime = totalFindEntitiesTime;
+	}
+
+	public long getTotalDiscoverConstantTGFDsTime() {
+		return totalDiscoverConstantTGFDsTime;
+	}
+
+	public void setTotalDiscoverConstantTGFDsTime(long totalDiscoverConstantTGFDsTime) {
+		this.totalDiscoverConstantTGFDsTime = totalDiscoverConstantTGFDsTime;
+	}
+
+	public long getTotalDiscoverGeneralTGFDTime() {
+		return totalDiscoverGeneralTGFDTime;
+	}
+
+	public void setTotalDiscoverGeneralTGFDTime(long totalDiscoverGeneralTGFDTime) {
+		this.totalDiscoverGeneralTGFDTime = totalDiscoverGeneralTGFDTime;
 	}
 
 	public static class Pair implements Comparable<Pair> {
