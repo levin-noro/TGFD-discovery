@@ -477,8 +477,11 @@ public class TgfdDiscovery {
 		System.out.println("Center vertex type: "+centerVertexType);
 		ArrayList<ArrayList<DataVertex>> matchesOfCenterVertex;
 		if (centerVertexParent != null && centerVertexParent.getListOfCenterVertices() != null) {
+			System.out.println("Found center vertex parent: "+centerVertexParent);
 			matchesOfCenterVertex = centerVertexParent.getListOfCenterVertices();
 		} else {
+			// TO-DO: Can we reduce the possibility of this happening?
+			System.out.println("Missing center vertex parent...");
 			matchesOfCenterVertex = extractListOfCenterVertices(graphs, centerVertexType);
 		}
 		return matchesOfCenterVertex;
@@ -644,7 +647,10 @@ public class TgfdDiscovery {
 		System.out.println("Median in-degrees of vertex types...");
 		List<Double> medianInDegrees = new ArrayList<>();
 		for (Entry<String, List<Integer>> entry: vertexTypesToInDegreesMap.entrySet()) {
-			if (entry.getValue().size() == 0) continue;
+			if (entry.getValue().size() == 0) {
+				this.getVertexTypesToAvgInDegreeMap().put(entry.getKey(), 0.0);
+				continue;
+			}
 			entry.getValue().sort(Comparator.naturalOrder());
 			double medianInDegree;
 			if (entry.getValue().size() % 2 == 0) {
@@ -685,6 +691,7 @@ public class TgfdDiscovery {
 
 	private double getHighOutlierThreshold(List<Double> listOfDegrees) {
 		listOfDegrees.sort(Comparator.naturalOrder());
+		if (listOfDegrees.size() == 1) return listOfDegrees.get(0);
 		double q1, q3;
 		if (listOfDegrees.size() % 2 == 0) {
 			int halfSize = listOfDegrees.size()/2;
@@ -846,14 +853,12 @@ public class TgfdDiscovery {
 					}
 				}
 			}
-			if (this.isDissolveSuperVertexTypes()) {
-				for (String vertexType : v.getTypes()) {
-					if (!vertexTypesToInDegreesMap.containsKey(vertexType)) {
-						vertexTypesToInDegreesMap.put(vertexType, new ArrayList<>());
-					}
-					if (inDegree > 0) {
-						vertexTypesToInDegreesMap.get(vertexType).add(inDegree);
-					}
+			for (String vertexType : v.getTypes()) {
+				if (!vertexTypesToInDegreesMap.containsKey(vertexType)) {
+					vertexTypesToInDegreesMap.put(vertexType, new ArrayList<>());
+				}
+				if (inDegree > 0) {
+					vertexTypesToInDegreesMap.get(vertexType).add(inDegree);
 				}
 			}
 		}
@@ -881,7 +886,7 @@ public class TgfdDiscovery {
 			System.out.println(entry.getKey()+":"+averageDegree);
 			listOfAverageDegreesAbove1.add(averageDegree);
 		}
-		setSuperVertexDegree(Math.max(getSuperVertexDegree(), Math.round(listOfAverageDegreesAbove1.stream().reduce(0L, Long::sum).doubleValue() / (double) listOfAverageDegreesAbove1.size())));
+		this.setSuperVertexDegree(Math.max(getSuperVertexDegree(), Math.round(listOfAverageDegreesAbove1.stream().reduce(0L, Long::sum).doubleValue() / (double) listOfAverageDegreesAbove1.size())));
 	}
 
 	private void setVertexTypesToAttributesMap(Map<String, Set<String>> tempVertexAttrFreqMap) {
@@ -1026,13 +1031,13 @@ public class TgfdDiscovery {
 
 		this.setSortedFrequentVertexTypesHistogram(vertexTypesHistogram);
 
+		final long superVertexHandlingTime = System.currentTimeMillis();
+		// TO-DO: What is the best way to estimate a good value for SUPER_VERTEX_DEGREE for each run?
+//		this.calculateAverageInDegree(vertexTypesToInDegreesMap);
+		this.calculateMedianInDegree(vertexTypesToInDegreesMap);
+//		this.calculateMaxInDegree(vertexTypesToInDegreesMap);
 		if (this.isDissolveSuperVertexTypes()) {
 			if (this.getGraphs().size() > 0) {
-				// TO-DO: What is the best way to estimate a good value for SUPER_VERTEX_DEGREE for each run?
-				final long superVertexHandlingTime = System.currentTimeMillis();
-//				this.calculateAverageInDegree(vertexTypesToInDegreesMap);
-				this.calculateMedianInDegree(vertexTypesToInDegreesMap);
-//				this.calculateMaxInDegree(vertexTypesToInDegreesMap);
 				System.out.println("Collapsing vertices with an in-degree above " + this.getSuperVertexDegree());
 				this.dissolveSuperVerticesAndUpdateHistograms(tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, edgeTypesHistogram);
 				printWithTime("Super vertex dissolution", (System.currentTimeMillis() - superVertexHandlingTime));
