@@ -371,27 +371,24 @@ public class TgfdDiscovery {
 			TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
 			tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
 			if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK()) break;
-			List<Set<Set<ConstantLiteral>>> matches = new ArrayList<>();
-			for (int timestamp = 0; timestamp < tgfdDiscovery.getNumOfSnapshots(); timestamp++) {
-				matches.add(new HashSet<>());
-			}
 			long matchingTime = System.currentTimeMillis();
 
 			assert patternTreeNode != null;
+			List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
 			if (tgfdDiscovery.isValidationSearch()) {
-				tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
+				matchesPerTimestamps = tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode);
 				matchingTime = System.currentTimeMillis() - matchingTime;
-				TgfdDiscovery.printWithTime("getMatchesUsingChangeFiles", (matchingTime));
+				TgfdDiscovery.printWithTime("getMatchesForPattern", (matchingTime));
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 			}
 			else if (tgfdDiscovery.useChangeFile()) {
-				tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode, matches);
+				matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
 				matchingTime = System.currentTimeMillis() - matchingTime;
 				TgfdDiscovery.printWithTime("getMatchesUsingChangeFiles", (matchingTime));
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 			}
 			else {
-				tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode, matches);
+				matchesPerTimestamps = tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode);
 				matchingTime = System.currentTimeMillis() - matchingTime;
 				TgfdDiscovery.printWithTime("findMatchesUsingCenterVertices", (matchingTime));
 				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
@@ -406,7 +403,7 @@ public class TgfdDiscovery {
 			if (tgfdDiscovery.isSkipK1() && tgfdDiscovery.getCurrentVSpawnLevel() == 1) continue;
 
 			final long hSpawnStartTime = System.currentTimeMillis();
-			ArrayList<TGFD> tgfds = tgfdDiscovery.hSpawn(patternTreeNode, matches);
+			ArrayList<TGFD> tgfds = tgfdDiscovery.hSpawn(patternTreeNode, matchesPerTimestamps);
 			TgfdDiscovery.printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
 			tgfdDiscovery.getTgfds().get(tgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
 		}
@@ -485,15 +482,22 @@ public class TgfdDiscovery {
 		return matchesOfCenterVertex;
 	}
 
-	public void findMatchesUsingCenterVertices(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
+	public List<Set<Set<ConstantLiteral>>> findMatchesUsingCenterVertices(List<GraphLoader> graphs, PatternTreeNode patternTreeNode) {
 
 		HashSet<String> entityURIs = new HashSet<>();
+
+		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
+		for (int timestamp = 0; timestamp < this.getNumOfSnapshots(); timestamp++) {
+			matchesPerTimestamps.add(new HashSet<>());
+		}
 
 		this.extractMatchesAcrossSnapshots(graphs, patternTreeNode, matchesPerTimestamps, entityURIs);
 
 		this.countTotalNumberOfMatchesFound(matchesPerTimestamps);
 
 		this.setPatternSupport(entityURIs.size(), patternTreeNode);
+
+		return matchesPerTimestamps;
 	}
 
 	private void extractMatchesAcrossSnapshots(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps, HashSet<String> entityURIs) {
@@ -2723,9 +2727,14 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesForPattern(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
+	public List<Set<Set<ConstantLiteral>>> getMatchesForPattern(List<GraphLoader> graphs, PatternTreeNode patternTreeNode) {
 		// TO-DO: Potential speed up for single-edge/single-node patterns. Iterate through all edges/nodes in graph.
 		HashSet<String> entityURIs = new HashSet<>();
+		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
+		for (int timestamp = 0; timestamp < this.getNumOfSnapshots(); timestamp++) {
+			matchesPerTimestamps.add(new HashSet<>());
+		}
+
 		patternTreeNode.getPattern().getCenterVertexType();
 
 		for (int year = 0; year < this.getNumOfSnapshots(); year++) {
@@ -2756,6 +2765,8 @@ public class TgfdDiscovery {
 		System.out.println("Total number of matches found across all snapshots:" + numberOfMatchesFound);
 
 		this.setPatternSupport(entityURIs.size(), patternTreeNode);
+
+		return matchesPerTimestamps;
 	}
 
 	private void extractMatch(GraphMapping<Vertex, RelationshipEdge> result, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, HashSet<String> entityURIs) {
@@ -2832,10 +2843,15 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public void getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
+	public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode) {
 		// TO-DO: Should we use changefiles based on freq types??
 
-		patternTreeNode.getPattern().setDiameter(this.getCurrentVSpawnLevel());
+		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
+		for (int timestamp = 0; timestamp < this.getNumOfSnapshots(); timestamp++) {
+			matchesPerTimestamps.add(new HashSet<>());
+		}
+
+//		patternTreeNode.getPattern().setDiameter(this.getCurrentVSpawnLevel());
 
 		TGFD dummyTgfd = new TGFD();
 		dummyTgfd.setName(patternTreeNode.getEdgeString());
@@ -3016,6 +3032,8 @@ public class TgfdDiscovery {
 		System.out.println("-------------------------------------");
 		System.out.println("Total number of matches found in all snapshots: " + numberOfMatchesFound);
 		this.setPatternSupport(entityURIs.size(), patternTreeNode);
+
+		return matchesPerTimestamps;
 	}
 
 	private boolean equalsLiteral(Set<ConstantLiteral> match1, Set<ConstantLiteral> match2) {
