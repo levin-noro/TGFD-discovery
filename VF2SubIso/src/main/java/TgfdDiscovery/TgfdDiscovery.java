@@ -2288,8 +2288,8 @@ public class TgfdDiscovery {
 			System.out.println("VSpawnInit with single-node pattern " + (i+1) + "/" + this.getSortedVertexHistogram().size());
 			String vertexType = this.getSortedVertexHistogram().get(i).getKey();
 
-			if (this.vertexTypesToAttributesMap.get(vertexType).size() < 2)
-				continue; // TO-DO: Are we interested in TGFDs where LHS is empty?
+			if (this.vertexTypesToAttributesMap.get(vertexType).size() == 0)
+				continue; // TO-DO: Should these frequent types without active attribute be filtered out much earlier?
 
 			int numOfInstancesOfVertexType = this.getSortedVertexHistogram().get(i).getValue();
 			int numOfInstancesOfAllVertexTypes = this.getNumOfVerticesInAllGraphs();
