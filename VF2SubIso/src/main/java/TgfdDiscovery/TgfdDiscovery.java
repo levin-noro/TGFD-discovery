@@ -413,27 +413,13 @@ public class TgfdDiscovery {
 
 	public void printTimeStatistics() {
 		System.out.println("----------------Total Time Statistics-----------------");
-		System.out.println("totalVspawnTime time: " + this.getTotalVSpawnTime() + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.getTotalVSpawnTime()) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.getTotalVSpawnTime()) +  "(min)");
-		System.out.println("totalMatchingTime time: " + this.getTotalMatchingTime() + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.getTotalMatchingTime()) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.getTotalMatchingTime()) +  "(min)");
-		System.out.println("totalVisitedPathCheckingTime time: " + this.totalVisitedPathCheckingTime + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.totalVisitedPathCheckingTime) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.totalVisitedPathCheckingTime) +  "(min)");
-		System.out.println("totalSupersetPathCheckingTime time: " + this.totalSupersetPathCheckingTime + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.totalSupersetPathCheckingTime) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.totalSupersetPathCheckingTime) +  "(min)");
-		System.out.println("totalFindEntitiesTime time: " + this.totalFindEntitiesTime + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.totalFindEntitiesTime) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.totalFindEntitiesTime) +  "(min)");
-		System.out.println("totalDiscoverConstantTGFDsTime time: " + this.totalDiscoverConstantTGFDsTime + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.totalDiscoverConstantTGFDsTime) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.totalDiscoverConstantTGFDsTime) +  "(min)");
-		System.out.println("totalDiscoverGeneralTGFDTime time: " + this.totalDiscoverGeneralTGFDTime + "(ms) ** " +
-				TimeUnit.MILLISECONDS.toSeconds(this.totalDiscoverGeneralTGFDTime) +  "(sec)" +
-				TimeUnit.MILLISECONDS.toMinutes(this.totalDiscoverGeneralTGFDTime) +  "(min)");
+		printWithTime("Total vSpawn", this.getTotalVSpawnTime());
+		printWithTime("Total Matching", this.getTotalMatchingTime());
+		printWithTime("Total Visited Path Checking", this.getTotalVisitedPathCheckingTime());
+		printWithTime("Total Superset Path Checking Time", this.getTotalSupersetPathCheckingTime());
+		printWithTime("Total Find Entities ", this.getTotalFindEntitiesTime());
+		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime());
+		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime());
 	}
 
 	private int findAllMatchesOfEdgeInSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, HashSet<String> entityURIs, GraphLoader currentSnapshot, HashSet<HashSet<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex) {
@@ -463,7 +449,7 @@ public class TgfdDiscovery {
 		for (Set<Set<ConstantLiteral>> matchesInOneTimestamp : matchesPerTimestamps) {
 			numberOfMatchesFound += matchesInOneTimestamp.size();
 		}
-		System.out.println("Total number of matches found across all snapshots:" + numberOfMatchesFound);
+		System.out.println("Total number of matches found across all snapshots: " + numberOfMatchesFound);
 	}
 
 	private ArrayList<ArrayList<DataVertex>> getListOfMatchesOfCenterVerticesOfThisPattern(List<GraphLoader> graphs, PatternTreeNode patternTreeNode) {
@@ -1185,20 +1171,13 @@ public class TgfdDiscovery {
 		return literals;
 	}
 
-	public boolean isPathVisited(AttributeDependency path, ArrayList<AttributeDependency> visitedPaths) {
+	public boolean isPathVisited(AttributeDependency path, HashSet<AttributeDependency> visitedPaths) {
 		long visitedPathCheckingTime = System.currentTimeMillis();
-		for (AttributeDependency visitedPath : visitedPaths) {
-			if (visitedPath.size() == path.size()
-					&& visitedPath.getLhs().containsAll(path.getLhs())
-					&& visitedPath.getRhs().equals(path.getRhs())) {
-				System.out.println("This literal path was already visited.");
-				return true;
-			}
-		}
+		boolean pathAlreadyVisited = visitedPaths.contains(path);
 		visitedPathCheckingTime = System.currentTimeMillis() - visitedPathCheckingTime;
-		printWithTime("visitedPathCheckingTime", visitedPathCheckingTime);
-		totalVisitedPathCheckingTime += visitedPathCheckingTime;
-		return false;
+		printWithTime("visitedPathChecking", visitedPathCheckingTime);
+		setTotalVisitedPathCheckingTime(getTotalVisitedPathCheckingTime() + visitedPathCheckingTime);
+		return pathAlreadyVisited;
 	}
 
 	public boolean isSupersetPath(AttributeDependency path, ArrayList<AttributeDependency> prunedPaths) {
@@ -1212,7 +1191,7 @@ public class TgfdDiscovery {
 		}
 		supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
 		printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
-		totalSupersetPathCheckingTime += supersetPathCheckingTime;
+		setTotalSupersetPathCheckingTime(getTotalSupersetPathCheckingTime() + supersetPathCheckingTime);
 		return isPruned;
 	}
 
@@ -1243,11 +1222,12 @@ public class TgfdDiscovery {
 		Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> entities = findEntities(literalPath, matchesPerTimestamps);
 		findEntitiesTime = System.currentTimeMillis() - findEntitiesTime;
 		printWithTime("findEntitiesTime", findEntitiesTime);
-		totalFindEntitiesTime += findEntitiesTime;
+		setTotalFindEntitiesTime(getTotalFindEntitiesTime() + findEntitiesTime);
 		if (entities == null) {
-			System.out.println("Mark as Pruned. No entities found during entity discovery.");
+			System.out.println("No entities found during entity discovery.");
 			if (this.hasSupportPruning()) {
 				literalTreeNode.setIsPruned();
+				System.out.println("Marked as pruned. Literal path "+literalTreeNode.getPathToRoot());
 				patternNode.addLowSupportDependency(literalPath);
 			}
 			return tgfds;
@@ -1262,7 +1242,7 @@ public class TgfdDiscovery {
 		ArrayList<TGFD> constantTGFDs = discoverConstantTGFDs(patternNode, literalPath.getRhs(), entities, deltaToPairsMap);
 		discoverConstantTGFDsTime = System.currentTimeMillis() - discoverConstantTGFDsTime;
 		printWithTime("discoverConstantTGFDsTime", discoverConstantTGFDsTime);
-		totalDiscoverConstantTGFDsTime += discoverConstantTGFDsTime;
+		setTotalDiscoverConstantTGFDsTime(getTotalDiscoverConstantTGFDsTime() + discoverConstantTGFDsTime);
 		// TO-DO: Try discover general TGFD even if no constant TGFD candidate met support threshold
 		System.out.println("Constant TGFDs discovered: " + constantTGFDs.size());
 		tgfds.addAll(constantTGFDs);
@@ -1271,18 +1251,19 @@ public class TgfdDiscovery {
 
 		// Find general TGFDs
 		long discoverGeneralTGFDTime = System.currentTimeMillis();
-		ArrayList<TGFD> generalTGFD = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap);
+		ArrayList<TGFD> generalTGFDs = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap);
 		discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
 		printWithTime("discoverGeneralTGFDTime", discoverGeneralTGFDTime);
-		totalDiscoverGeneralTGFDTime += discoverGeneralTGFDTime;
-		if (generalTGFD.size() > 0) {
-			System.out.println("Marking literal node as pruned. Discovered general TGFDs for this dependency.");
+		setTotalDiscoverGeneralTGFDTime(getTotalDiscoverGeneralTGFDTime() + discoverGeneralTGFDTime);
+		if (generalTGFDs.size() > 0) {
+			System.out.println("Discovered "+generalTGFDs.size()+" general TGFDs for this dependency.");
 			if (this.hasMinimalityPruning()) {
 				literalTreeNode.setIsPruned();
+				System.out.println("Marked as pruned. Literal path "+literalTreeNode.getPathToRoot());
 				patternNode.addMinimalDependency(literalPath);
 			}
 		}
-		tgfds.addAll(generalTGFD);
+		tgfds.addAll(generalTGFDs);
 
 		return tgfds;
 	}
@@ -2854,7 +2835,7 @@ public class TgfdDiscovery {
 //		patternTreeNode.getPattern().setDiameter(this.getCurrentVSpawnLevel());
 
 		TGFD dummyTgfd = new TGFD();
-		dummyTgfd.setName(patternTreeNode.getEdgeString());
+		dummyTgfd.setName(patternTreeNode.getAllEdgeStrings().toString());
 		dummyTgfd.setPattern(patternTreeNode.getPattern());
 
 		System.out.println("-----------Snapshot (1)-----------");
@@ -2871,7 +2852,7 @@ public class TgfdDiscovery {
 					continue;
 				Path input= Paths.get(path);
 				Model model = ModelFactory.createDefaultModel();
-				System.out.println("Loading Node Types: " + path);
+				System.out.println("Reading Node Types: " + path);
 				model.read(input.toUri().toString());
 				this.setFirstSnapshotTypeModel(model);
 			}
@@ -2882,7 +2863,7 @@ public class TgfdDiscovery {
 				if (path.toLowerCase().contains("types"))
 					continue;
 				Path input= Paths.get(path);
-				System.out.println("Loading DBpedia Graph: "+path);
+				System.out.println("Reading data graph: "+path);
 				dataModel.read(input.toUri().toString());
 				this.setFirstSnapshotDataModel(dataModel);
 			}
@@ -2920,14 +2901,18 @@ public class TgfdDiscovery {
 			startTime = System.currentTimeMillis();
 			JSONArray changesJsonArray;
 			if (this.isUseTypeChangeFile()) {
+				System.out.println("Using type changefiles...");
 				changesJsonArray = new JSONArray();
 				for (RelationshipEdge e: patternTreeNode.getGraph().edgeSet()) {
 					for (String type: e.getSource().getTypes()) {
 						String changeFilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + type + ".json";
+						System.out.println(changeFilePath);
 						JSONArray changesJsonArrayForType;
 						if (this.isStoreInMemory()) {
+							System.out.println("Getting changefile from memory");
 							changesJsonArrayForType = this.getChangeFilesMap().get(changeFilePath);
 						} else {
+							System.out.println("Reading changefile from disk");
 							changesJsonArrayForType = readJsonArrayFromFile(changeFilePath);
 						}
 						changesJsonArray.addAll(changesJsonArrayForType);
@@ -3030,6 +3015,7 @@ public class TgfdDiscovery {
 		}
 
 		System.out.println("-------------------------------------");
+		System.out.println("Number of entity URIs found: "+entityURIs.size());
 		System.out.println("Total number of matches found in all snapshots: " + numberOfMatchesFound);
 		this.setPatternSupport(entityURIs.size(), patternTreeNode);
 
