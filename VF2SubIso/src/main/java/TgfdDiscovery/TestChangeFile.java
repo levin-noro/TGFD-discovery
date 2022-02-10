@@ -77,7 +77,8 @@ public class TestChangeFile extends TgfdDiscovery{
         this.setSkipK1(cmd.hasOption("skipK1"));
 
         this.setGamma(cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a")));
-        this.setTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
+        this.setTgfdTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_TGFD_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
+        this.setPatternTheta(cmd.getOptionValue("pTheta") == null ? this.getTgfdTheta() : Double.parseDouble(cmd.getOptionValue("pTheta")));
         this.setK(cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k")));
         this.setFrequentSetSize(cmd.getOptionValue("p") == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue("p")));
 
@@ -105,19 +106,7 @@ public class TestChangeFile extends TgfdDiscovery{
         this.loadGraphsAndComputeHistogram(this.getTimestampToFilesMap().subList(0,1));
 //        this.loadChangeFilesIntoMemory();
 
-        String[] info = {
-                String.join("=", "loader", this.getGraphSize()),
-                String.join("=", "|G|", this.getGraphSize()),
-                String.join("=", "k", Integer.toString(this.getK())),
-                String.join("=", "theta", Double.toString(this.getTheta())),
-                String.join("=", "gamma", Double.toString(this.getGamma())),
-                String.join("=", "frequentSetSize", Double.toString(this.getFrequentSetSize())),
-                String.join("=", "interesting", Boolean.toString(this.isOnlyInterestingTGFDs())),
-                String.join("=", "noMinimalityPruning", Boolean.toString(!this.hasMinimalityPruning())),
-                String.join("=", "noSupportPruning", Boolean.toString(!this.hasSupportPruning())),
-        };
-
-        System.out.println(String.join(", ", info));
+        this.printInfo();
     }
 
     public static void main(String[] args) {
@@ -241,7 +230,7 @@ public class TestChangeFile extends TgfdDiscovery{
                     tgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
 
-                if (patternTreeNode.getPatternSupport() < tgfdDiscovery.getTheta()) {
+                if (patternTreeNode.getPatternSupport() < tgfdDiscovery.getPatternTheta()) {
                     System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
                     if (tgfdDiscovery.hasSupportPruning()) patternTreeNode.setIsPruned();
                     continue;

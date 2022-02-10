@@ -61,7 +61,8 @@ public class TgfdDiscovery {
 	public static final int DEFAULT_FREQUENT_SIZE_SET = Integer.MAX_VALUE;
 	public static final int DEFAULT_GAMMA = 20;
 	public static final int DEFAULT_K = 3;
-	public static final double DEFAULT_THETA = 0.5;
+	public static final double DEFAULT_TGFD_THETA = 0.25;
+	public static final double DEFAULT_PATTERN_THETA = 0.05;
 	private boolean reUseMatches = true;
 	private boolean generatek0Tgfds = false;
     private boolean skipK1 = false;
@@ -73,7 +74,8 @@ public class TgfdDiscovery {
 	private String graphSize = null;
 	private boolean onlyInterestingTGFDs = true;
 	private int k = DEFAULT_K;
-	private double theta = DEFAULT_THETA;
+	private double tgfdTheta = DEFAULT_TGFD_THETA;
+	private double patternTheta = DEFAULT_PATTERN_THETA;
 	private int gamma = DEFAULT_GAMMA;
 	private int frequentSetSize = DEFAULT_FREQUENT_SIZE_SET;
 	private HashSet<String> activeAttributesSet;
@@ -115,19 +117,7 @@ public class TgfdDiscovery {
 	public TgfdDiscovery() {
 		this.setStartTime(System.currentTimeMillis());
 
-		String[] info = {
-				String.join("=", "loader", this.getGraphSize()),
-				String.join("=", "|G|", this.getGraphSize()),
-				String.join("=", "k", Integer.toString(this.getK())),
-				String.join("=", "theta", Double.toString(this.getTheta())),
-				String.join("=", "gamma", Double.toString(this.getGamma())),
-				String.join("=", "frequentSetSize", Double.toString(this.getFrequentSetSize())),
-				String.join("=", "interesting", Boolean.toString(this.isOnlyInterestingTGFDs())),
-				String.join("=", "noMinimalityPruning", Boolean.toString(!this.hasMinimalityPruning())),
-				String.join("=", "noSupportPruning", Boolean.toString(!this.hasSupportPruning())),
-		};
-
-		System.out.println(String.join(", ", info));
+		printInfo();
 
 		this.initializeTgfdLists();
 	}
@@ -203,7 +193,8 @@ public class TgfdDiscovery {
 		this.setT(cmd.getOptionValue("t") == null ? TgfdDiscovery.DEFAULT_NUM_OF_SNAPSHOTS : Integer.parseInt(cmd.getOptionValue("t")));
 		this.setGamma(cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a")));
 		this.setNumOfExtraLiterals(cmd.getOptionValue("extraLit") == null ? TgfdDiscovery.DEFAULT_NUM_OF_EXTRA_LITERALS : Integer.parseInt(cmd.getOptionValue("extraLit")));
-		this.setTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
+		this.setTgfdTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_TGFD_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
+		this.setPatternTheta(cmd.getOptionValue("pTheta") == null ? this.getTgfdTheta() : Double.parseDouble(cmd.getOptionValue("pTheta")));
 		this.setK(cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k")));
 		this.setFrequentSetSize(cmd.getOptionValue("p") == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue("p")));
 
@@ -230,12 +221,17 @@ public class TgfdDiscovery {
 		}
 		this.loadGraphsAndComputeHistogram(this.getTimestampToFilesMap());
 
+		printInfo();
+	}
+
+	protected void printInfo() {
 		String[] info = {
 				String.join("=", "loader", this.getGraphSize()),
 				String.join("=", "|G|", this.getGraphSize()),
 				String.join("=", "t", Integer.toString(this.getT())),
 				String.join("=", "k", Integer.toString(this.getK())),
-				String.join("=", "theta", Double.toString(this.getTheta())),
+				String.join("=", "pTheta", Double.toString(this.getPatternTheta())),
+				String.join("=", "theta", Double.toString(this.getTgfdTheta())),
 				String.join("=", "gamma", Double.toString(this.getGamma())),
 				String.join("=", "frequentSetSize", Double.toString(this.getFrequentSetSize())),
 				String.join("=", "interesting", Boolean.toString(this.isOnlyInterestingTGFDs())),
@@ -259,6 +255,7 @@ public class TgfdDiscovery {
 		options.addOption("k", true, "run experiment for k iterations");
 		options.addOption("a", true, "run experiment for specified active attribute set size");
 		options.addOption("theta", true, "run experiment using a specific support threshold");
+		options.addOption("pTheta", true, "run experiment using a specific pattern support threshold");
 		options.addOption("K", false, "run experiment for k = 1 to 5");
 		options.addOption("p", true, "run experiment using frequent set of p vertices and p edges");
 		options.addOption(CHANGEFILE_PARAMETER_TEXT, true, "run experiment using changefiles instead of snapshots");
@@ -301,8 +298,9 @@ public class TgfdDiscovery {
 	public String toString() {
 		String[] info = {"G"+this.getGraphSize()
 				, "t" + this.getT()
-				,"k" + this.getCurrentVSpawnLevel()
-				, "theta" + this.getTheta()
+				, "k" + this.getCurrentVSpawnLevel()
+				, "pTheta" + this.getPatternTheta()
+				, "theta" + this.getTgfdTheta()
 				, "gamma" + this.getGamma()
 				, "extraLit" + this.getNumOfExtraLiterals()
 				, "freqSet" + (this.getFrequentSetSize() == Integer.MAX_VALUE ? "All" : this.getFrequentSetSize())
@@ -1383,7 +1381,7 @@ public class TgfdDiscovery {
 			double support = this.calculateSupport(numberOfSatisfyingPairs, entitiesSize);
 			System.out.println("Candidate general TGFD support: " + support);
 			this.generalTgfdSupportsList.add(support);
-			if (support < this.getTheta()) {
+			if (support < this.getTgfdTheta()) {
 //				if (!this.noSupportPruning) patternTreeNode.addLowSupportDependency(literalPath);
 				System.out.println("Support for candidate general TGFD is below support threshold");
 				continue;
@@ -1560,7 +1558,7 @@ public class TgfdDiscovery {
 			this.constantTgfdSupportsList.add(candidateTGFDsupport); // Statistics
 
 			// Only output constant TGFDs that satisfy support
-			if (candidateTGFDsupport < this.getTheta()) {
+			if (candidateTGFDsupport < this.getTgfdTheta()) {
 				System.out.println("Could not satisfy TGFD support threshold for entity: " + entityEntry.getKey());
 				continue;
 			}
@@ -1848,8 +1846,8 @@ public class TgfdDiscovery {
 		return numOfSnapshots;
 	}
 
-	public double getTheta() {
-		return theta;
+	public double getTgfdTheta() {
+		return tgfdTheta;
 	}
 
 	public long getTotalVSpawnTime() {
@@ -2054,8 +2052,8 @@ public class TgfdDiscovery {
 		this.k = k;
 	}
 
-	public void setTheta(double theta) {
-		this.theta = theta;
+	public void setTgfdTheta(double tgfdTheta) {
+		this.tgfdTheta = tgfdTheta;
 	}
 
 	public int getGamma() {
@@ -2226,6 +2224,14 @@ public class TgfdDiscovery {
 		this.totalDiscoverGeneralTGFDTime = totalDiscoverGeneralTGFDTime;
 	}
 
+	public double getPatternTheta() {
+		return patternTheta;
+	}
+
+	public void setPatternTheta(double patternTheta) {
+		this.patternTheta = patternTheta;
+	}
+
 	public static class Pair implements Comparable<Pair> {
 		private final Integer min;
 		private final Integer max;
@@ -2369,7 +2375,7 @@ public class TgfdDiscovery {
 
 	private boolean doesNotSatisfyTheta(PatternTreeNode patternTreeNode) {
 		assert patternTreeNode.getPatternSupport() != null;
-		return patternTreeNode.getPatternSupport() < this.getTheta();
+		return patternTreeNode.getPatternSupport() < this.getPatternTheta();
 	}
 
 	public static boolean isDuplicateEdge(VF2PatternGraph pattern, String edgeType, String sourceType, String targetType) {
