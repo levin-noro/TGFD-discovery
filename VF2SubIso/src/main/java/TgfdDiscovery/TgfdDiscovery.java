@@ -2849,7 +2849,10 @@ public class TgfdDiscovery {
 		GraphLoader graph;
 		if (this.getFirstSnapshotTypeModel() == null && this.getFirstSnapshotDataModel() == null) {
 			for (String path : this.getTimestampToFilesMap().get(0).getValue()) {
-				if (!path.toLowerCase().contains("types")) continue;
+				if (!path.toLowerCase().endsWith(".ttl") && !path.toLowerCase().endsWith(".nt"))
+					continue;
+				if (path.toLowerCase().contains("literals") || path.toLowerCase().contains("objects"))
+					continue;
 				Path input= Paths.get(path);
 				Model model = ModelFactory.createDefaultModel();
 				System.out.println("Loading Node Types: " + path);
@@ -2858,7 +2861,10 @@ public class TgfdDiscovery {
 			}
 			Model dataModel = ModelFactory.createDefaultModel();
 			for (String path: this.getTimestampToFilesMap().get(0).getValue()) {
-				if (path.toLowerCase().contains("types")) continue;
+				if (!path.toLowerCase().endsWith(".ttl") && !path.toLowerCase().endsWith(".nt"))
+					continue;
+				if (path.toLowerCase().contains("types"))
+					continue;
 				Path input= Paths.get(path);
 				System.out.println("Loading DBpedia Graph: "+path);
 				dataModel.read(input.toUri().toString());
@@ -2866,6 +2872,8 @@ public class TgfdDiscovery {
 			}
 		}
 		Config.optimizedLoadingBasedOnTGFD = true;
+		assert this.getFirstSnapshotTypeModel() != null;
+		assert this.getFirstSnapshotDataModel() != null;
 		if (this.getLoader().equals("dbpedia")) {
 			graph = new DBPediaLoader(tgfds, Collections.singletonList(this.getFirstSnapshotTypeModel()), Collections.singletonList(this.getFirstSnapshotDataModel()));
 		} else {

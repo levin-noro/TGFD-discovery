@@ -52,9 +52,11 @@ public class testDiffExtractorDbpedia {
             ArrayList<File> files = new ArrayList<>(List.of(Objects.requireNonNull(new File(directory.getPath()).listFiles(File::isFile))));
             List<String> paths = files.stream().map(File::getPath).collect(Collectors.toList());
             for (String filepath : paths) {
-                if (filepath.contains("types")) {
+                if (!filepath.toLowerCase().contains(".ttl")) continue;
+                if (!filepath.toLowerCase().contains("literal") && !filepath.toLowerCase().contains("object")) {
                     str.append("-t" + index + " " + filepath + "\n");
-                } else {
+                }
+                if (!filepath.toLowerCase().contains("types")) {
                     str.append("-d" + index + " " + filepath + "\n");
                 }
             }
