@@ -1615,7 +1615,13 @@ public class TgfdDiscovery {
 	}
 
 	public void setImdbTimestampToFilesMapFromPath(String path) {
-		System.out.println("Searching for IMDB snapshots in path: "+path);
+		HashMap<String, List<String>> timestampToFilesMap = generateImdbTimestampToFilesMapFromPath(path);
+		this.setTimestampToFilesMap(new ArrayList<>(timestampToFilesMap.entrySet()));
+	}
+
+	@NotNull
+	public static HashMap<String, List<String>> generateImdbTimestampToFilesMapFromPath(String path) {
+		System.out.println("Searching for IMDB snapshots in path: "+ path);
 		List<File> allFilesInDirectory = new ArrayList<>(List.of(Objects.requireNonNull(new File(path).listFiles(File::isFile))));
 		System.out.println("Found files: "+allFilesInDirectory);
 		List<File> ntFilesInDirectory = new ArrayList<>();
@@ -1639,7 +1645,9 @@ public class TgfdDiscovery {
 				timestampToFilesMap.get(timestamp).add(ntFile.getPath());
 			}
 		}
-		this.setTimestampToFilesMap(new ArrayList<>(timestampToFilesMap.entrySet()));
+		System.out.println("TimestampToFilesMap...");
+		System.out.println(timestampToFilesMap);
+		return timestampToFilesMap;
 	}
 
 	protected void loadChangeFilesIntoMemory() {
@@ -1681,6 +1689,12 @@ public class TgfdDiscovery {
 	}
 
 	public void setDBpediaTimestampsAndFilePaths(String path) {
+		Map<String, List<String>> timestampToFilesMap = generateDbpediaTimestampToFilesMap(path);
+		this.setTimestampToFilesMap(new ArrayList<>(timestampToFilesMap.entrySet()));
+	}
+
+	@NotNull
+	public static Map<String, List<String>> generateDbpediaTimestampToFilesMap(String path) {
 		ArrayList<File> directories = new ArrayList<>(List.of(Objects.requireNonNull(new File(path).listFiles(File::isDirectory))));
 		directories.sort(Comparator.comparing(File::getName));
 		Map<String, List<String>> timestampToFilesMap = new HashMap<>();
@@ -1689,7 +1703,7 @@ public class TgfdDiscovery {
 			List<String> paths = files.stream().map(File::getPath).collect(Collectors.toList());
 			timestampToFilesMap.put(directory.getName(),paths);
 		}
-		this.setTimestampToFilesMap(new ArrayList<>(timestampToFilesMap.entrySet()));
+		return timestampToFilesMap;
 	}
 
 	public void setCitationTimestampsAndFilePaths() {
