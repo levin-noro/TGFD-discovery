@@ -9,7 +9,7 @@ public class PatternVertex extends Vertex{
     public PatternVertex(String type) {
         super(type.toLowerCase());
     }
-    private boolean isPatternNode=true;
+    private boolean isMarked = false;
 
     @Override
     public String toString() {
@@ -59,5 +59,13 @@ public class PatternVertex extends Vertex{
             newV.addAttribute(attr.getAttrName(), attr.getAttrValue());
         }
         return newV;
+    }
+
+    public boolean isMarked() {
+        return isMarked;
+    }
+
+    public void setMarked(boolean marked) {
+        isMarked = marked;
     }
 }
