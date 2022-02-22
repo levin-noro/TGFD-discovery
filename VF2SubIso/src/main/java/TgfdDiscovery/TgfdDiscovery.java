@@ -2489,14 +2489,14 @@ public class TgfdDiscovery {
 		// TO-DO: FIX label conflict. What if an edge has same vertex type on both sides?
 		for (Vertex v : previousLevelNode.getGraph().vertexSet()) {
 			System.out.println("Looking to add candidate edge to vertex: " + v.getTypes());
-
-			if (v.isMarked()) {
-				System.out.println("Skip vertex. Already added candidate edge to vertex: " + v.getTypes());
+			PatternVertex pv = (PatternVertex) v;
+			if (pv.isMarked()) {
+				System.out.println("Skip vertex. Already added candidate edge to vertex: " + pv.getTypes());
 				continue;
 			}
-			if (!v.getTypes().contains(sourceVertexType) && !v.getTypes().contains(targetVertexType)) {
-				System.out.println("Skip vertex. Candidate edge does not connect to vertex: " + v.getTypes());
-				v.setMarked(true);
+			if (!pv.getTypes().contains(sourceVertexType) && !pv.getTypes().contains(targetVertexType)) {
+				System.out.println("Skip vertex. Candidate edge does not connect to vertex: " + pv.getTypes());
+				pv.setMarked(true);
 				continue;
 			}
 
@@ -2533,13 +2533,13 @@ public class TgfdDiscovery {
 
 			// TO-DO: Debug - Why does this work with strings but not subgraph isomorphism???
 			if (isIsomorphicPattern(newPattern, this.patternTree)) {
-				v.setMarked(true);
+				pv.setMarked(true);
 				System.out.println("Skip. Candidate pattern is an isomorph of existing pattern");
 				continue;
 			}
 
 			if (this.hasSupportPruning() && isSuperGraphOfPrunedPattern(newPattern, this.patternTree)) {
-				v.setMarked(true);
+				pv.setMarked(true);
 				System.out.println("Skip. Candidate pattern is a supergraph of pruned pattern");
 				continue;
 			}
@@ -2581,13 +2581,13 @@ public class TgfdDiscovery {
 				newPattern.setCenterVertexType(centerVertexType);
 				patternTreeNode = this.patternTree.createNodeAtLevel(this.getCurrentVSpawnLevel(), newPattern, previousLevelNode, candidateEdgeString);
 			}
-			System.out.println("Marking vertex " + v.getTypes() + "as expanded.");
+			System.out.println("Marking vertex " + pv.getTypes() + "as expanded.");
 			break;
 		}
 		if (patternTreeNode == null) {
 			for (Vertex v : previousLevelNode.getGraph().vertexSet()) {
 				System.out.println("Unmarking all vertices in current pattern for the next candidate edge");
-				v.setMarked(false);
+				((PatternVertex)v).setMarked(false);
 			}
 			this.setCandidateEdgeIndex(this.getCandidateEdgeIndex() + 1);
 		}
