@@ -10,6 +10,7 @@ import java.util.LinkedList;
 public class VF2PatternGraph {
 
     private Graph<Vertex, RelationshipEdge> pattern;
+    private HashMap<Vertex, Integer> vertexToRadius = new HashMap<>();
 
     private int diameter;
 
@@ -102,6 +103,11 @@ public class VF2PatternGraph {
     }
 
     public int calculateRadiusForGivenVertex(Vertex v) {
+        // store results of earlier queries to calculate radius
+        if (vertexToRadius.containsKey(v)) {
+            return vertexToRadius.get(v);
+        }
+
         // Define a HashMap to store visited vertices
         HashMap <Vertex,Integer> visited=new HashMap<>();
 
@@ -132,6 +138,7 @@ public class VF2PatternGraph {
                 }
             }
         }
+        vertexToRadius.putIfAbsent(v, d);
         return d;
     }
 
