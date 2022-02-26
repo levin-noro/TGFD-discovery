@@ -44,12 +44,14 @@ public class TgfdDiscovery {
 	public static final int DEFAULT_NUM_OF_SNAPSHOTS = 3;
 	public static final String NO_REUSE_MATCHES_PARAMETER_TEXT = "noReuseMatches";
 	public static final String CHANGEFILE_PARAMETER_TEXT = "changefile";
-	private static final int DEFAULT_NUM_OF_EXTRA_LITERALS = 0;
+	private static final int DEFAULT_MAX_LITERALS_NUM = 0;
+	public static final String FREQUENT_SIZE_SET_PARAM = "f";
+	public static final String MAX_LIT_PARAM = "maxLit";
 	protected static Integer INDIVIDUAL_VERTEX_INDEGREE_FLOOR = 25;
 	public static double MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = 25.0;
 	public static final double DEFAULT_MAX_SUPER_VERTEX_DEGREE = 1500.0;
 	public static final double DEFAULT_AVG_SUPER_VERTEX_DEGREE = 30.0;
-	private int numOfExtraLiterals = DEFAULT_NUM_OF_EXTRA_LITERALS;
+	private int maxNumOfLiterals = DEFAULT_MAX_LITERALS_NUM;
 	private int t = DEFAULT_NUM_OF_SNAPSHOTS;
 	private boolean dissolveSuperVerticesBasedOnCount = false;
 	private double superVertexDegree = MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR;
@@ -192,11 +194,11 @@ public class TgfdDiscovery {
 
 		this.setT(cmd.getOptionValue("t") == null ? TgfdDiscovery.DEFAULT_NUM_OF_SNAPSHOTS : Integer.parseInt(cmd.getOptionValue("t")));
 		this.setGamma(cmd.getOptionValue("a") == null ? TgfdDiscovery.DEFAULT_GAMMA : Integer.parseInt(cmd.getOptionValue("a")));
-		this.setNumOfExtraLiterals(cmd.getOptionValue("extraLit") == null ? TgfdDiscovery.DEFAULT_NUM_OF_EXTRA_LITERALS : Integer.parseInt(cmd.getOptionValue("extraLit")));
+		this.setMaxNumOfLiterals(cmd.getOptionValue(MAX_LIT_PARAM) == null ? TgfdDiscovery.DEFAULT_MAX_LITERALS_NUM : Integer.parseInt(cmd.getOptionValue(MAX_LIT_PARAM)));
 		this.setTgfdTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_TGFD_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
 		this.setPatternTheta(cmd.getOptionValue("pTheta") == null ? this.getTgfdTheta() : Double.parseDouble(cmd.getOptionValue("pTheta")));
 		this.setK(cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k")));
-		this.setFrequentSetSize(cmd.getOptionValue("p") == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue("p")));
+		this.setFrequentSetSize(cmd.getOptionValue(FREQUENT_SIZE_SET_PARAM) == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue(FREQUENT_SIZE_SET_PARAM)));
 
 		this.initializeTgfdLists();
 
@@ -235,7 +237,7 @@ public class TgfdDiscovery {
 				String.join("=", "gamma", Double.toString(this.getGamma())),
 				String.join("=", "frequentSetSize", Double.toString(this.getFrequentSetSize())),
 				String.join("=", "interesting", Boolean.toString(this.isOnlyInterestingTGFDs())),
-				String.join("=", "literalMax", Integer.toString(this.getNumOfExtraLiterals())),
+				String.join("=", "literalMax", Integer.toString(this.getMaxNumOfLiterals())),
 				String.join("=", "noMinimalityPruning", Boolean.toString(!this.hasMinimalityPruning())),
 				String.join("=", "noSupportPruning", Boolean.toString(!this.hasSupportPruning())),
 		};
@@ -257,7 +259,7 @@ public class TgfdDiscovery {
 		options.addOption("theta", true, "run experiment using a specific support threshold");
 		options.addOption("pTheta", true, "run experiment using a specific pattern support threshold");
 		options.addOption("K", false, "run experiment for k = 1 to 5");
-		options.addOption("p", true, "run experiment using frequent set of p vertices and p edges");
+		options.addOption(FREQUENT_SIZE_SET_PARAM, true, "run experiment using frequent set of p vertices and p edges");
 		options.addOption(CHANGEFILE_PARAMETER_TEXT, true, "run experiment using changefiles instead of snapshots");
 		options.addOption(NO_REUSE_MATCHES_PARAMETER_TEXT, false, "run experiment without reusing matches between levels");
 		options.addOption("k0", false, "run experiment and generate tgfds for single-node patterns");
@@ -268,7 +270,7 @@ public class TgfdDiscovery {
 		options.addOption("simplifySuperVertex", true, "run experiment by collapsing super vertices");
 		options.addOption("simplifySuperVertexTypes", true, "run experiment by collapsing super vertex types");
 		options.addOption("dontStore", false, "run experiment without storing changefiles in memory, read from disk");
-		options.addOption("extraLit", true, "run experiment that outputs TGFDs with up n literals");
+		options.addOption(MAX_LIT_PARAM, true, "run experiment that outputs TGFDs with up n literals");
 		return options;
 	}
 
@@ -302,7 +304,7 @@ public class TgfdDiscovery {
 				, "pTheta" + this.getPatternTheta()
 				, "theta" + this.getTgfdTheta()
 				, "gamma" + this.getGamma()
-				, "extraLit" + this.getNumOfExtraLiterals()
+				, MAX_LIT_PARAM + this.getMaxNumOfLiterals()
 				, "freqSet" + (this.getFrequentSetSize() == Integer.MAX_VALUE ? "All" : this.getFrequentSetSize())
 				, (this.isValidationSearch() ? "-validation" : "")
 				, (this.useChangeFile() ? "-changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "")
@@ -1727,7 +1729,7 @@ public class TgfdDiscovery {
 		HashSet<ConstantLiteral> activeAttributes = getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), false);
 
 		LiteralTree literalTree = new LiteralTree();
-		int hSpawnLimit = patternTreeNode.getGraph().vertexSet().size() + this.getNumOfExtraLiterals();
+		int hSpawnLimit = Math.max(patternTreeNode.getGraph().vertexSet().size(), this.getMaxNumOfLiterals());
 		for (int j = 0; j < hSpawnLimit; j++) {
 
 			System.out.println("HSpawn level " + j + "/" + hSpawnLimit);
@@ -2175,12 +2177,12 @@ public class TgfdDiscovery {
 		this.firstSnapshotDataModel = firstSnapshotDataModel;
 	}
 
-	public int getNumOfExtraLiterals() {
-		return numOfExtraLiterals;
+	public int getMaxNumOfLiterals() {
+		return maxNumOfLiterals;
 	}
 
-	public void setNumOfExtraLiterals(int numOfExtraLiterals) {
-		this.numOfExtraLiterals = numOfExtraLiterals;
+	public void setMaxNumOfLiterals(int maxNumOfLiterals) {
+		this.maxNumOfLiterals = maxNumOfLiterals;
 	}
 
 	public long getTotalVisitedPathCheckingTime() {
