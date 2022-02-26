@@ -80,7 +80,7 @@ public class TestChangeFile extends TgfdDiscovery{
         this.setTgfdTheta(cmd.getOptionValue("theta") == null ? TgfdDiscovery.DEFAULT_TGFD_THETA : Double.parseDouble(cmd.getOptionValue("theta")));
         this.setPatternTheta(cmd.getOptionValue("pTheta") == null ? this.getTgfdTheta() : Double.parseDouble(cmd.getOptionValue("pTheta")));
         this.setK(cmd.getOptionValue("k") == null ? TgfdDiscovery.DEFAULT_K : Integer.parseInt(cmd.getOptionValue("k")));
-        this.setFrequentSetSize(cmd.getOptionValue("p") == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue("p")));
+        this.setFrequentSetSize(cmd.getOptionValue(TgfdDiscovery.FREQUENT_SIZE_SET_PARAM) == null ? TgfdDiscovery.DEFAULT_FREQUENT_SIZE_SET : Integer.parseInt(cmd.getOptionValue(TgfdDiscovery.FREQUENT_SIZE_SET_PARAM)));
 
         this.initializeTgfdLists();
 
