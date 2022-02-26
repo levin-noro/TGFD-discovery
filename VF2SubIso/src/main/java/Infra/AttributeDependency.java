@@ -7,6 +7,7 @@ import java.util.Objects;
 public class AttributeDependency {
     HashSet<ConstantLiteral> lhs;
     ConstantLiteral rhs;
+    private Delta delta;
 
     public AttributeDependency(ArrayList<ConstantLiteral> dependency) {
         lhs = new HashSet<>(dependency.subList(0, dependency.size() - 1));
@@ -16,6 +17,12 @@ public class AttributeDependency {
     public AttributeDependency(ArrayList<ConstantLiteral> pathToRoot, ConstantLiteral literal) {
         lhs = new HashSet<>(pathToRoot);
         rhs = literal;
+    }
+
+    public AttributeDependency(HashSet<ConstantLiteral> pathToRoot, ConstantLiteral literal, Delta deltaInterval) {
+        lhs = new HashSet<>(pathToRoot);
+        rhs = literal;
+        setDelta(deltaInterval);
     }
 
     public AttributeDependency() {
@@ -58,5 +65,40 @@ public class AttributeDependency {
     @Override
     public int hashCode() {
         return Objects.hash(lhs.hashCode(), rhs.hashCode());
+    }
+
+    public Delta getDelta() {
+        return delta;
+    }
+
+    public void setDelta(Delta delta) {
+        this.delta = delta;
+    }
+
+    public boolean isSuperSetOfPath(ArrayList<AttributeDependency> zeroEntityDependenciesOnThisPath) {
+        boolean isPruned = false;
+        for (AttributeDependency prunedPath : zeroEntityDependenciesOnThisPath) {
+            if (this.getRhs().equals(prunedPath.getRhs()) && this.getLhs().containsAll(prunedPath.getLhs())) {
+                System.out.println("Candidate path " + this + " is a superset of pruned path " + prunedPath);
+                isPruned = true;
+            }
+        }
+        return isPruned;
+    }
+
+    public boolean isSuperSetOfPathAndSubsetOfDelta(ArrayList<AttributeDependency> minimalDependenciesOnThisPath) {
+        boolean isPruned = false;
+        for (AttributeDependency prunedPath : minimalDependenciesOnThisPath) {
+            if (this.getRhs().equals(prunedPath.getRhs()) && this.getLhs().containsAll(prunedPath.getLhs())) {
+                System.out.println("Candidate path " + this + " is a superset of pruned path " + prunedPath);
+                if (this.getDelta().subsetOf(prunedPath.getDelta())) {
+                    System.out.println("Candidate path delta " + this.getDelta()
+                            + "\n with pruned path delta " + prunedPath.getDelta()
+                            + ".");
+                    isPruned = true;
+                }
+            }
+        }
+        return isPruned;
     }
 }
