@@ -1182,21 +1182,6 @@ public class TgfdDiscovery {
 		return pathAlreadyVisited;
 	}
 
-	public boolean isSupersetPath(AttributeDependency path, ArrayList<AttributeDependency> prunedPaths) {
-		long supersetPathCheckingTime = System.currentTimeMillis();
-		boolean isPruned = false;
-		for (AttributeDependency prunedPath : prunedPaths) {
-			if (path.getRhs().equals(prunedPath.getRhs()) && path.getLhs().containsAll(prunedPath.getLhs())) {
-				System.out.println("Candidate path " + path + " is a superset of pruned path " + prunedPath);
-				isPruned = true;
-			}
-		}
-		supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
-		printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
-		setTotalSupersetPathCheckingTime(getTotalSupersetPathCheckingTime() + supersetPathCheckingTime);
-		return isPruned;
-	}
-
 	public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
@@ -1230,7 +1215,7 @@ public class TgfdDiscovery {
 			if (this.hasSupportPruning()) {
 				literalTreeNode.setIsPruned();
 				System.out.println("Marked as pruned. Literal path "+literalTreeNode.getPathToRoot());
-				patternNode.addLowSupportDependency(literalPath);
+				patternNode.addZeroEntityDependency(literalPath);
 			}
 			return tgfds;
 		}
@@ -1252,20 +1237,22 @@ public class TgfdDiscovery {
 		System.out.println("Discovering general TGFDs");
 
 		// Find general TGFDs
-		long discoverGeneralTGFDTime = System.currentTimeMillis();
-		ArrayList<TGFD> generalTGFDs = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap);
-		discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
-		printWithTime("discoverGeneralTGFDTime", discoverGeneralTGFDTime);
-		setTotalDiscoverGeneralTGFDTime(getTotalDiscoverGeneralTGFDTime() + discoverGeneralTGFDTime);
-		if (generalTGFDs.size() > 0) {
-			System.out.println("Discovered "+generalTGFDs.size()+" general TGFDs for this dependency.");
-			if (this.hasMinimalityPruning()) {
-				literalTreeNode.setIsPruned();
-				System.out.println("Marked as pruned. Literal path "+literalTreeNode.getPathToRoot());
-				patternNode.addMinimalDependency(literalPath);
+		if (!deltaToPairsMap.isEmpty()) {
+			long discoverGeneralTGFDTime = System.currentTimeMillis();
+			ArrayList<TGFD> generalTGFDs = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap, literalTreeNode);
+			discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
+			printWithTime("discoverGeneralTGFDTime", discoverGeneralTGFDTime);
+			setTotalDiscoverGeneralTGFDTime(getTotalDiscoverGeneralTGFDTime() + discoverGeneralTGFDTime);
+			if (generalTGFDs.size() > 0) {
+				System.out.println("Discovered " + generalTGFDs.size() + " general TGFDs for this dependency.");
+				if (this.hasMinimalityPruning()) {
+					literalTreeNode.setIsPruned();
+					System.out.println("Marked as pruned. Literal path " + literalTreeNode.getPathToRoot());
+					patternNode.addMinimalDependency(literalPath);
+				}
 			}
+			tgfds.addAll(generalTGFDs);
 		}
-		tgfds.addAll(generalTGFDs);
 
 		return tgfds;
 	}
@@ -1353,9 +1340,6 @@ public class TgfdDiscovery {
 		System.out.println("Evaluating candidate deltas for general TGFD...");
 		for (Entry<Pair, ArrayList<Pair>> intersection : sortedIntersections) {
 			Pair candidateDelta = intersection.getKey();
-//			if (!this.noSupportPruning && isSupersetPath(literalPath, candidateDelta, patternTreeNode.getAllLowSupportGeneralTgfds())) {
-//				continue;
-//			}
 			int generalMin = candidateDelta.min();
 			int generalMax = candidateDelta.max();
 			System.out.println("Calculating support for candidate general TGFD candidate delta: " + intersection.getKey());
@@ -1368,13 +1352,8 @@ public class TgfdDiscovery {
 			double support = this.calculateSupport(numberOfSatisfyingPairs, entitiesSize);
 			System.out.println("Candidate general TGFD support: " + support);
 			this.generalTgfdSupportsList.add(support);
-			if (support < this.getTgfdTheta()) {
-//				if (!this.noSupportPruning) patternTreeNode.addLowSupportDependency(literalPath);
-				System.out.println("Support for candidate general TGFD is below support threshold");
-				continue;
-			}
 
-			Delta delta = new Delta(Period.ofDays(generalMin * 183), Period.ofDays(generalMax * 183 + 1), Duration.ofDays(183));
+			Delta delta = new Delta(Period.ofYears(generalMin), Period.ofYears(generalMax), Duration.ofDays(365));
 
 			Dependency generalDependency = new Dependency();
 			String yVertexType = literalPath.getRhs().getVertexType();
@@ -1388,10 +1367,19 @@ public class TgfdDiscovery {
 				generalDependency.addLiteralToX(varX);
 			}
 
-			System.out.println("Creating new general TGFD...");
-			TGFD tgfd = new TGFD(patternTreeNode.getPattern(), delta, generalDependency, support, patternSupport, "");
-			System.out.println("TGFD: " + tgfd);
-			tgfds.add(tgfd);
+			if (support < this.getTgfdTheta()) {
+				if (this.hasSupportPruning() && delta.getMin().getYears() == 0 && delta.getMax().getYears() == this.getNumOfSnapshots()-1) {
+					literalTreeNode.setIsPruned();
+					patternTreeNode.addLowSupportDependency(new AttributeDependency(literalPath.getLhs(), literalPath.getRhs(), delta));
+				}
+				System.out.println("Support for candidate general TGFD is below support threshold");
+//				continue;
+			} else {
+				System.out.println("Creating new general TGFD...");
+				TGFD tgfd = new TGFD(patternTreeNode.getPattern(), delta, generalDependency, support, patternSupport, "");
+				System.out.println("TGFD: " + tgfd);
+				tgfds.add(tgfd);
+			}
 		}
 		return tgfds;
 	}
@@ -1428,7 +1416,7 @@ public class TgfdDiscovery {
 			for (Vertex v : newPattern.getPattern().vertexSet()) {
 				String vType = new ArrayList<>(v.getTypes()).get(0);
 				if (vType.equalsIgnoreCase(yVertexType)) { // TO-DO: What if our pattern has duplicate vertex types?
-					v.addAttribute(new Attribute(yAttrName));
+					v.putAttributeIfAbsent(new Attribute(yAttrName));
 					if (newDependency.getY().size() == 0) {
 						VariableLiteral newY = new VariableLiteral(yVertexType, yAttrName, yVertexType, yAttrName);
 						newDependency.addLiteralToY(newY);
@@ -1436,7 +1424,7 @@ public class TgfdDiscovery {
 				}
 				for (ConstantLiteral xLiteral : entityEntry.getKey()) {
 					if (xLiteral.getVertexType().equalsIgnoreCase(vType)) {
-						v.addAttribute(new Attribute(xLiteral.getAttrName(), xLiteral.getAttrValue()));
+						v.putAttributeIfAbsent(new Attribute(xLiteral.getAttrName(), xLiteral.getAttrValue()));
 						ConstantLiteral newXLiteral = new ConstantLiteral(vType, xLiteral.getAttrName(), xLiteral.getAttrValue());
 						newDependency.addLiteralToX(newXLiteral);
 						constantPath.addToLhs(newXLiteral);
@@ -1544,25 +1532,29 @@ public class TgfdDiscovery {
 
 			this.constantTgfdSupportsList.add(candidateTGFDsupport); // Statistics
 
-			// Only output constant TGFDs that satisfy support
-			if (candidateTGFDsupport < this.getTgfdTheta()) {
-				System.out.println("Could not satisfy TGFD support threshold for entity: " + entityEntry.getKey());
-				continue;
-			}
 			int minDistance = mostSupportedDelta.min();
 			int maxDistance = mostSupportedDelta.max();
-			candidateTGFDdelta = new Delta(Period.ofDays(minDistance * 183), Period.ofDays(maxDistance * 183 + 1), Duration.ofDays(183));
+			candidateTGFDdelta = new Delta(Period.ofYears(minDistance), Period.ofYears(maxDistance), Duration.ofDays(365));
 			System.out.println("Constant TGFD delta: "+candidateTGFDdelta);
+			constantPath.setDelta(candidateTGFDdelta);
 
-			if (this.hasMinimalityPruning() && isSupersetPath(constantPath, patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
+			if (this.hasMinimalityPruning() && constantPath.isSuperSetOfPathAndSubsetOfDelta(patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
 				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
 				continue;
 			}
-			System.out.println("Creating new constant TGFD...");
-			TGFD entityTGFD = new TGFD(newPattern, candidateTGFDdelta, newDependency, candidateTGFDsupport, patternNode.getPatternSupport(), "");
-			System.out.println("TGFD: " + entityTGFD);
-			tgfds.add(entityTGFD);
-			if (this.hasMinimalityPruning()) patternNode.addMinimalConstantDependency(constantPath);
+			// Only output constant TGFDs that satisfy support
+			if (candidateTGFDsupport < this.getTgfdTheta()) {
+				if (this.hasSupportPruning() && candidateTGFDdelta.getMin().getYears() == 0 && candidateTGFDdelta.getMax().getYears() == this.getNumOfSnapshots()-1)
+					patternNode.addLowSupportDependency(new AttributeDependency(constantPath.getLhs(), constantPath.getRhs(), candidateTGFDdelta));
+				System.out.println("Could not satisfy TGFD support threshold for entity: " + entityEntry.getKey());
+//				continue;
+			} else {
+				System.out.println("Creating new constant TGFD...");
+				TGFD entityTGFD = new TGFD(newPattern, candidateTGFDdelta, newDependency, candidateTGFDsupport, patternNode.getPatternSupport(), "");
+				System.out.println("TGFD: " + entityTGFD);
+				tgfds.add(entityTGFD);
+				if (this.hasMinimalityPruning()) patternNode.addMinimalConstantDependency(constantPath);
+			}
 		}
 		return tgfds;
 	}
@@ -1770,14 +1762,23 @@ public class TgfdDiscovery {
 							continue;
 						}
 
-						if (this.hasSupportPruning() && isSupersetPath(newPath, patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
+						long supersetPathCheckingTime = System.currentTimeMillis();
+						if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getZeroEntityDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
+							System.out.println("Skip. Candidate literal path is a superset of zero-entity dependency.");
+							continue;
+						}
+						if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
 							System.out.println("Skip. Candidate literal path is a superset of low-support dependency.");
 							continue;
 						}
-						if (this.hasMinimalityPruning() && isSupersetPath(newPath, patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
+						if (this.hasMinimalityPruning() && newPath.isSuperSetOfPath(patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
 							System.out.println("Skip. Candidate literal path is a superset of minimal dependency.");
 							continue;
 						}
+						supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
+						printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
+						setTotalSupersetPathCheckingTime(getTotalSupersetPathCheckingTime() + supersetPathCheckingTime);
+
 						System.out.println("Newly created unique literal path: " + newPath);
 
 						// Add leaf node to tree
