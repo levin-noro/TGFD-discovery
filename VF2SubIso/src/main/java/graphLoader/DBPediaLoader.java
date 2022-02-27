@@ -273,7 +273,7 @@ public class DBPediaLoader extends GraphLoader {
                     if (edgeAdded) graphSize++;
                 } else {
 //                    if (!Config.optimizedLoadingBasedOnTGFD || validAttributes.contains(predicate)) {
-                        subjVertex.addAttribute(new Attribute(predicate, objectNodeURI));
+                        subjVertex.putAttributeIfAbsent(new Attribute(predicate, objectNodeURI));
                         graphSize++;
 //                    }
                 }

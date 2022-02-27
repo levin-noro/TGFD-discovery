@@ -37,4 +37,8 @@ public class Delta {
                 ", granularity=" + granularity +
                 '}';
     }
+
+    public boolean subsetOf(Delta delta) {
+        return this.getMin().getDays() >= delta.getMin().getDays() && this.getMax().getDays() <= delta.getMax().getDays();
+    }
 }

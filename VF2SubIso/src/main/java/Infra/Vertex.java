@@ -54,18 +54,26 @@ public abstract class Vertex implements Comparable<Vertex>, Serializable {
         this.types.add(type);
     }
 
+    public void removeType(String type)
+    {
+        this.types.remove(type);
+    }
 
-    public void addAttribute(String name, String value)
+    public void putAttribute(String name, String value)
     {
         attributes.put(name.toLowerCase(),new Attribute(name.toLowerCase(),value.toLowerCase()));
     }
 
-    public void setOrAddAttribute(Attribute attr)
+    public void putAttributeIfAbsent(Attribute attr)
     {
-        if(attributes.containsKey(attr.getAttrName()))
-            attributes.get(attr.getAttrName()).setAttrValue(attr.getAttrValue());
-        else
-            addAttribute(attr);
+        // Handles case where an attribute is a multi-value attribute
+        if (attributes.containsKey(attr.getAttrName()) && attributes.get(attr.getAttrName()) != null) {
+            if (attr.getAttrValue().compareTo(attributes.get(attr.getAttrName()).getAttrValue()) < 0) {
+                attributes.put(attr.getAttrName(),attr);
+            }
+        } else {
+            putAttribute(attr);
+        }
     }
 
     public void deleteAllAttributes()
@@ -78,7 +86,7 @@ public abstract class Vertex implements Comparable<Vertex>, Serializable {
         attributes.remove(attr.getAttrName());
     }
 
-    public void addAttribute(Attribute attr)
+    public void putAttribute(Attribute attr)
     {
         attributes.put(attr.getAttrName(),attr);
     }

@@ -14,7 +14,7 @@ public class DataVertex extends Vertex implements Serializable {
     public DataVertex(String uri, String type) {
         super(type.toLowerCase());
         this.vertexURI=uri.toLowerCase();
-        this.addAttribute("uri",vertexURI);
+        this.putAttributeIfAbsent(new Attribute("uri",vertexURI));
         // ???: Is Integer large enough for our use case of possible 10+ million vertices? [2021-02-07]
 //        this.hashValue=vertexURI.hashCode();
     }
