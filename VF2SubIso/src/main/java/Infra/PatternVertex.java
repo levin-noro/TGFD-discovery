@@ -56,7 +56,7 @@ public class PatternVertex extends Vertex{
     public PatternVertex copy(){
         PatternVertex newV = new PatternVertex(new ArrayList<>(this.getTypes()).get(0));
         for (Attribute attr : this.getAllAttributesList()) {
-            newV.addAttribute(attr.getAttrName(), attr.getAttrValue());
+            newV.putAttribute(new Attribute(attr.getAttrName(), attr.getAttrValue()));
         }
         return newV;
     }

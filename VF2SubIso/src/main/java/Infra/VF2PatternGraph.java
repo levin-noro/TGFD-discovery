@@ -172,13 +172,16 @@ public class VF2PatternGraph {
         StringBuilder res= new StringBuilder("VF2PatternGraph{");
         if (pattern.edgeSet().size() > 0) {
             for (RelationshipEdge edge : pattern.edgeSet()) {
+                res.append("\n\t");
                 res.append(edge.toString());
             }
         } else {
             for (Vertex v : pattern.vertexSet()) {
+                res.append("\n\t");
                 res.append(v.toString());
             }
         }
+        res.append("\n");
         res.append('}');
         return res.toString();
     }

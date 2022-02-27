@@ -217,7 +217,7 @@ public class CitationLoader extends GraphLoader {
         }
 
         if (paper.getTitle() != null && paper.getTitle().length() > 0) {
-            subjectVertex.addAttribute("title", paper.getTitle());
+            subjectVertex.putAttribute("title", paper.getTitle());
         }
 
         if (paper.getAuthors() != null) {
@@ -230,10 +230,10 @@ public class CitationLoader extends GraphLoader {
                     graph.addVertex(objectVertex);
                 }
                 if (author.getName() != null) {
-                    objectVertex.addAttribute("name", author.getName());
+                    objectVertex.putAttribute("name", author.getName());
                 }
                 if (author.getOrg() != null) {
-                    objectVertex.addAttribute("org", author.getOrg());
+                    objectVertex.putAttribute("org", author.getOrg());
                 }
                 graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge("authored_by"));
             }
@@ -249,16 +249,16 @@ public class CitationLoader extends GraphLoader {
                     graph.addVertex(objectVertex);
                 }
                 if (venue.getName_d() != null) {
-                    objectVertex.addAttribute("name", venue.getName_d());
+                    objectVertex.putAttribute("name", venue.getName_d());
                 } else if (venue.getRaw() != null) {
-                    objectVertex.addAttribute("name", venue.getRaw());
+                    objectVertex.putAttribute("name", venue.getRaw());
                 }
                 graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge("paper_venue"));
             }
         }
 
         if (paper.getYear() != null) {
-            subjectVertex.addAttribute("year", String.valueOf(paper.getYear()));
+            subjectVertex.putAttribute("year", String.valueOf(paper.getYear()));
         }
 
         if (paper.getKeywords() != null) {
@@ -268,7 +268,7 @@ public class CitationLoader extends GraphLoader {
                     objectVertex = new DataVertex(keyword, "keyword");
                     graph.addVertex(objectVertex);
                 }
-                objectVertex.addAttribute("name", keyword);
+                objectVertex.putAttribute("name", keyword);
                 graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge("has_keyword"));
             }
         }
@@ -285,9 +285,9 @@ public class CitationLoader extends GraphLoader {
                         objectVertex = new DataVertex(fosName, "field");
                         graph.addVertex(objectVertex);
                     }
-                    objectVertex.addAttribute("name", fosName);
+                    objectVertex.putAttribute("name", fosName);
                     if (fos.getW() != null) {
-                        objectVertex.addAttribute("weight", String.valueOf(fos.getW()));
+                        objectVertex.putAttribute("weight", String.valueOf(fos.getW()));
                     }
                     graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge("field_of_study"));
                 } else if (obj instanceof String) {
@@ -298,7 +298,7 @@ public class CitationLoader extends GraphLoader {
                         objectVertex = new DataVertex(fosName, "field");
                         graph.addVertex(objectVertex);
                     }
-                    objectVertex.addAttribute("name", fosName);
+                    objectVertex.putAttribute("name", fosName);
                     graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge("field_of_study"));
                 }
             }
@@ -316,51 +316,51 @@ public class CitationLoader extends GraphLoader {
         }
 
         if (paper.getN_citation() != null) {
-            subjectVertex.addAttribute("citation_count", String.valueOf(paper.getN_citation()));
+            subjectVertex.putAttribute("citation_count", String.valueOf(paper.getN_citation()));
         }
 
         if (paper.getPage_start() != null && paper.getPage_start().length() > 0) {
-            subjectVertex.addAttribute("page_start", paper.getPage_start());
+            subjectVertex.putAttribute("page_start", paper.getPage_start());
         }
 
         if (paper.getPage_end() != null && paper.getPage_end().length() > 0) {
-            subjectVertex.addAttribute("page_end", paper.getPage_end());
+            subjectVertex.putAttribute("page_end", paper.getPage_end());
         }
 
         if (paper.getDoc_type() != null && paper.getDoc_type().length() > 0) {
-            subjectVertex.addAttribute("doc_type", paper.getDoc_type());
+            subjectVertex.putAttribute("doc_type", paper.getDoc_type());
         }
 
         if (paper.getLang() != null && paper.getLang().length() > 0) {
-            subjectVertex.addAttribute("language", paper.getLang());
+            subjectVertex.putAttribute("language", paper.getLang());
         }
 
         if (paper.getPublisher() != null && paper.getPublisher().length() > 0) {
-            subjectVertex.addAttribute("publisher", paper.getPublisher());
+            subjectVertex.putAttribute("publisher", paper.getPublisher());
         }
 
         if (paper.getVolume() != null && paper.getVolume().length() > 0) {
-            subjectVertex.addAttribute("volume", paper.getVolume());
+            subjectVertex.putAttribute("volume", paper.getVolume());
         }
 
         if (paper.getIssue() != null && paper.getIssue().length() > 0) {
-            subjectVertex.addAttribute("issue", paper.getIssue());
+            subjectVertex.putAttribute("issue", paper.getIssue());
         }
 
         if (paper.getIssn() != null && paper.getIssn().length() > 0) {
-            subjectVertex.addAttribute("issn", paper.getIssn());
+            subjectVertex.putAttribute("issn", paper.getIssn());
         }
 
         if (paper.getIsbn() != null && paper.getIsbn().length() > 0) {
-            subjectVertex.addAttribute("isbn", paper.getIsbn());
+            subjectVertex.putAttribute("isbn", paper.getIsbn());
         }
 
         if (paper.getDoi() != null && paper.getDoi().length() > 0) {
-            subjectVertex.addAttribute("doi", paper.getDoi());
+            subjectVertex.putAttribute("doi", paper.getDoi());
         }
 
         if (paper.getPdf() != null && paper.getPdf().length() > 0) {
-            subjectVertex.addAttribute("pdf", paper.getPdf());
+            subjectVertex.putAttribute("pdf", paper.getPdf());
         }
 
         if (paper.getUrl() != null) {
@@ -370,13 +370,13 @@ public class CitationLoader extends GraphLoader {
                     objectVertex = new DataVertex(url, "link");
                     graph.addVertex(objectVertex);
                 }
-                objectVertex.addAttribute("url", url);
+                objectVertex.putAttribute("url", url);
                 graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge("has_url"));
             }
         }
 
         if (paper.get_abstract() != null && paper.get_abstract().length() > 0) {
-            subjectVertex.addAttribute("abstract", paper.get_abstract());
+            subjectVertex.putAttribute("abstract", paper.get_abstract());
         }
 
         // indexed abstract ?

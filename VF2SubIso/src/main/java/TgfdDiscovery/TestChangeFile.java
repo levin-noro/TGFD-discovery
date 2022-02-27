@@ -30,6 +30,82 @@ import java.util.*;
 public class TestChangeFile extends TgfdDiscovery{
     public TestChangeFile(String[] args) {
         super();
+        init(args);
+        super.loadGraphsAndComputeHistogram(this.getTimestampToFilesMap().subList(0,1));
+    }
+
+    public TestChangeFile(String[] args, List<GraphLoader> graphs) {
+        super();
+        init(args);
+//        this.readGraphsAndComputeHistogram(graphs);
+    }
+
+    public void readGraphsAndComputeHistogram(List<GraphLoader> graphs) {
+        System.out.println("Computing Histogram...");
+
+        final long histogramTime = System.currentTimeMillis();
+
+        Map<String, Integer> vertexTypesHistogram = new HashMap<>();
+        Map<String, Set<String>> tempVertexAttrFreqMap = new HashMap<>();
+        Map<String, Set<String>> attrDistributionMap = new HashMap<>();
+        Map<String, List<Integer>> vertexTypesToInDegreesMap = new HashMap<>();
+        Map<String, Integer> edgeTypesHistogram = new HashMap<>();
+
+        this.setGraphs(new ArrayList<>());
+
+        int numOfVerticesAcrossAllGraphs = 0;
+        int numOfEdgesAcrossAllGraphs = 0;
+        for (GraphLoader graph: graphs) {
+            if (this.isStoreInMemory() || this.getLoader().equalsIgnoreCase("dbpedia")) {
+                if (this.useChangeFile()) {
+                    if (this.getGraphs().size() == 0) {
+                        this.getGraphs().add(graph);
+                        this.loadChangeFilesIntoMemory();
+                    }
+                } else {
+                    this.getGraphs().add(graph);
+                }
+            }
+            final long graphReadTime = System.currentTimeMillis();
+            numOfVerticesAcrossAllGraphs += readVertexTypesAndAttributeNamesFromGraph(vertexTypesHistogram, tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, graph, edgeTypesHistogram);
+            numOfEdgesAcrossAllGraphs += readEdgesInfoFromGraph(edgeTypesHistogram, graph);
+            printWithTime("Single graph read", (System.currentTimeMillis() - graphReadTime));
+        }
+
+        this.setNumOfVerticesInAllGraphs(numOfVerticesAcrossAllGraphs);
+        this.setNumOfEdgesInAllGraphs(numOfEdgesAcrossAllGraphs);
+
+        this.printVertexAndEdgeStatisticsForEntireTemporalGraph(graphs, vertexTypesHistogram);
+
+        final long superVertexHandlingTime = System.currentTimeMillis();
+        // TO-DO: What is the best way to estimate a good value for SUPER_VERTEX_DEGREE for each run?
+//		this.calculateAverageInDegree(vertexTypesToInDegreesMap);
+        this.calculateMedianInDegree(vertexTypesToInDegreesMap);
+//		this.calculateMaxInDegree(vertexTypesToInDegreesMap);
+        if (this.isDissolveSuperVertexTypes()) {
+            if (this.getGraphs().size() > 0) {
+                System.out.println("Collapsing vertices with an in-degree above " + this.getSuperVertexDegree());
+                this.dissolveSuperVerticesAndUpdateHistograms(tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, edgeTypesHistogram);
+                printWithTime("Super vertex dissolution", (System.currentTimeMillis() - superVertexHandlingTime));
+            }
+        }
+
+        this.setActiveAttributeSet(attrDistributionMap);
+
+        this.setVertexTypesToAttributesMap(tempVertexAttrFreqMap);
+
+        System.out.println("Number of edges across all graphs: " + this.getNumOfEdgesInAllGraphs());
+        System.out.println("Number of edges labels across all graphs: " + edgeTypesHistogram.size());
+        this.setSortedFrequentEdgeHistogram(edgeTypesHistogram, vertexTypesHistogram);
+
+        this.findAndSetNumOfSnapshots();
+
+        printWithTime("All snapshots histogram", (System.currentTimeMillis() - histogramTime));
+        printHistogram();
+        printHistogramStatistics();
+    }
+
+    private void init(String[] args) {
         String timeAndDateStamp = ZonedDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("uuuu.MM.dd.HH.mm.ss"));
         this.setExperimentDateAndTimeStamp(timeAndDateStamp);
         this.setStartTime(System.currentTimeMillis());
@@ -41,14 +117,14 @@ public class TestChangeFile extends TgfdDiscovery{
             this.setPath(cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home")));
             if (!Files.isDirectory(Path.of(this.getPath()))) {
                 System.out.println(Path.of(this.getPath()) + " is not a valid directory.");
-                return;
+                System.exit(1);
             }
             this.setGraphSize(Path.of(this.getPath()).getFileName().toString());
         }
 
         if (!cmd.hasOption("loader")) {
             System.out.println("No specifiedLoader is specified.");
-            return;
+            System.exit(1);
         } else {
             this.setLoader(cmd.getOptionValue("loader"));
         }
@@ -103,10 +179,6 @@ public class TestChangeFile extends TgfdDiscovery{
                 System.exit(1);
             }
         }
-        this.loadGraphsAndComputeHistogram(this.getTimestampToFilesMap().subList(0,1));
-//        this.loadChangeFilesIntoMemory();
-
-        this.printInfo();
     }
 
     public static void main(String[] args) {
@@ -114,49 +186,35 @@ public class TestChangeFile extends TgfdDiscovery{
         ArrayList<Long> runtimes = new ArrayList<>();
         for (int index = 0; index <= 4; index++) {
 
-            TestChangeFile tgfdDiscovery = new TestChangeFile(args);
+            TestChangeFile tgfdDiscoveryInit = new TestChangeFile(args);
 
-            tgfdDiscovery.setUseChangeFile(false);
-            tgfdDiscovery.setReUseMatches(false);
-            tgfdDiscovery.setSupportPruning(false);
-            tgfdDiscovery.setMinimalityPruning(false);
-            if (index == 0) {
-                tgfdDiscovery.setReUseMatches(true);
-            } else if (index == 1) {
-                tgfdDiscovery.setUseChangeFile(true);
-            } else if (index == 2) {
-                tgfdDiscovery.setSupportPruning(true);
-            } else if (index == 3) {
-                tgfdDiscovery.setMinimalityPruning(true);
-            }
-
-            if (tgfdDiscovery.getGraphs().size() == 1) {
+            if (tgfdDiscoveryInit.getGraphs().size() == 1) {
                 HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
                 for (int i = 1; i < 3; i++) {
                     GraphLoader graph;
                     Model model = ModelFactory.createDefaultModel();
-                    for (String path : tgfdDiscovery.getTimestampToFilesMap().get(0).getValue()) {
+                    for (String path : tgfdDiscoveryInit.getTimestampToFilesMap().get(0).getValue()) {
                         if (path.toLowerCase().contains("literals") || path.toLowerCase().contains("objects") || !path.toLowerCase().contains(".ttl"))
                             continue;
                         Path input = Paths.get(path);
                         model.read(input.toUri().toString());
                     }
                     Model dataModel = ModelFactory.createDefaultModel();
-                    for (String path : tgfdDiscovery.getTimestampToFilesMap().get(0).getValue()) {
+                    for (String path : tgfdDiscoveryInit.getTimestampToFilesMap().get(0).getValue()) {
                         if (path.toLowerCase().contains("types") || !path.toLowerCase().contains(".ttl")) continue;
                         Path input = Paths.get(path);
                         System.out.println("Reading data graph: " + path);
                         dataModel.read(input.toUri().toString());
                     }
-                    if (tgfdDiscovery.getLoader().equals("dbpedia")) {
+                    if (tgfdDiscoveryInit.getLoader().equals("dbpedia")) {
                         graph = new DBPediaLoader(new ArrayList<>(), Collections.singletonList(model), Collections.singletonList(dataModel));
                     } else {
                         graph = new IMDBLoader(new ArrayList<>(), Collections.singletonList(dataModel));
                     }
-                    tgfdDiscovery.getGraphs().add(graph);
+                    tgfdDiscoveryInit.getGraphs().add(graph);
                     for (int j = 0; j < i; j++) {
                         List<HashMap<Integer, HashSet<Change>>> changes = new ArrayList<>();
-                        String changefilePath = "changes_t" + (j+1) + "_t" + (j+2) + "_" + tgfdDiscovery.getGraphSize() + ".json";
+                        String changefilePath = "changes_t" + (j+1) + "_t" + (j+2) + "_" + tgfdDiscoveryInit.getGraphSize() + ".json";
                         JSONParser parser = new JSONParser();
                         Object json;
                         org.json.simple.JSONArray jsonArray = new JSONArray();
@@ -172,7 +230,7 @@ public class TestChangeFile extends TgfdDiscovery{
                         HashMap<Integer, HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
                         System.out.println("Total number of changes in changefile: " + newChanges.size());
                         changes.add(newChanges);
-                        ArrayList<TGFD> tgfds = tgfdDiscovery.getDummyEdgeTypeTGFDs();
+                        ArrayList<TGFD> tgfds = tgfdDiscoveryInit.getDummyEdgeTypeTGFDs();
                         IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), tgfds);
                         incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
                         HashMap<String, TGFD> tgfdsByName = new HashMap<>();
@@ -186,65 +244,85 @@ public class TestChangeFile extends TgfdDiscovery{
                         }
                     }
                 }
-                tgfdDiscovery.setChangeFilesMap(changeFilesMap);
+                tgfdDiscoveryInit.setChangeFilesMap(changeFilesMap);
             }
-            tgfdDiscovery.setNumOfSnapshots(tgfdDiscovery.getGraphs().size());
+            tgfdDiscoveryInit.setNumOfSnapshots(tgfdDiscoveryInit.getGraphs().size());
 
-            tgfdDiscovery.initialize(tgfdDiscovery.getGraphs());
+            TestChangeFile realTgfdDiscovery = new TestChangeFile(args, tgfdDiscoveryInit.getGraphs());
 
-            while (tgfdDiscovery.getCurrentVSpawnLevel() <= tgfdDiscovery.getK()) {
+            realTgfdDiscovery.setUseChangeFile(false);
+            realTgfdDiscovery.setReUseMatches(false);
+            realTgfdDiscovery.setSupportPruning(false);
+            realTgfdDiscovery.setMinimalityPruning(false);
+            if (index == 0) {
+                realTgfdDiscovery.setReUseMatches(true);
+            } else if (index == 1) {
+                realTgfdDiscovery.setUseChangeFile(true);
+            } else if (index == 2) {
+                realTgfdDiscovery.setSupportPruning(true);
+            } else if (index == 3) {
+                realTgfdDiscovery.setMinimalityPruning(true);
+            }
 
-                System.out.println("VSpawn level " + tgfdDiscovery.getCurrentVSpawnLevel());
-                System.out.println("Previous level node index " + tgfdDiscovery.getPreviousLevelNodeIndex());
-                System.out.println("Candidate edge index " + tgfdDiscovery.getCandidateEdgeIndex());
+            realTgfdDiscovery.readGraphsAndComputeHistogram(tgfdDiscoveryInit.getGraphs());
+
+            realTgfdDiscovery.printInfo();
+
+            realTgfdDiscovery.initialize(realTgfdDiscovery.getGraphs());
+
+            while (realTgfdDiscovery.getCurrentVSpawnLevel() <= realTgfdDiscovery.getK()) {
+
+                System.out.println("VSpawn level " + realTgfdDiscovery.getCurrentVSpawnLevel());
+                System.out.println("Previous level node index " + realTgfdDiscovery.getPreviousLevelNodeIndex());
+                System.out.println("Candidate edge index " + realTgfdDiscovery.getCandidateEdgeIndex());
 
                 PatternTreeNode patternTreeNode = null;
                 long vSpawnTime = System.currentTimeMillis();
-                while (patternTreeNode == null && tgfdDiscovery.getCurrentVSpawnLevel() <= tgfdDiscovery.getK()) {
-                    patternTreeNode = tgfdDiscovery.vSpawn();
+                while (patternTreeNode == null && realTgfdDiscovery.getCurrentVSpawnLevel() <= realTgfdDiscovery.getK()) {
+                    patternTreeNode = realTgfdDiscovery.vSpawn();
                 }
                 vSpawnTime = System.currentTimeMillis() - vSpawnTime;
                 TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
-                tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
-                if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK()) break;
+                realTgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
+                if (realTgfdDiscovery.getCurrentVSpawnLevel() > realTgfdDiscovery.getK()) break;
                 long matchingTime = System.currentTimeMillis();
 
                 assert patternTreeNode != null;
                 List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
-                if (tgfdDiscovery.isValidationSearch()) {
-                    matchesPerTimestamps = tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode);
+                if (realTgfdDiscovery.isValidationSearch()) {
+                    matchesPerTimestamps = realTgfdDiscovery.getMatchesForPattern(realTgfdDiscovery.getGraphs(), patternTreeNode);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
-                    tgfdDiscovery.addToTotalMatchingTime(matchingTime);
+                    realTgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
-                else if (tgfdDiscovery.useChangeFile()) {
-                    matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
+                else if (realTgfdDiscovery.useChangeFile()) {
+                    matchesPerTimestamps = realTgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingChangeFiles", (matchingTime));
-                    tgfdDiscovery.addToTotalMatchingTime(matchingTime);
+                    realTgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
                 else {
-                    matchesPerTimestamps = tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode);
+                    matchesPerTimestamps = realTgfdDiscovery.findMatchesUsingCenterVertices(realTgfdDiscovery.getGraphs(), patternTreeNode);
                     matchingTime = System.currentTimeMillis() - matchingTime;
                     TgfdDiscovery.printWithTime("findMatchesUsingCenterVertices", (matchingTime));
-                    tgfdDiscovery.addToTotalMatchingTime(matchingTime);
+                    realTgfdDiscovery.addToTotalMatchingTime(matchingTime);
                 }
 
-                if (patternTreeNode.getPatternSupport() < tgfdDiscovery.getPatternTheta()) {
+                if (patternTreeNode.getPatternSupport() < realTgfdDiscovery.getPatternTheta()) {
                     System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
-                    if (tgfdDiscovery.hasSupportPruning()) patternTreeNode.setIsPruned();
+                    if (realTgfdDiscovery.hasSupportPruning()) patternTreeNode.setIsPruned();
                     continue;
                 }
 
-                if (tgfdDiscovery.isSkipK1() && tgfdDiscovery.getCurrentVSpawnLevel() == 1) continue;
+                if (realTgfdDiscovery.isSkipK1() && realTgfdDiscovery.getCurrentVSpawnLevel() == 1) continue;
 
                 final long hSpawnStartTime = System.currentTimeMillis();
-                ArrayList<TGFD> tgfds = tgfdDiscovery.hSpawn(patternTreeNode, matchesPerTimestamps);
+                ArrayList<TGFD> tgfds = realTgfdDiscovery.hSpawn(patternTreeNode, matchesPerTimestamps);
                 TgfdDiscovery.printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
-                tgfdDiscovery.getTgfds().get(tgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
+                realTgfdDiscovery.getTgfds().get(realTgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
             }
-            tgfdDiscovery.printTimeStatistics();
-            final long endTime = System.currentTimeMillis() - tgfdDiscovery.getStartTime();
+            realTgfdDiscovery.printTimeStatistics();
+            final long endTime = System.currentTimeMillis() - realTgfdDiscovery.getStartTime();
             System.out.println("Total execution time: " + (endTime));
             runtimes.add(endTime);
         }

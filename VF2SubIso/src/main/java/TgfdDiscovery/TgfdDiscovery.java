@@ -4,8 +4,7 @@ import IncrementalRunner.IncUpdates;
 import IncrementalRunner.IncrementalChange;
 import Infra.*;
 import VF2Runner.VF2SubgraphIsomorphism;
-import changeExploration.Change;
-import changeExploration.ChangeLoader;
+import changeExploration.*;
 import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
 import graphLoader.IMDBLoader;
@@ -19,7 +18,6 @@ import org.jgrapht.GraphMapping;
 import org.jgrapht.alg.isomorphism.VF2AbstractIsomorphismInspector;
 import org.json.simple.JSONArray;
 import org.json.simple.parser.JSONParser;
-import util.Config;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -424,7 +422,7 @@ public class TgfdDiscovery {
 		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime());
 	}
 
-	private int findAllMatchesOfEdgeInSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, HashSet<String> entityURIs, GraphLoader currentSnapshot, HashSet<HashSet<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex) {
+	private int findAllMatchesOfEdgeInSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, Map<String, List<Integer>> entityURIs, GraphLoader currentSnapshot, HashSet<HashSet<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex, int timestamp) {
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
 		Set<String> edgeLabels = patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
 		String sourceType = patternTreeNode.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
@@ -438,7 +436,7 @@ public class TgfdDiscovery {
 		}
 
 		ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
-		int numOfMatchesFound = extractMatches(edgeSet, matches, patternTreeNode, entityURIs);
+		int numOfMatchesFound = extractMatches(edgeSet, matches, patternTreeNode, entityURIs, timestamp);
 		if (numOfMatchesFound > 0) { // equivalent to results.isomorphismExists()
 			matchesSet.addAll(matches);
 			matchesOfCenterVertexInCurrentSnapshot.add(dataVertex);
@@ -472,7 +470,7 @@ public class TgfdDiscovery {
 
 	public List<Set<Set<ConstantLiteral>>> findMatchesUsingCenterVertices(List<GraphLoader> graphs, PatternTreeNode patternTreeNode) {
 
-		HashSet<String> entityURIs = new HashSet<>();
+		Map<String, List<Integer>> entityURIs = new HashMap<>();
 
 		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
 		for (int timestamp = 0; timestamp < this.getNumOfSnapshots(); timestamp++) {
@@ -483,12 +481,15 @@ public class TgfdDiscovery {
 
 		this.countTotalNumberOfMatchesFound(matchesPerTimestamps);
 
-		this.setPatternSupport(entityURIs.size(), patternTreeNode);
+//		for (Map.Entry<String, List<Integer>> entry: entityURIs.entrySet()) {
+//			System.out.println(entry);
+//		}
+		this.setPatternSupport(entityURIs, patternTreeNode);
 
 		return matchesPerTimestamps;
 	}
 
-	private void extractMatchesAcrossSnapshots(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps, HashSet<String> entityURIs) {
+	private void extractMatchesAcrossSnapshots(List<GraphLoader> graphs, PatternTreeNode patternTreeNode, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps, Map<String, List<Integer>> entityURIs) {
 
 		ArrayList<ArrayList<DataVertex>> matchesOfCenterVertex = getListOfMatchesOfCenterVerticesOfThisPattern(graphs, patternTreeNode);
 
@@ -508,9 +509,9 @@ public class TgfdDiscovery {
 			for (DataVertex dataVertex: centerVertexMatchesInThisTimestamp) {
 				int numOfMatchesFound;
 				if (this.getCurrentVSpawnLevel() == 1) {
-					numOfMatchesFound = findAllMatchesOfEdgeInSnapshotUsingCenterVertices(patternTreeNode, entityURIs, currentSnapshot, matchesSet, newMatchesOfCenterVertexInCurrentSnapshot, dataVertex);
+					numOfMatchesFound = findAllMatchesOfEdgeInSnapshotUsingCenterVertices(patternTreeNode, entityURIs, currentSnapshot, matchesSet, newMatchesOfCenterVertexInCurrentSnapshot, dataVertex, year);
 				} else {
-					numOfMatchesFound = findAllMatchesOfPatternInThisSnapshotUsingCenterVertices(patternTreeNode, entityURIs, currentSnapshot, matchesSet, newMatchesOfCenterVertexInCurrentSnapshot, dataVertex);
+					numOfMatchesFound = findAllMatchesOfPatternInThisSnapshotUsingCenterVertices(patternTreeNode, entityURIs, currentSnapshot, matchesSet, newMatchesOfCenterVertexInCurrentSnapshot, dataVertex, year);
 				}
 				numOfMatchesInTimestamp += numOfMatchesFound;
 
@@ -530,7 +531,7 @@ public class TgfdDiscovery {
 		System.out.println("Number of entity URIs found: "+entityURIs.size());
 	}
 
-	private int findAllMatchesOfPatternInThisSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, HashSet<String> entityURIs, GraphLoader currentSnapshot, HashSet<HashSet<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex) {
+	private int findAllMatchesOfPatternInThisSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, Map<String, List<Integer>> entityURIs, GraphLoader currentSnapshot, HashSet<HashSet<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex, int timestamp) {
 		Set<String> edgeLabels = patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
 		int diameter = patternTreeNode.getPattern().getRadius();
 		Graph<Vertex, RelationshipEdge> subgraph = currentSnapshot.getGraph().getSubGraphWithinDiameter(dataVertex, diameter, edgeLabels, patternTreeNode.getGraph().edgeSet());
@@ -539,7 +540,7 @@ public class TgfdDiscovery {
 		int numOfMatchesForCenterVertex = 0;
 		ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
 		if (results.isomorphismExists()) {
-			numOfMatchesForCenterVertex = extractMatches(results.getMappings(), matches, patternTreeNode, entityURIs);
+			numOfMatchesForCenterVertex = extractMatches(results.getMappings(), matches, patternTreeNode, entityURIs, timestamp);
 			matchesSet.addAll(matches);
 			matchesOfCenterVertexInCurrentSnapshot.add(dataVertex);
 		}
@@ -547,7 +548,7 @@ public class TgfdDiscovery {
 		return numOfMatchesForCenterVertex;
 	}
 
-	private void printHistogramStatistics() {
+	protected void printHistogramStatistics() {
 		System.out.println("----------------Statistics for Histogram-----------------");
 		Collections.sort(this.vertexFrequenciesList);
 		Collections.sort(this.edgeFrequenciesList);
@@ -601,7 +602,7 @@ public class TgfdDiscovery {
 		this.setTimeAndDateStamp(timeAndDateStamp);
 	}
 
-	private void printVertexAndEdgeStatisticsForEntireTemporalGraph(List<?> graphs, Map<String, Integer> vertexTypesHistogram) {
+	protected void printVertexAndEdgeStatisticsForEntireTemporalGraph(List<?> graphs, Map<String, Integer> vertexTypesHistogram) {
 		System.out.println("Number of vertices across all graphs: " + this.getNumOfVerticesInAllGraphs());
 		System.out.println("Number of vertex types across all graphs: " + vertexTypesHistogram.size());
 		if (graphs.stream().allMatch(c -> c instanceof GraphLoader)) {
@@ -633,7 +634,7 @@ public class TgfdDiscovery {
 		System.out.println("Super vertex degree is "+ this.getSuperVertexDegree());
 	}
 
-	private void calculateMedianInDegree(Map<String, List<Integer>> vertexTypesToInDegreesMap) {
+	protected void calculateMedianInDegree(Map<String, List<Integer>> vertexTypesToInDegreesMap) {
 		System.out.println("Median in-degrees of vertex types...");
 		List<Double> medianInDegrees = new ArrayList<>();
 		for (Entry<String, List<Integer>> entry: vertexTypesToInDegreesMap.entrySet()) {
@@ -698,7 +699,7 @@ public class TgfdDiscovery {
 		return q3 + (9 * iqr);
 	}
 
-	private void dissolveSuperVerticesAndUpdateHistograms(Map<String, Set<String>> tempVertexAttrFreqMap, Map<String, Set<String>> attrDistributionMap, Map<String, List<Integer>> vertexTypesToInDegreesMap, Map<String, Integer> edgeTypesHistogram) {
+	protected void dissolveSuperVerticesAndUpdateHistograms(Map<String, Set<String>> tempVertexAttrFreqMap, Map<String, Set<String>> attrDistributionMap, Map<String, List<Integer>> vertexTypesToInDegreesMap, Map<String, Integer> edgeTypesHistogram) {
 		int numOfCollapsedSuperVertices = 0;
 		this.setNumOfEdgesInAllGraphs(0);
 		this.setNumOfVerticesInAllGraphs(0);
@@ -707,10 +708,7 @@ public class TgfdDiscovery {
 			if (entry.getValue().size() == 0) continue;
 			double medianDegree = this.getVertexTypesToAvgInDegreeMap().get(entry.getKey());
 			if (medianDegree > this.getSuperVertexDegree()) {
-//			double maxDegree = Collections.max(entry.getValue()).doubleValue();
-//			if (maxDegree > SUPER_VERTEX_DEGREE) {
 				System.out.println("Collapsing super vertex "+superVertexType+" with...");
-//				System.out.println("Max Degree = "+maxDegree+", Vertex Count = "+this.vertexHistogram.get(superVertexType));
 				System.out.println("Degree = "+medianDegree+", Vertex Count = "+this.vertexHistogram.get(superVertexType));
 				numOfCollapsedSuperVertices++;
 				for (GraphLoader graph: this.getGraphs()) {
@@ -730,7 +728,7 @@ public class TgfdDiscovery {
 								if (sourceVertexAttrMap.containsKey(newAttrName)) {
 									newAttrName = e.getLabel() + "value";
 									if (!sourceVertexAttrMap.containsKey(newAttrName)) {
-										sourceVertex.addAttribute(newAttrName, v.getAttributeValueByName("uri"));
+										sourceVertex.putAttributeIfAbsent(new Attribute(newAttrName, v.getAttributeValueByName("uri")));
 										numOfAttributesAdded++;
 									}
 								}
@@ -777,7 +775,32 @@ public class TgfdDiscovery {
 		System.out.println("Number of super vertices collapsed: "+numOfCollapsedSuperVertices);
 	}
 
-	private int readVertexTypesAndAttributeNamesFromGraph(Map<String, Integer> vertexTypesHistogram, Map<String, Set<String>> tempVertexAttrFreqMap, Map<String, Set<String>> attrDistributionMap, Map<String, List<Integer>> vertexTypesToInDegreesMap, GraphLoader graph, Map<String, Integer> edgeTypesHistogram) {
+	// TO-DO: Can this be merged with the code in histogram?
+	protected void dissolveSuperVerticesBasedOnCount(GraphLoader graph) {
+		System.out.println("Dissolving super vertices based on count...");
+		System.out.println("Initial edge count of first snapshot: "+graph.getGraph().getGraph().edgeSet().size());
+		for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
+			int inDegree = graph.getGraph().getGraph().incomingEdgesOf(v).size();
+			if (inDegree > INDIVIDUAL_VERTEX_INDEGREE_FLOOR) {
+				List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.getGraph().getGraph().incomingEdgesOf(v));
+				for (RelationshipEdge e : edgesToDelete) {
+					Vertex sourceVertex = e.getSource();
+					Map<String, Attribute> sourceVertexAttrMap = sourceVertex.getAllAttributesHashMap();
+					String newAttrName = e.getLabel();
+					if (sourceVertexAttrMap.containsKey(newAttrName)) {
+						newAttrName = e.getLabel() + "value";
+						if (!sourceVertexAttrMap.containsKey(newAttrName)) {
+							sourceVertex.putAttributeIfAbsent(new Attribute(newAttrName, v.getAttributeValueByName("uri")));
+						}
+					}
+					graph.getGraph().getGraph().removeEdge(e);
+				}
+			}
+		}
+		System.out.println("Updated edge count of first snapshot: "+graph.getGraph().getGraph().edgeSet().size());
+	}
+
+	protected int readVertexTypesAndAttributeNamesFromGraph(Map<String, Integer> vertexTypesHistogram, Map<String, Set<String>> tempVertexAttrFreqMap, Map<String, Set<String>> attrDistributionMap, Map<String, List<Integer>> vertexTypesToInDegreesMap, GraphLoader graph, Map<String, Integer> edgeTypesHistogram) {
 		int initialEdgeCount = graph.getGraph().getGraph().edgeSet().size();
 		System.out.println("Initial count of edges in graph: " + initialEdgeCount);
 
@@ -814,7 +837,7 @@ public class TgfdDiscovery {
 					if (sourceVertexAttrMap.containsKey(newAttrName)) {
 						newAttrName = e.getLabel() + "value";
 						if (!sourceVertexAttrMap.containsKey(newAttrName)) {
-							sourceVertex.addAttribute(newAttrName, v.getAttributeValueByName("uri"));
+							sourceVertex.putAttributeIfAbsent(new Attribute(newAttrName, v.getAttributeValueByName("uri")));
 							numOfAttributesAdded++;
 						}
 					}
@@ -879,7 +902,7 @@ public class TgfdDiscovery {
 		this.setSuperVertexDegree(Math.max(getSuperVertexDegree(), Math.round(listOfAverageDegreesAbove1.stream().reduce(0L, Long::sum).doubleValue() / (double) listOfAverageDegreesAbove1.size())));
 	}
 
-	private void setVertexTypesToAttributesMap(Map<String, Set<String>> tempVertexAttrFreqMap) {
+	protected void setVertexTypesToAttributesMap(Map<String, Set<String>> tempVertexAttrFreqMap) {
 		Map<String, HashSet<String>> vertexTypesToAttributesMap = new HashMap<>();
 		for (String vertexType : tempVertexAttrFreqMap.keySet()) {
 			Set<String> attrNameSet = tempVertexAttrFreqMap.get(vertexType);
@@ -894,7 +917,7 @@ public class TgfdDiscovery {
 		this.vertexTypesToAttributesMap = vertexTypesToAttributesMap;
 	}
 
-	private void setActiveAttributeSet(Map<String, Set<String>> attrDistributionMap) {
+	protected void setActiveAttributeSet(Map<String, Set<String>> attrDistributionMap) {
 		ArrayList<Entry<String,Set<String>>> sortedAttrDistributionMap = new ArrayList<>(attrDistributionMap.entrySet());
 		sortedAttrDistributionMap.sort((o1, o2) -> o2.getValue().size() - o1.getValue().size());
 		HashSet<String> mostDistributedAttributesSet = new HashSet<>();
@@ -904,7 +927,7 @@ public class TgfdDiscovery {
 		this.activeAttributesSet = mostDistributedAttributesSet;
 	}
 
-	private int readEdgesInfoFromGraph(Map<String, Integer> edgeTypesHistogram, GraphLoader graph) {
+	protected int readEdgesInfoFromGraph(Map<String, Integer> edgeTypesHistogram, GraphLoader graph) {
 		int numOfEdges = 0;
 		for (RelationshipEdge e: graph.getGraph().getGraph().edgeSet()) {
 			numOfEdges++;
@@ -1019,13 +1042,7 @@ public class TgfdDiscovery {
 					this.getGraphs().add(graphLoader);
 				}
 			}
-//			else {
-//				if (this.useChangeFile()) {
-//					if (this.getGraphs().size() == 0) {
-//						this.getGraphs().add(graphLoader);
-//					}
-//				}
-//			}
+
 			printWithTime("Single graph load", (System.currentTimeMillis() - graphLoadTime));
 			final long graphReadTime = System.currentTimeMillis();
 			numOfVerticesAcrossAllGraphs += readVertexTypesAndAttributeNamesFromGraph(vertexTypesHistogram, tempVertexAttrFreqMap, attrDistributionMap, vertexTypesToInDegreesMap, graphLoader, edgeTypesHistogram);
@@ -1194,7 +1211,7 @@ public class TgfdDiscovery {
 			String vType = new ArrayList<>(v.getTypes()).get(0);
 			for (ConstantLiteral attribute : attributesSetForDependency) {
 				if (vType.equals(attribute.getVertexType())) {
-					v.addAttribute(new Attribute(attribute.getAttrName()));
+					v.putAttributeIfAbsent(new Attribute(attribute.getAttrName()));
 				}
 			}
 		}
@@ -1257,7 +1274,7 @@ public class TgfdDiscovery {
 		return tgfds;
 	}
 
-	private ArrayList<TGFD> discoverGeneralTGFD(PatternTreeNode patternTreeNode, double patternSupport, AttributeDependency literalPath, int entitiesSize, Map<Pair, ArrayList<TreeSet<Pair>>> deltaToPairsMap) {
+	private ArrayList<TGFD> discoverGeneralTGFD(PatternTreeNode patternTreeNode, double patternSupport, AttributeDependency literalPath, int entitiesSize, Map<Pair, ArrayList<TreeSet<Pair>>> deltaToPairsMap, LiteralTreeNode literalTreeNode) {
 
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
@@ -2118,10 +2135,6 @@ public class TgfdDiscovery {
 		return sortedVertexHistogram;
 	}
 
-	public void setSortedVertexHistogram(List<Entry<String, Integer>> sortedVertexHistogram) {
-		this.sortedVertexHistogram = sortedVertexHistogram;
-	}
-
 	public Integer getNumOfEdgesInAllGraphs() {
 		return numOfEdgesInAllGraphs;
 	}
@@ -2355,20 +2368,29 @@ public class TgfdDiscovery {
 
 	}
 
-	public void setPatternSupport(double numOfEntitiesMatched, PatternTreeNode patternTreeNode) {
+	public void setPatternSupport(Map<String, List<Integer>> entityURIsMap, PatternTreeNode patternTreeNode) {
 		System.out.println("Calculating pattern support...");
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
 		System.out.println("Center vertex type: " + centerVertexType);
-		double numOfValidPairs = numOfEntitiesMatched * CombinatoricsUtils.binomialCoefficient(this.getNumOfSnapshots()+2-1,2);
-		double S = this.vertexHistogram.get(centerVertexType);
-		double patternSupport = calculateSupport(numOfValidPairs, S);
+		int numOfPossiblePairs = 0;
+		for (Entry<String, List<Integer>> entityUriEntry : entityURIsMap.entrySet()) {
+			int numberOfAcrossMatchesOfEntity = (int) entityUriEntry.getValue().stream().filter(x -> x > 0).count();
+			int k = 2;
+			if (numberOfAcrossMatchesOfEntity >= k) {
+				numOfPossiblePairs += CombinatoricsUtils.binomialCoefficient(numberOfAcrossMatchesOfEntity, k);
+			}
+			int numberOfWithinMatchesOfEntity = (int) entityUriEntry.getValue().stream().filter(x -> x > 1).count();
+			numOfPossiblePairs += numberOfWithinMatchesOfEntity;
+		}
+		int S = this.vertexHistogram.get(centerVertexType);
+		double patternSupport = calculateSupport(numOfPossiblePairs, S);
 		patternTreeNode.setPatternSupport(patternSupport);
 		this.patternSupportsList.add(patternSupport);
 	}
 
 	private double calculateSupport(double numerator, double S) {
 		System.out.println("S = "+S);
-		double denominator = S * CombinatoricsUtils.binomialCoefficient(this.getNumOfSnapshots()+2-1,2);
+		double denominator = S * CombinatoricsUtils.binomialCoefficient(this.getNumOfSnapshots()+1,2);
 		assert numerator <= denominator;
 		double support = numerator / denominator;
 		System.out.println("Support: " + numerator + " / " + denominator + " = " + support);
@@ -2686,7 +2708,7 @@ public class TgfdDiscovery {
 		return matchesOfThisCenterVertex;
 	}
 
-	public int extractMatches(Set<RelationshipEdge> edgeSet, ArrayList<HashSet<ConstantLiteral>> matches, PatternTreeNode patternTreeNode, HashSet<String> entityURIs) {
+	public int extractMatches(Set<RelationshipEdge> edgeSet, ArrayList<HashSet<ConstantLiteral>> matches, PatternTreeNode patternTreeNode, Map<String, List<Integer>> entityURIs, int timestamp) {
 		String patternEdgeLabel = patternTreeNode.getGraph().edgeSet().iterator().next().getLabel();
 		String sourceVertexType = patternTreeNode.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
 		String targetVertexType = patternTreeNode.getGraph().edgeSet().iterator().next().getTarget().getTypes().iterator().next();
@@ -2698,20 +2720,16 @@ public class TgfdDiscovery {
 			if (matchedEdgeLabel.equals(patternEdgeLabel) && matchedSourceVertexType.contains(sourceVertexType) && matchedTargetVertexType.contains(targetVertexType)) {
 				numOfMatches++;
 				HashSet<ConstantLiteral> literalsInMatch = new HashSet<>();
-				extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, patternTreeNode, literalsInMatch, entityURIs);
-				if (this.isOnlyInterestingTGFDs()) {
-					int interestingLiteralCount = 0;
-					for (ConstantLiteral literal: literalsInMatch) {
-						if (!literal.getAttrName().equals("uri")) {
-							interestingLiteralCount++;
-						}
-						if (interestingLiteralCount >= patternTreeNode.getGraph().vertexSet().size()) {
-							break;
-						}
-					}
-					if (interestingLiteralCount < patternTreeNode.getGraph().vertexSet().size()) continue;
-				} else {
-					if (literalsInMatch.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
+				Map<String, Integer> interestingnessMap = new HashMap<>();
+				String entityURI = extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, patternTreeNode, literalsInMatch, interestingnessMap);
+				if (this.isOnlyInterestingTGFDs() && interestingnessMap.values().stream().anyMatch(n -> n < 2)) {
+					continue;
+				} else if (!this.isOnlyInterestingTGFDs() && literalsInMatch.size() <= patternTreeNode.getGraph().vertexSet().size()) {
+					continue;
+				}
+				if (entityURI != null) {
+					entityURIs.putIfAbsent(entityURI, new ArrayList<>(Arrays.asList(0, 0, 0)));
+					entityURIs.get(entityURI).set(timestamp, entityURIs.get(entityURI).get(timestamp)+1);
 				}
 				matches.add(literalsInMatch);
 			}
@@ -2727,7 +2745,7 @@ public class TgfdDiscovery {
 
 	public List<Set<Set<ConstantLiteral>>> getMatchesForPattern(List<GraphLoader> graphs, PatternTreeNode patternTreeNode) {
 		// TO-DO: Potential speed up for single-edge/single-node patterns. Iterate through all edges/nodes in graph.
-		HashSet<String> entityURIs = new HashSet<>();
+		Map<String, List<Integer>> entityURIs = new HashMap<>();
 		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
 		for (int timestamp = 0; timestamp < this.getNumOfSnapshots(); timestamp++) {
 			matchesPerTimestamps.add(new HashSet<>());
@@ -2744,7 +2762,7 @@ public class TgfdDiscovery {
 //			} else {
 				VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(graphs.get(year).getGraph(), patternTreeNode.getPattern(), false);
 				if (results.isomorphismExists()) {
-					numOfMatchesInTimestamp = extractMatches(results.getMappings(), matches, patternTreeNode, entityURIs);
+					numOfMatchesInTimestamp = extractMatches(results.getMappings(), matches, patternTreeNode, entityURIs, year);
 				}
 //			}
 			System.out.println("Number of matches found: " + numOfMatchesInTimestamp);
@@ -2762,29 +2780,29 @@ public class TgfdDiscovery {
 		}
 		System.out.println("Total number of matches found across all snapshots:" + numberOfMatchesFound);
 
-		this.setPatternSupport(entityURIs.size(), patternTreeNode);
+		this.setPatternSupport(entityURIs, patternTreeNode);
 
 		return matchesPerTimestamps;
 	}
 
-	private void extractMatch(GraphMapping<Vertex, RelationshipEdge> result, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, HashSet<String> entityURIs) {
+	// TO-DO: Merge with other extractMatch method?
+	private String extractMatch(GraphMapping<Vertex, RelationshipEdge> result, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, Map<String, Integer> interestingnessMap) {
 		String entityURI = null;
 		for (Vertex v : patternTreeNode.getGraph().vertexSet()) {
 			Vertex currentMatchedVertex = result.getVertexCorrespondence(v, false);
 			if (currentMatchedVertex == null) continue;
 			String patternVertexType = v.getTypes().iterator().next();
 			if (entityURI == null) {
-				entityURI = extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
+				entityURI = extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex, interestingnessMap);
 			} else {
-				extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
+				extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex, interestingnessMap);
 			}
 		}
-		if (entityURI != null && match.size() > patternTreeNode.getGraph().vertexSet().size()) {
-			entityURIs.add(entityURI);
-		}
+		return entityURI;
 	}
 
-	private void extractMatch(Vertex currentSourceVertex, String sourceVertexType, Vertex currentTargetVertex, String targetVertexType, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, HashSet<String> entityURIs) {
+	// TO-DO: Merge with other extractMatch method?
+	private String extractMatch(Vertex currentSourceVertex, String sourceVertexType, Vertex currentTargetVertex, String targetVertexType, PatternTreeNode patternTreeNode, HashSet<ConstantLiteral> match, Map<String, Integer> interestingnessMap) {
 		String entityURI = null;
 		List<String> patternVerticesTypes = Arrays.asList(sourceVertexType, targetVertexType);
 		List<Vertex> vertices = Arrays.asList(currentSourceVertex, currentTargetVertex);
@@ -2792,17 +2810,15 @@ public class TgfdDiscovery {
 			Vertex currentMatchedVertex = vertices.get(index);
 			String patternVertexType = patternVerticesTypes.get(index);
 			if (entityURI == null) {
-				entityURI = extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
+				entityURI = extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex, interestingnessMap);
 			} else {
-				extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex);
+				extractAttributes(patternTreeNode, patternVertexType, match, currentMatchedVertex, interestingnessMap);
 			}
 		}
-		if (entityURI != null && match.size() > patternTreeNode.getGraph().vertexSet().size()) {
-			entityURIs.add(entityURI);
-		}
+		return entityURI;
 	}
 
-	private String extractAttributes(PatternTreeNode patternTreeNode, String patternVertexType, HashSet<ConstantLiteral> match, Vertex currentMatchedVertex) {
+	private String extractAttributes(PatternTreeNode patternTreeNode, String patternVertexType, HashSet<ConstantLiteral> match, Vertex currentMatchedVertex, Map<String, Integer> interestingnessMap) {
 		String entityURI = null;
 		String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
 		Set<String> matchedVertexTypes = currentMatchedVertex.getTypes();
@@ -2815,22 +2831,32 @@ public class TgfdDiscovery {
 				if (!activeAttribute.getAttrName().equals(matchedAttrName)) continue;
 				String matchedAttrValue = currentMatchedVertex.getAttributeValueByName(matchedAttrName);
 				ConstantLiteral xLiteral = new ConstantLiteral(patternVertexType, matchedAttrName, matchedAttrValue);
+				interestingnessMap.merge(patternVertexType, 1, Integer::sum);
 				match.add(xLiteral);
 			}
 		}
 		return entityURI;
 	}
 
-	private int extractMatches(Iterator<GraphMapping<Vertex, RelationshipEdge>> iterator, ArrayList<HashSet<ConstantLiteral>> matches, PatternTreeNode patternTreeNode, HashSet<String> entityURIs) {
+	private int extractMatches(Iterator<GraphMapping<Vertex, RelationshipEdge>> iterator, ArrayList<HashSet<ConstantLiteral>> matches, PatternTreeNode patternTreeNode, Map<String, List<Integer>> entityURIs, int timestamp) {
 		int numOfMatches = 0;
 		while (iterator.hasNext()) {
 			numOfMatches++;
 			GraphMapping<Vertex, RelationshipEdge> result = iterator.next();
-			HashSet<ConstantLiteral> match = new HashSet<>();
-			extractMatch(result, patternTreeNode, match, entityURIs);
+			HashSet<ConstantLiteral> literalsInMatch = new HashSet<>();
+			Map<String, Integer> interestingnessMap = new HashMap<>();
+			String entityURI = extractMatch(result, patternTreeNode, literalsInMatch, interestingnessMap);
 			// ensures that the match is not empty and contains more than just the uri attribute
-			if (match.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
-			matches.add(match);
+			if (this.isOnlyInterestingTGFDs() && interestingnessMap.values().stream().anyMatch(n -> n < 2)) {
+				continue;
+			} else if (!this.isOnlyInterestingTGFDs() && literalsInMatch.size() <= patternTreeNode.getGraph().vertexSet().size()) {
+				continue;
+			}
+			if (entityURI != null) {
+				entityURIs.putIfAbsent(entityURI, new ArrayList<>(Arrays.asList(0, 0, 0)));
+				entityURIs.get(entityURI).set(timestamp, entityURIs.get(entityURI).get(timestamp)+1);
+			}
+			matches.add(literalsInMatch);
 		}
 		matches.sort(new Comparator<HashSet<ConstantLiteral>>() {
 			@Override
@@ -2885,7 +2911,7 @@ public class TgfdDiscovery {
 				this.setFirstSnapshotDataModel(dataModel);
 			}
 		}
-		Config.optimizedLoadingBasedOnTGFD = true;
+//		Config.optimizedLoadingBasedOnTGFD = true; // TO-DO: Does enabling optimized loading cause problems with TypeChange?
 		assert this.getFirstSnapshotTypeModel() != null;
 		assert this.getFirstSnapshotDataModel() != null;
 		if (this.getLoader().equals("dbpedia")) {
@@ -2893,13 +2919,16 @@ public class TgfdDiscovery {
 		} else {
 			graph = new IMDBLoader(tgfds, Collections.singletonList(this.getFirstSnapshotDataModel()));
 		}
-		Config.optimizedLoadingBasedOnTGFD = false;
+//		Config.optimizedLoadingBasedOnTGFD = false;
+
+		if (this.isDissolveSuperVerticesBasedOnCount())
+			this.dissolveSuperVerticesBasedOnCount(graph);
 
 		printWithTime("Load graph (1)", System.currentTimeMillis()-startTime);
 
 		// Now, we need to find the matches for each snapshot.
 		// Finding the matches...
-		HashSet<String> entityURIs = new HashSet<>();
+		Map<String, List<Integer>> entityURIs = new HashMap<>();
 
 		for (TGFD tgfd : tgfds) {
 			System.out.println("\n###########" + tgfd.getName() + "###########");
@@ -2945,10 +2974,50 @@ public class TgfdDiscovery {
 			}
 			ChangeLoader changeLoader = new ChangeLoader(changesJsonArray);
 			HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
+			List<Entry<Integer,HashSet<Change>>> sortedChanges = new ArrayList<>(newChanges.entrySet());
+			HashMap<ChangeType, Integer> map = new HashMap<>();
+			map.put(ChangeType.deleteAttr, 1);
+			map.put(ChangeType.insertAttr, 3);
+			map.put(ChangeType.changeAttr, 3);
+			map.put(ChangeType.deleteEdge, 0);
+			map.put(ChangeType.insertEdge, 4);
+			map.put(ChangeType.changeType, 2);
+			map.put(ChangeType.deleteVertex, 0);
+			map.put(ChangeType.insertVertex, 6);
+			sortedChanges.sort(new Comparator<Entry<Integer, HashSet<Change>>>() {
+				@Override
+				public int compare(Entry<Integer, HashSet<Change>> o1, Entry<Integer, HashSet<Change>> o2) {
+					if ((o1.getValue().iterator().next() instanceof AttributeChange || o1.getValue().iterator().next() instanceof TypeChange)
+							&& (o2.getValue().iterator().next() instanceof AttributeChange || o2.getValue().iterator().next() instanceof TypeChange)) {
+						boolean o1containsTypeChange = false;
+						for (Change c: o1.getValue()) {
+							if (c instanceof TypeChange) {
+								o1containsTypeChange = true;
+								break;
+							}
+						}
+						boolean o2containsTypeChange = false;
+						for (Change c: o2.getValue()) {
+							if (c instanceof TypeChange) {
+								o2containsTypeChange = true;
+								break;
+							}
+						}
+						if (o1containsTypeChange && !o2containsTypeChange) {
+							return -1;
+						} else if (!o1containsTypeChange && o2containsTypeChange) {
+							return 1;
+						} else {
+							return 0;
+						}
+					}
+					return map.get(o1.getValue().iterator().next().getTypeOfChange()).compareTo(map.get(o2.getValue().iterator().next().getTypeOfChange()));
+				}
+			});
 			printWithTime("Load changes for Snapshot (" + (i+2) + ")", System.currentTimeMillis()-startTime);
 			System.out.println("Total number of changes in changefile: " + newChanges.size());
-			List<HashMap<Integer,HashSet<Change>>> changes = new ArrayList<>();
-			changes.add(newChanges);
+			List<List<Entry<Integer,HashSet<Change>>>> changes = new ArrayList<>();
+			changes.add(sortedChanges);
 
 			System.out.println("Total number of changes: " + changes.size());
 
@@ -2956,38 +3025,72 @@ public class TgfdDiscovery {
 			// Finding the matches...
 
 			startTime=System.currentTimeMillis();
-			System.out.println("Updating the graph");
+			System.out.println("Updating the graph...");
 			// TO-DO: Do we need to update the subgraphWithinDiameter method used in IncUpdates?
 			IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), tgfds);
 			incUpdatesOnDBpedia.AddNewVertices(changeLoader.getAllChanges());
+			System.out.println("Added new vertices.");
 
 			HashMap<String, TGFD> tgfdsByName = new HashMap<>();
 			for (TGFD tgfd : tgfds) {
 				tgfdsByName.put(tgfd.getName(), tgfd);
 			}
-			HashSet<HashSet<ConstantLiteral>> newMatches = new HashSet<>();
-			HashSet<HashSet<ConstantLiteral>> removedMatches = new HashSet<>();
+			Map<String, Set<ConstantLiteral>> newMatches = new HashMap<>();
+			Map<String, Set<ConstantLiteral>> removedMatches = new HashMap<>();
 			int numOfNewMatchesFoundInSnapshot = 0;
-			for (HashMap<Integer,HashSet<Change>> changesByFile:changes) {
-				for (int changeID : changesByFile.keySet()) {
-
-					HashMap<String, IncrementalChange> incrementalChangeHashMap = incUpdatesOnDBpedia.updateGraphByGroupOfChanges(changesByFile.get(changeID), tgfdsByName);
+			for (List<Entry<Integer, HashSet<Change>>> changesByFile: changes) {
+				for (Entry<Integer, HashSet<Change>> entry : changesByFile) {
+					HashMap<String, IncrementalChange> incrementalChangeHashMap = incUpdatesOnDBpedia.updateGraphByGroupOfChanges(entry.getValue(), tgfdsByName);
 					if (incrementalChangeHashMap == null)
 						continue;
 					for (String tgfdName : incrementalChangeHashMap.keySet()) {
-						for (GraphMapping<Vertex, RelationshipEdge> mapping : incrementalChangeHashMap.get(tgfdName).getNewMatches().values()) {
+						for (Entry<String, Set<ConstantLiteral>> allLiteralsInNewMatchEntry : incrementalChangeHashMap.get(tgfdName).getNewMatches().entrySet()) {
 							numOfNewMatchesFoundInSnapshot++;
 							HashSet<ConstantLiteral> match = new HashSet<>();
-							extractMatch(mapping, patternTreeNode, match, entityURIs);
-							if (match.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
-							newMatches.add(match);
+							Map<String, Integer> interestingnessMap = new HashMap<>();
+//							String entityURI = null;
+							for (ConstantLiteral matchedLiteral: allLiteralsInNewMatchEntry.getValue()) {
+								for (ConstantLiteral activeAttribute : getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), true)) {
+									if (!matchedLiteral.getVertexType().equals(activeAttribute.getVertexType())) continue;
+									if (!matchedLiteral.getAttrName().equals(activeAttribute.getAttrName())) continue;
+//									if (matchedLiteral.getVertexType().equals(patternTreeNode.getPattern().getCenterVertexType()) && matchedLiteral.getAttrName().equals("uri")) {
+//										entityURI = matchedLiteral.getAttrValue();
+//									}
+									ConstantLiteral xLiteral = new ConstantLiteral(matchedLiteral.getVertexType(), matchedLiteral.getAttrName(), matchedLiteral.getAttrValue());
+									interestingnessMap.merge(matchedLiteral.getVertexType(), 1, Integer::sum);
+									match.add(xLiteral);
+								}
+							}
+							if (this.isOnlyInterestingTGFDs() && interestingnessMap.values().stream().anyMatch(n -> n < 2)) {
+								continue;
+							} else if (!this.isOnlyInterestingTGFDs() && match.size() <= patternTreeNode.getGraph().vertexSet().size()) {
+								continue;
+							}
+							newMatches.put(allLiteralsInNewMatchEntry.getKey(), match);
 						}
 
-						for (GraphMapping<Vertex, RelationshipEdge> mapping : incrementalChangeHashMap.get(tgfdName).getRemovedMatches().values()) {
+						for (Entry<String, Set<ConstantLiteral>> allLiteralsInRemovedMatchesEntry : incrementalChangeHashMap.get(tgfdName).getRemovedMatches().entrySet()) {
 							HashSet<ConstantLiteral> match = new HashSet<>();
-							extractMatch(mapping, patternTreeNode, match, entityURIs);
-							if (match.size() <= patternTreeNode.getGraph().vertexSet().size()) continue;
-							removedMatches.add(match);
+							Map<String, Integer> interestingnessMap = new HashMap<>();
+//							String entityURI = null;
+							for (ConstantLiteral matchedLiteral: allLiteralsInRemovedMatchesEntry.getValue()) {
+								for (ConstantLiteral activeAttribute : getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), true)) {
+									if (!matchedLiteral.getVertexType().equals(activeAttribute.getVertexType())) continue;
+									if (!matchedLiteral.getAttrName().equals(activeAttribute.getAttrName())) continue;
+//									if (matchedLiteral.getVertexType().equals(patternTreeNode.getPattern().getCenterVertexType()) && matchedLiteral.getAttrName().equals("uri")) {
+//										entityURI = matchedLiteral.getAttrValue();
+//									}
+									ConstantLiteral xLiteral = new ConstantLiteral(matchedLiteral.getVertexType(), matchedLiteral.getAttrName(), matchedLiteral.getAttrValue());
+									interestingnessMap.merge(matchedLiteral.getVertexType(), 1, Integer::sum);
+									match.add(xLiteral);
+								}
+							}
+							if (this.isOnlyInterestingTGFDs() && interestingnessMap.values().stream().anyMatch(n -> n < 2)) {
+								continue;
+							} else if (!this.isOnlyInterestingTGFDs() && match.size() <= patternTreeNode.getGraph().vertexSet().size()) {
+								continue;
+							}
+							removedMatches.putIfAbsent(allLiteralsInRemovedMatchesEntry.getKey(), match);
 						}
 					}
 				}
@@ -2996,23 +3099,36 @@ public class TgfdDiscovery {
 			System.out.println("Number of new matches found that contain active attributes: " + newMatches.size());
 			System.out.println("Number of removed matched: " + removedMatches.size());
 
-			matchesPerTimestamps.get(i+1).addAll(newMatches);
+			for (Set<ConstantLiteral> newMatch: newMatches.values()) {
+				for (ConstantLiteral l: newMatch) {
+					if (l.getVertexType().equals(patternTreeNode.getPattern().getCenterVertexType())
+							&& l.getAttrName().equals("uri")) {
+						String entityURI = l.getAttrValue();
+						entityURIs.putIfAbsent(entityURI, new ArrayList<>(Arrays.asList(0, 0, 0)));
+						entityURIs.get(entityURI).set(i+1, entityURIs.get(entityURI).get(i+1)+1);
+					}
+				}
+				matchesPerTimestamps.get(i+1).add(newMatch);
+			}
 
 			int numOfOldMatchesFoundInSnapshot = 0;
 			for (Set<ConstantLiteral> previousMatch : matchesPerTimestamps.get(i)) {
-				boolean skip = false;
-				for (HashSet<ConstantLiteral> removedMatch : removedMatches) {
-					if (equalsLiteral(removedMatch, previousMatch)) {
-						skip = true;
+				String centerVertexType = patternTreeNode.getPattern().getCenterVertexType();
+				String entityURI = null;
+				for (ConstantLiteral l: previousMatch) {
+					if (l.getVertexType().equals(centerVertexType) && l.getAttrName().equals("uri")) {
+						entityURI = l.getAttrValue();
+						break;
 					}
 				}
-				if (skip) continue;
-				for (Set<ConstantLiteral> newMatch : newMatches) {
-					if (equalsLiteral(newMatch, previousMatch)) {
-						skip = true;
-					}
+				if (removedMatches.containsValue(previousMatch))
+					continue;
+				if (newMatches.containsValue(previousMatch))
+					continue;
+				if (entityURI != null) {
+					entityURIs.putIfAbsent(entityURI, new ArrayList<>(Arrays.asList(0, 0, 0)));
+					entityURIs.get(entityURI).set(i + 1, entityURIs.get(entityURI).get(i + 1) + 1);
 				}
-				if (skip) continue;
 				matchesPerTimestamps.get(i+1).add(previousMatch);
 				numOfOldMatchesFoundInSnapshot++;
 			}
@@ -3021,38 +3137,20 @@ public class TgfdDiscovery {
 
 			numberOfMatchesFound += matchesPerTimestamps.get(i+1).size();
 
-//			matchesPerTimestamps.get(i+1).sort(new Comparator<HashSet<ConstantLiteral>>() {
-//				@Override
-//				public int compare(HashSet<ConstantLiteral> o1, HashSet<ConstantLiteral> o2) {
-//					return o1.size() - o2.size();
-//				}
-//			});
+			incUpdatesOnDBpedia.deleteVertices(changeLoader.getAllChanges());
 
 			printWithTime("Update and retrieve matches", System.currentTimeMillis()-startTime);
 		}
 
 		System.out.println("-------------------------------------");
 		System.out.println("Number of entity URIs found: "+entityURIs.size());
+//		for (Map.Entry<String, List<Integer>> entry: entityURIs.entrySet()) {
+//			System.out.println(entry);
+//		}
 		System.out.println("Total number of matches found in all snapshots: " + numberOfMatchesFound);
-		this.setPatternSupport(entityURIs.size(), patternTreeNode);
+		this.setPatternSupport(entityURIs, patternTreeNode);
 
 		return matchesPerTimestamps;
-	}
-
-	private boolean equalsLiteral(Set<ConstantLiteral> match1, Set<ConstantLiteral> match2) {
-		Set<String> uris1 = new HashSet<>();
-		for (ConstantLiteral match1Attr : match1) {
-			if (match1Attr.getAttrName().equals("uri")) {
-				uris1.add(match1Attr.getAttrValue());
-			}
-		}
-		Set<String> uris2 = new HashSet<>();
-		for (ConstantLiteral match2Attr: match2) {
-			if (match2Attr.getAttrName().equals("uri")) {
-				uris2.add(match2Attr.getAttrValue());
-			}
-		}
-		return uris1.equals(uris2);
 	}
 
 	public static void printWithTime(String message, long runTimeInMS)

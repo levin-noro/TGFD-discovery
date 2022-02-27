@@ -54,8 +54,8 @@ public class ChangeFinder {
      */
     public List<Change> findAllChanged()
     {
-        findChanges(g1,g2, ChangeType.deleteEdge, ChangeType.deleteVertex, ChangeType.deleteAttr, ChangeType.changeAttr);
-        findChanges(g2,g1, ChangeType.insertEdge, ChangeType.insertVertex, ChangeType.insertAttr,null);
+        findChanges(g1,g2, ChangeType.deleteEdge, ChangeType.deleteVertex, ChangeType.deleteAttr, ChangeType.changeAttr, ChangeType.changeType);
+        findChanges(g2,g1, ChangeType.insertEdge, ChangeType.insertVertex, ChangeType.insertAttr,null, null);
         return allChanges;
     }
 
@@ -139,7 +139,7 @@ public class ChangeFinder {
      * @param attrChange Type of attribute change (either update or null)
      */
     private void findChanges(VF2DataGraph first, VF2DataGraph second, ChangeType edgeType,
-                             ChangeType vertexType, ChangeType attrType, ChangeType attrChange)
+                             ChangeType vertexType, ChangeType attrType, ChangeType attrChange, ChangeType typeChange)
     {
         for (Vertex v:first.getGraph().vertexSet()) {
             DataVertex v1=(DataVertex) v;
@@ -196,20 +196,40 @@ public class ChangeFinder {
                 continue;
             }
             int groupedId=changeID++;
-            for (Attribute attr:v.getAllAttributesList()) {
-                if(!v2.hasAttribute(attr.getAttrName()))
-                {
-                    Change changeOfAttr=new AttributeChange(attrType,groupedId ,v1.getVertexURI(),attr);
-                    changeOfAttr.addTGFD(findRelaventTGFDs(v1.getTypes()));
-                    allChanges.add(changeOfAttr);
-                    numberOfEffectiveChanges++;
+            if (!v2.getTypes().containsAll(v1.getTypes()) && typeChange == ChangeType.changeType) {
+                for (String v1Type: v1.getTypes()) {
+                    if (!v2.getTypes().contains(v1Type)) {
+                        Change vChange1=new TypeChange(typeChange,groupedId,v1,v2,v1.getVertexURI());
+                        vChange1.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        allChanges.add(vChange1);
+                    }
                 }
-                else if(attrChange!=null && !v2.getAttributeValueByName(attr.getAttrName()).equals(attr.getAttrValue()))
-                {
-                    Change changeOfAttr=new AttributeChange(ChangeType.changeAttr,groupedId ,v1.getVertexURI(),attr);
-                    changeOfAttr.addTGFD(findRelaventTGFDs(v1.getTypes()));
-                    allChanges.add(changeOfAttr);
-                    numberOfEffectiveChanges++;
+            }
+            for (Attribute attr:v.getAllAttributesList()) {
+                if (attrChange != null) {
+                    if(!v2.hasAttribute(attr.getAttrName()))
+                    {
+                        Change changeOfAttr=new AttributeChange(ChangeType.deleteAttr,groupedId ,v1.getVertexURI(),attr);
+                        changeOfAttr.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        allChanges.add(changeOfAttr);
+                        numberOfEffectiveChanges++;
+                    }
+                    else if (!v2.getAttributeValueByName(attr.getAttrName()).equals(attr.getAttrValue())) {
+                        Change changeOfAttr=new AttributeChange(ChangeType.changeAttr,groupedId ,v1.getVertexURI(),v2.getAllAttributesHashMap().get(attr.getAttrName()));
+                        changeOfAttr.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        allChanges.add(changeOfAttr);
+                        numberOfEffectiveChanges++;
+                    }
+                }
+            }
+            for (Attribute attr: v2.getAllAttributesList()) {
+                if (attrChange != null) {
+                    if (!v1.hasAttribute(attr.getAttrName())) {
+                        Change changeOfAttr = new AttributeChange(ChangeType.insertAttr, groupedId, v2.getVertexURI(), attr);
+                        changeOfAttr.addTGFD(findRelaventTGFDs(v2.getTypes()));
+                        allChanges.add(changeOfAttr);
+                        numberOfEffectiveChanges++;
+                    }
                 }
             }
         }

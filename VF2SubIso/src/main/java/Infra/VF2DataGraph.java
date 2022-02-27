@@ -33,6 +33,26 @@ public class VF2DataGraph implements Serializable {
         return graph;
     }
 
+    public void deleteVertex(DataVertex vertex)
+    {
+        if(nodeMap.containsKey(vertex.getVertexURI()))
+        {
+            DataVertex v = (DataVertex) this.getNode(vertex.getVertexURI());
+            if (v == null)
+                return;
+            List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.edgesOf(v));
+            for (RelationshipEdge e : edgesToDelete) {
+                graph.removeEdge(e);
+            }
+            graph.removeVertex(v);
+            nodeMap.remove(v.getVertexURI());
+        }
+//        else
+//        {
+//            System.out.println("Node already existed, Vertex URI: " + v.getVertexURI());
+//        }
+    }
+
     public void addVertex(DataVertex v)
     {
         if(!nodeMap.containsKey(v.getVertexURI()))
@@ -77,7 +97,8 @@ public class VF2DataGraph implements Serializable {
         return nodeMap;
     }
 
-    public Graph<Vertex, RelationshipEdge> getSubGraphWithinDiameter(DataVertex center, int diameter)
+    // TO-DO: Merge with other getSubGraphWithinDiameter method?
+    public Graph<Vertex, RelationshipEdge> getSubGraphWithinDiameter(DataVertex center, int diameter, Set<String> edgeLabels, Set<RelationshipEdge> edgeSet, Set<String> uris)
     {
         Graph<Vertex, RelationshipEdge> subgraph = new DefaultDirectedGraph<>(RelationshipEdge.class);
 
@@ -105,6 +126,27 @@ public class VF2DataGraph implements Serializable {
 
             // Outgoing edges
             for (RelationshipEdge edge : graph.outgoingEdgesOf(v)) {
+
+                if (!edgeLabels.contains(edge.getLabel())) continue;
+
+                boolean skip = true;
+                if (uris.contains(((DataVertex)(edge.getSource())).getVertexURI()) || uris.contains(((DataVertex)(edge.getTarget())).getVertexURI())) {
+                    skip = false;
+                } else {
+                    for (RelationshipEdge patternEdge : edgeSet) {
+                        if (edge.getLabel().equals(patternEdge.getLabel())
+                                && edge.getSource().getTypes().contains(patternEdge.getSource().getTypes().iterator().next())
+                                && edge.getTarget().getTypes().contains(patternEdge.getTarget().getTypes().iterator().next())) {
+                            skip = false;
+                            break;
+                        } else if (uris.contains(((DataVertex) (edge.getSource())).getVertexURI()) || uris.contains(((DataVertex) (edge.getTarget())).getVertexURI())) {
+                            skip = false;
+                            break;
+                        }
+                    }
+                }
+                if (skip) continue;
+
                 w = (DataVertex) edge.getTarget();
 
                 // Check if the vertex is not visited
@@ -123,6 +165,24 @@ public class VF2DataGraph implements Serializable {
             }
             // Incoming edges
             for (RelationshipEdge edge : graph.incomingEdgesOf(v)) {
+
+                if (!edgeLabels.contains(edge.getLabel())) continue;
+
+                boolean skip = true;
+                if (uris.contains(((DataVertex)(edge.getSource())).getVertexURI()) || uris.contains(((DataVertex)(edge.getTarget())).getVertexURI())) {
+                    skip = false;
+                } else {
+                    for (RelationshipEdge patternEdge : edgeSet) {
+                        if (edge.getLabel().equals(patternEdge.getLabel())
+                                && edge.getSource().getTypes().contains(patternEdge.getSource().getTypes().iterator().next())
+                                && edge.getTarget().getTypes().contains(patternEdge.getTarget().getTypes().iterator().next())) {
+                            skip = false;
+                            break;
+                        }
+                    }
+                }
+                if (skip) continue;
+
                 w = (DataVertex) edge.getSource();
 
                 // Check if the vertex is not visited
@@ -145,6 +205,21 @@ public class VF2DataGraph implements Serializable {
         }
         for (Vertex source:withinDiameter) {
             for (RelationshipEdge e:graph.outgoingEdgesOf(source)) {
+                if (!edgeLabels.contains(e.getLabel())) continue;
+                boolean skip = true;
+                if (uris.contains(((DataVertex)(e.getSource())).getVertexURI()) || uris.contains(((DataVertex)(e.getTarget())).getVertexURI())) {
+                    skip = false;
+                } else {
+                    for (RelationshipEdge patternEdge : edgeSet) {
+                        if (e.getLabel().equals(patternEdge.getLabel())
+                                && e.getSource().getTypes().contains(patternEdge.getSource().getTypes().iterator().next())
+                                && e.getTarget().getTypes().contains(patternEdge.getTarget().getTypes().iterator().next())) {
+                            skip = false;
+                            break;
+                        }
+                    }
+                }
+                if (skip) continue;
                 DataVertex target=(DataVertex)e.getTarget();
                 if(visited.containsKey(target.getVertexURI()))
                     subgraph.addEdge(e.getSource(),e.getTarget(),e);
@@ -381,12 +456,6 @@ public class VF2DataGraph implements Serializable {
         return fragmentedGraph;
     }
 
-
-    public void updateGraphByAttribute(DataVertex v1, Attribute attribute)
-    {
-        nodeMap.get(v1.getVertexURI()).setOrAddAttribute(attribute);
-    }
-
     public Graph<Vertex, RelationshipEdge> getSubGraphWithinDiameter(DataVertex center, int diameter, Set<String> edgeLabels, Set<RelationshipEdge> edgeSet) {
         Graph<Vertex, RelationshipEdge> subgraph = new DefaultDirectedGraph<>(RelationshipEdge.class);
 
@@ -483,6 +552,17 @@ public class VF2DataGraph implements Serializable {
         }
         for (Vertex source:withinDiameter) {
             for (RelationshipEdge e:graph.outgoingEdgesOf(source)) {
+                if (!edgeLabels.contains(e.getLabel())) continue;
+                boolean skip = true;
+                for (RelationshipEdge patternEdge: edgeSet) {
+                    if (e.getLabel().equals(patternEdge.getLabel())
+                            && e.getSource().getTypes().contains(patternEdge.getSource().getTypes().iterator().next())
+                            && e.getTarget().getTypes().contains(patternEdge.getTarget().getTypes().iterator().next())) {
+                        skip = false;
+                        break;
+                    }
+                }
+                if (skip) continue;
                 DataVertex target=(DataVertex)e.getTarget();
                 if(visited.containsKey(target.getVertexURI()))
                     subgraph.addEdge(e.getSource(),e.getTarget(),e);

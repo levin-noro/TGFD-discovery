@@ -104,7 +104,7 @@ public class SyntheticLoader extends GraphLoader {
                         DataVertex subjectVertex= (DataVertex) graph.getNode(subject[1]);
                         if (subjectVertex==null) {
                             subjectVertex=new DataVertex(subject[1],subject[0]);
-                            subjectVertex.addAttribute(new Attribute("name", RandomStringUtils.randomAlphabetic(10)));
+                            subjectVertex.putAttributeIfAbsent(new Attribute("name", RandomStringUtils.randomAlphabetic(10)));
                             graph.addVertex(subjectVertex);
                             if(typesDistribution.containsKey(subject[0]))
                                 typesDistribution.put(subject[0], typesDistribution.get(subject[0])+1);
@@ -115,7 +115,7 @@ public class SyntheticLoader extends GraphLoader {
                         // check if we have an attribute
                         if (object[0].equals("string") || object[0].equals("integer") || object[0].equals("datetime"))
                         {
-                            subjectVertex.addAttribute(new Attribute(rdf[1], object[1]));
+                            subjectVertex.putAttributeIfAbsent(new Attribute(rdf[1], object[1]));
                             graphSize++;
                         }
                         else // there is a node with a type
@@ -123,7 +123,7 @@ public class SyntheticLoader extends GraphLoader {
                             DataVertex objectVertex= (DataVertex) graph.getNode(object[1]);
                             if (objectVertex==null) {
                                 objectVertex=new DataVertex(object[1],object[0]);
-                                objectVertex.addAttribute(new Attribute("name", RandomStringUtils.randomAlphabetic(10)));
+                                objectVertex.putAttributeIfAbsent(new Attribute("name", RandomStringUtils.randomAlphabetic(10)));
                                 graph.addVertex(objectVertex);
                                 if(typesDistribution.containsKey(object[0]))
                                     typesDistribution.put(object[0], typesDistribution.get(object[0])+1);

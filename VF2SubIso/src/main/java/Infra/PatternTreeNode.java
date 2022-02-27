@@ -2,10 +2,10 @@ package Infra;
 
 import org.jgrapht.Graph;
 
-import java.util.ArrayList;
+import java.util.*;
 
 public class PatternTreeNode {
-    private final VF2PatternGraph pattern;
+    private VF2PatternGraph pattern;
     private Double patternSupport = null;
     private final PatternTreeNode parentNode;
     private ArrayList<PatternTreeNode> subgraphParents = new ArrayList<>();
@@ -15,23 +15,54 @@ public class PatternTreeNode {
     private ArrayList<AttributeDependency> lowSupportDependencies = new ArrayList<>();
     private ArrayList<AttributeDependency> minimalDependencies = new ArrayList<>();
     private ArrayList<AttributeDependency> minimalConstantDependencies = new ArrayList<>();
-//    private HashMap<AttributeDependency, ArrayList<TgfdDiscovery.Pair>> lowSupportGeneralTgfdList = new HashMap<>();
     private ArrayList<ArrayList<DataVertex>> listOfCenterVertices = null;
+    private boolean isAcyclic = true;
+    private ArrayList<AttributeDependency> zeroEntityDependencies = new ArrayList<>();;
 
     public PatternTreeNode(VF2PatternGraph pattern, PatternTreeNode parentNode, String edgeString) {
-        this.pattern = pattern;
+        this.setPattern(pattern);
         this.parentNode = parentNode;
         this.edgeString = edgeString;
     }
 
     public PatternTreeNode(VF2PatternGraph pattern) {
-        this.pattern = pattern;
+        this.setPattern(pattern);
         this.parentNode = null;
         this.edgeString = null;
     }
 
     public Graph<Vertex, RelationshipEdge> getGraph() {
         return pattern.getPattern();
+    }
+
+    private void setPattern(VF2PatternGraph pattern) {
+        this.pattern = pattern;
+//        this.checkIfCyclesExist();
+    }
+
+    private void checkIfCyclesExist() {
+        for (Vertex currentVertex: this.getGraph().vertexSet()) {
+            Map<Vertex, Vertex> visited = new HashMap<>();
+            visited.put(currentVertex, null);
+            LinkedList<Vertex> queue = new LinkedList<>();
+            queue.add(currentVertex);
+            Vertex x,w;
+            while (queue.size() != 0) {
+                x = queue.poll();
+                for (RelationshipEdge edge : this.getGraph().edgesOf(x)) {
+                    w = edge.getSource();
+                    if (w.equals(x)) w = edge.getTarget();
+                    if (visited.get(x) != null && visited.get(x).equals(w)) continue;
+                    if (visited.containsKey(w)) {
+                        this.isAcyclic = false;
+                        return;
+                    } else {
+                        visited.putIfAbsent(w, x);
+                        queue.add(w);
+                    }
+                }
+            }
+        }
     }
 
     public VF2PatternGraph getPattern() {
@@ -47,7 +78,7 @@ public class PatternTreeNode {
     }
 
     public PatternTreeNode parentNode() {
-        return this.parentNode;
+        return this.getParentNode();
     }
 
     public void setIsPruned() {
@@ -67,6 +98,10 @@ public class PatternTreeNode {
                 '}';
     }
 
+    public void addZeroEntityDependency(AttributeDependency dependency) {
+        this.zeroEntityDependencies.add(dependency);
+    }
+
     public void addLowSupportDependency(AttributeDependency dependency) {
         this.lowSupportDependencies.add(dependency);
     }
@@ -75,11 +110,24 @@ public class PatternTreeNode {
         return this.lowSupportDependencies;
     }
 
+    public ArrayList<AttributeDependency> getZeroEntityDependencies() {
+        return this.zeroEntityDependencies;
+    }
+
     public ArrayList<AttributeDependency> getLowSupportDependenciesOnThisPath() {
         PatternTreeNode currPatternTreeNode = this;
-        ArrayList<AttributeDependency> zeroEntityPaths = new ArrayList<>(currPatternTreeNode.getLowSupportDependencies());
+        ArrayList<AttributeDependency> lowSupportPaths = new ArrayList<>(currPatternTreeNode.getLowSupportDependencies());
         for (PatternTreeNode parentNode: subgraphParents) {
-            zeroEntityPaths.addAll(parentNode.getLowSupportDependenciesOnThisPath());
+            lowSupportPaths.addAll(parentNode.getLowSupportDependenciesOnThisPath());
+        }
+        return lowSupportPaths;
+    }
+
+    public ArrayList<AttributeDependency> getZeroEntityDependenciesOnThisPath() {
+        PatternTreeNode currPatternTreeNode = this;
+        ArrayList<AttributeDependency> zeroEntityPaths = new ArrayList<>(currPatternTreeNode.getZeroEntityDependencies());
+        for (PatternTreeNode parentNode: subgraphParents) {
+            zeroEntityPaths.addAll(parentNode.getZeroEntityDependenciesOnThisPath());
         }
         return zeroEntityPaths;
     }
@@ -146,8 +194,8 @@ public class PatternTreeNode {
         return this.edgeString;
     }
 
-    public ArrayList<String> getAllEdgeStrings() {
-        ArrayList<String> edgeStrings = new ArrayList<>();
+    public List<String> getAllEdgeStrings() {
+        List<String> edgeStrings = new ArrayList<>();
         edgeStrings.add(this.edgeString);
         PatternTreeNode currentNode = this;
         while (currentNode.getParentNode().getEdgeString() != null) {

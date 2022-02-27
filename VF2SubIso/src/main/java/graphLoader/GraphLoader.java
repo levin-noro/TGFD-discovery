@@ -56,6 +56,12 @@ public class GraphLoader {
         validAttributes=new HashSet<>();
     }
 
+    public GraphLoader(VF2DataGraph graph)
+    {
+        this.graph=graph;
+        validTypes=new HashSet <>();
+        validAttributes=new HashSet<>();
+    }
 
     //endregion
 
@@ -108,7 +114,7 @@ public class GraphLoader {
                 if(v1==null)
                     continue;
                 if(attributeChange.getTypeOfChange()==ChangeType.changeAttr || attributeChange.getTypeOfChange()==ChangeType.insertAttr)
-                    v1.setOrAddAttribute(attributeChange.getAttribute());
+                    v1.putAttributeIfAbsent(attributeChange.getAttribute());
                 else if(attributeChange.getTypeOfChange()==ChangeType.deleteAttr)
                     v1.deleteAttribute(attributeChange.getAttribute());
             }
