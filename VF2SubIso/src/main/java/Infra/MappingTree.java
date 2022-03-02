@@ -1,0 +1,35 @@
+package Infra;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MappingTree {
+    private List<List<MappingTreeNode>> tree;
+
+    public MappingTree() {
+        setTree(new ArrayList<>());
+    }
+
+    public void addLevel() {
+        getTree().add(new ArrayList<>());
+//        System.out.println("TgfdDiscovery.MappingTree levels: " + getTree().size());
+    }
+
+    public MappingTreeNode createNodeAtLevel(int level, DataVertex dataVertex, String patternVertexType, MappingTreeNode parentNode) {
+        MappingTreeNode node = new MappingTreeNode(dataVertex, patternVertexType, parentNode);
+        getTree().get(level).add(node);
+        return node;
+    }
+
+    public List<MappingTreeNode> getLevel(int i) {
+        return getTree().get(i);
+    }
+
+    public List<List<MappingTreeNode>> getTree() {
+        return tree;
+    }
+
+    public void setTree(List<List<MappingTreeNode>> tree) {
+        this.tree = tree;
+    }
+}
