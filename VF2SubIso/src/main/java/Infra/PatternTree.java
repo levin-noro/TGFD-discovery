@@ -15,11 +15,11 @@ public class PatternTree {
         System.out.println("GenerationTree levels: " + getTree().size());
     }
 
-    public PatternTreeNode createNodeAtLevel(int level, VF2PatternGraph pattern, PatternTreeNode parentNode, String candidateEdgeString) {
+    public PatternTreeNode createNodeAtLevel(int level, VF2PatternGraph pattern, PatternTreeNode parentNode, String candidateEdgeString, boolean considerAlternativeParents) {
         PatternTreeNode node = new PatternTreeNode(pattern, parentNode, candidateEdgeString);
         getTree().get(level).add(node);
         findSubgraphParents(level-1, node);
-        findCenterVertexParent(level-1, node); // TO-DO: Why do we only need one parent?
+        findCenterVertexParent(level-1, node, considerAlternativeParents); // TO-DO: Why do we only need one parent?
         return node;
     }
 
@@ -62,7 +62,7 @@ public class PatternTree {
         }
     }
 
-    public void findCenterVertexParent(int level, PatternTreeNode node) {
+    public void findCenterVertexParent(int level, PatternTreeNode node, boolean considerAlternativeParents) {
         if (level < 0) return;
         System.out.println("Finding center vertex parent...");
         ArrayList<String> newPatternEdges = new ArrayList<>();
@@ -85,13 +85,13 @@ public class PatternTree {
                 }
             }
         }
-        if (node.getCenterVertexParent() == null) {
+        if (node.getCenterVertexParent() == null && considerAlternativeParents) {
             for (PatternTreeNode almostParent: almostParents) {
                 for (Vertex v: node.getGraph().vertexSet()) {
-                    String almostParentCenterVertexType = almostParent.getPattern().getCenterVertexType();
-                    if (v.getTypes().contains(almostParentCenterVertexType)) {
+                    Vertex almostParentCenterVertex = almostParent.getPattern().getCenterVertex();
+                    if (v.getTypes().containsAll(almostParentCenterVertex.getTypes())) {
                         if (node.getPattern().calculateRadiusForGivenVertex(v) == node.getPattern().getRadius()) {
-                            node.getPattern().setCenterVertexType(almostParentCenterVertexType);
+                            node.getPattern().setCenterVertex(almostParentCenterVertex);
                             System.out.println("New pattern: " + node.getPattern());
                             if (almostParent.getGraph().edgeSet().size() == 0) {
                                 System.out.println("is a child of center vertex parent pattern: " + almostParent.getGraph().vertexSet());
@@ -121,10 +121,6 @@ public class PatternTree {
 
     public ArrayList<PatternTreeNode> getLevel(int i) {
         return this.getTree().get(i);
-    }
-
-    public int getNumOfTreeLevels() {
-        return this.getTree().size();
     }
 
     public ArrayList<ArrayList<PatternTreeNode>> getTree() {

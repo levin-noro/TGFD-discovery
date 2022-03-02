@@ -16,6 +16,8 @@ public class VF2PatternGraph {
 
     public String centerVertexType="";
     private int radius;
+    private Vertex centerVertex;
+    private Vertex firstNode;
 
     public VF2PatternGraph(int diameter)
     {
@@ -65,8 +67,13 @@ public class VF2PatternGraph {
         return centerVertexType;
     }
 
-    public void setCenterVertexType(String centerVertexType) {
+    private void setCenterVertexType(String centerVertexType) {
         this.centerVertexType = centerVertexType;
+    }
+
+    public void setCenterVertex(Vertex centerVertex) {
+        this.centerVertex = centerVertex;
+        this.setCenterVertexType(centerVertex.getTypes().iterator().next());
     }
 
     public int getSize()
@@ -84,20 +91,25 @@ public class VF2PatternGraph {
         int patternDiameter=0;
         int patternRadius = this.pattern.vertexSet().size();
         Vertex centerNode=null;
+        Vertex firstNode=null;
         for (Vertex v:this.pattern.vertexSet()) {
             int d = calculateRadiusForGivenVertex(v);
             if(d>patternDiameter) {
                 patternDiameter=d;
+                firstNode = v;
             }
             if (d < patternRadius) {
                 patternRadius = d;
                 centerNode = v;
             }
         }
-        if(!centerNode.getTypes().isEmpty())
-            this.centerVertexType= centerNode.getTypes().iterator().next();
-        else
-            this.centerVertexType="NoType";
+        if(centerNode != null && !centerNode.getTypes().isEmpty()) {
+            this.setCenterVertex(centerNode);
+            this.firstNode = firstNode;
+            this.centerVertexType = this.centerVertex.getTypes().iterator().next();
+        } else {
+            this.centerVertexType = "NoType";
+        }
         this.diameter=patternDiameter;
         this.setRadius(patternRadius);
     }
@@ -192,5 +204,13 @@ public class VF2PatternGraph {
 
     public void setRadius(int radius) {
         this.radius = radius;
+    }
+
+    public Vertex getCenterVertex() {
+        return centerVertex;
+    }
+
+    public Vertex getFirstNode() {
+        return firstNode;
     }
 }
