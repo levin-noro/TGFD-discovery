@@ -79,7 +79,7 @@ public class TgfdDiscovery {
 	private double patternTheta = DEFAULT_PATTERN_THETA;
 	private int gamma = DEFAULT_GAMMA;
 	private int frequentSetSize = DEFAULT_FREQUENT_SIZE_SET;
-	private HashSet<String> activeAttributesSet;
+	private final HashSet<String> activeAttributesSet = new HashSet<>();
 	private int previousLevelNodeIndex = 0;
 	private int candidateEdgeIndex = 0;
 	private int currentVSpawnLevel = 0;
@@ -114,6 +114,8 @@ public class TgfdDiscovery {
 	private Map<String, Double> vertexTypesToAvgInDegreeMap = new HashMap<>();
 	private Model firstSnapshotTypeModel = null;
 	private Model firstSnapshotDataModel = null;
+	private long totalHistogramTime = 0;
+	private final Set<String> interestSet = new HashSet<>();
 
 	public TgfdDiscovery() {
 		this.setStartTime(System.currentTimeMillis());
@@ -220,6 +222,12 @@ public class TgfdDiscovery {
 				System.exit(1);
 			}
 		}
+
+		if (cmd.hasOption("interestLabels")) {
+			String[] interestLabels = cmd.getOptionValue("interestLabels").split(",");
+			this.getInterestSet().addAll(List.of(interestLabels));
+		}
+
 		this.loadGraphsAndComputeHistogram(this.getTimestampToFilesMap());
 
 		if (cmd.hasOption("fast")) {
@@ -1237,11 +1245,16 @@ public class TgfdDiscovery {
 	protected void setActiveAttributeSet(Map<String, Set<String>> attrDistributionMap) {
 		ArrayList<Entry<String,Set<String>>> sortedAttrDistributionMap = new ArrayList<>(attrDistributionMap.entrySet());
 		sortedAttrDistributionMap.sort((o1, o2) -> o2.getValue().size() - o1.getValue().size());
-		HashSet<String> mostDistributedAttributesSet = new HashSet<>();
-		for (Entry<String, Set<String>> attrNameEntry : sortedAttrDistributionMap.subList(0, Math.min(this.getGamma(), sortedAttrDistributionMap.size()))) {
-			mostDistributedAttributesSet.add(attrNameEntry.getKey());
+		int exclusiveIndex = Math.min(this.getGamma(), sortedAttrDistributionMap.size());
+		for (Entry<String, Set<String>> attrNameEntry : sortedAttrDistributionMap.subList(0, exclusiveIndex)) {
+			this.activeAttributesSet.add(attrNameEntry.getKey());
 		}
-		this.activeAttributesSet = mostDistributedAttributesSet;
+		if (this.getInterestSet().size() > 0) {
+			for (Entry<String, Set<String>> attrNameEntry : sortedAttrDistributionMap.subList(exclusiveIndex, sortedAttrDistributionMap.size())) {
+				if (this.getInterestSet().contains(attrNameEntry.getKey()))
+					this.activeAttributesSet.add(attrNameEntry.getKey());
+			}
+		}
 	}
 
 	protected int readEdgesInfoFromGraph(Map<String, Integer> edgeTypesHistogram, GraphLoader graph) {
@@ -1288,7 +1301,28 @@ public class TgfdDiscovery {
 			}
 		}
 		finalEdgesHist.sort((o1, o2) -> o2.getValue() - o1.getValue());
-		this.sortedFrequentEdgesHistogram = finalEdgesHist.subList(0, Math.min(finalEdgesHist.size(), this.getFrequentSetSize()));
+		int exclusiveIndex = Math.min(finalEdgesHist.size(), this.getFrequentSetSize());
+		this.sortedFrequentEdgesHistogram.addAll(finalEdgesHist.subList(0, exclusiveIndex));
+		if (this.getInterestSet().size() > 0) {
+			for (Entry<String, Integer> entry : finalEdgesHist.subList(exclusiveIndex, finalEdgesHist.size())) {
+				String[] edgeString = entry.getKey().split(" ");
+				String sourceType = edgeString[0];
+				if (this.getInterestSet().contains(sourceType)) {
+					this.sortedFrequentEdgesHistogram.add(entry);
+					continue;
+				}
+				String edgeLabel = edgeString[1];
+				if (this.getInterestSet().contains(edgeLabel)) {
+					this.sortedFrequentEdgesHistogram.add(entry);
+					continue;
+				}
+				String targetType = edgeString[2];
+				if (this.getInterestSet().contains(targetType)) {
+					this.sortedFrequentEdgesHistogram.add(entry);
+					continue;
+				}
+			}
+		}
 
 		Set<String> relevantFrequentVertexTypes = new HashSet<>();
 		for (Entry<String, Integer> entry : sortedFrequentEdgesHistogram) {
