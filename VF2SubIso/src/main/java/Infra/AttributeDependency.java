@@ -54,19 +54,6 @@ public class AttributeDependency {
         return "Dependency: " + "\n\tY=" + rhs + ",\n\tX={" + lhs + "\n\t}";
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        AttributeDependency that = (AttributeDependency) o;
-        return lhs.equals(that.lhs) && rhs.equals(that.rhs);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(lhs.hashCode(), rhs.hashCode());
-    }
-
     public Delta getDelta() {
         return delta;
     }
@@ -100,5 +87,18 @@ public class AttributeDependency {
             }
         }
         return isPruned;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AttributeDependency that = (AttributeDependency) o;
+        return lhs.equals(that.lhs) && rhs.equals(that.rhs) && Objects.equals(delta, that.delta);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(lhs, rhs, delta);
     }
 }
