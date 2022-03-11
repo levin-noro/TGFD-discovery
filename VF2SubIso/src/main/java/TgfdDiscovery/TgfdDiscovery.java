@@ -13,6 +13,7 @@ import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.jgrapht.Graph;
 import org.jgrapht.GraphMapping;
 import org.jgrapht.alg.isomorphism.VF2AbstractIsomorphismInspector;
@@ -90,21 +91,24 @@ public class TgfdDiscovery {
 	private boolean kExperiment = false;
 	private boolean useChangeFile = false;
 	private List<Entry<String, Integer>> sortedVertexHistogram; // freq nodes come from here
-	private List<Entry<String, Integer>> sortedFrequentEdgesHistogram; // freq edges come from here
+	private final List<Entry<String, Integer>> sortedFrequentEdgesHistogram = new ArrayList<>(); // freq edges come from here
 	private final HashMap<String, Integer> vertexHistogram = new HashMap<>();
 	private boolean hasSupportPruning = true;
-	private ArrayList<Double> patternSupportsList = new ArrayList<>();
-	private ArrayList<Double> constantTgfdSupportsList = new ArrayList<>();
-	private ArrayList<Double> generalTgfdSupportsList = new ArrayList<>();
+	private final List<Double> medianPatternSupportsList = new ArrayList<>();
+	private ArrayList<Double> patternSupportsListForThisSnapshot = new ArrayList<>();
+	private final List<Double> medianConstantTgfdSupportsList = new ArrayList<>();
+	private ArrayList<Double> constantTgfdSupportsListForThisSnapshot = new ArrayList<>();
+	private final List<Double> medianGeneralTgfdSupportsList = new ArrayList<>();
+	private ArrayList<Double> generalTgfdSupportsListForThisSnapshot = new ArrayList<>();
 	private final ArrayList<Double> vertexFrequenciesList = new ArrayList<>();
 	private final ArrayList<Double> edgeFrequenciesList = new ArrayList<>();
-	private long totalVisitedPathCheckingTime = 0;
-	private long totalMatchingTime = 0;
-	private long totalSupersetPathCheckingTime = 0;
-	private long totalFindEntitiesTime = 0;
-	private long totalVSpawnTime = 0;
-	private long totalDiscoverConstantTGFDsTime = 0;
-	private long totalDiscoverGeneralTGFDTime = 0;
+	private final List<Long> totalVisitedPathCheckingTime = new ArrayList<>();
+	private final List<Long> totalMatchingTime = new ArrayList<>();
+	private final List<Long> totalSupersetPathCheckingTime = new ArrayList<>();
+	private final List<Long> totalFindEntitiesTime = new ArrayList<>();
+	private final List<Long> totalVSpawnTime = new ArrayList<>();
+	private final List<Long> totalDiscoverConstantTGFDsTime = new ArrayList<>();
+	private final List<Long> totalDiscoverGeneralTGFDTime = new ArrayList<>();
 	private String experimentName;
 	private String loader;
 	private List<Entry<String, List<String>>> timestampToFilesMap = new ArrayList<>();
@@ -309,6 +313,10 @@ public class TgfdDiscovery {
 			this.printTgfdsToFile(this.getExperimentName(), this.getTgfds().get(this.getCurrentVSpawnLevel()));
 		}
 		this.getkRuntimes().add(System.currentTimeMillis() - this.getStartTime());
+		if (this.isGeneratek0Tgfds()) {
+			this.printSupportStatisticsForThisSnapshot();
+			this.printTimeStatisticsForThisSnapshot(this.getCurrentVSpawnLevel());
+		}
 		this.patternTree.addLevel();
 		this.setCurrentVSpawnLevel(this.getCurrentVSpawnLevel() + 1);
 	}
@@ -388,9 +396,13 @@ public class TgfdDiscovery {
 				patternTreeNode = tgfdDiscovery.vSpawn();
 			}
 			vSpawnTime = System.currentTimeMillis()-vSpawnTime;
+
+			if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK())
+				break;
+
 			TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
 			tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
-			if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK()) break;
+
 			long matchingTime = System.currentTimeMillis();
 
 			assert patternTreeNode != null;
@@ -427,19 +439,45 @@ public class TgfdDiscovery {
 			TgfdDiscovery.printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
 			tgfdDiscovery.getTgfds().get(tgfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
 		}
+		System.out.println("---------------------------------------------------------------");
+		System.out.println("                          Summary                              ");
+		System.out.println("---------------------------------------------------------------");
+		for (int level = 0; level <= tgfdDiscovery.getK(); level++) {
+			tgfdDiscovery.printSupportStatisticsForThisSnapshot(level);
+			tgfdDiscovery.printTimeStatisticsForThisSnapshot(level);
+		}
 		tgfdDiscovery.printTimeStatistics();
 		System.out.println("Total execution time: "+(System.currentTimeMillis() - startTime));
 	}
 
+	public void printSupportStatisticsForThisSnapshot(int level) {
+		System.out.println("----------------Support Statistics for vSpawn level "+level+"-----------------");
+		System.out.println("Median Pattern Support: " + this.getMedianPatternSupportsList(level));
+		System.out.println("Median Constant TGFD Support: " + this.getMedianConstantTgfdSupportsList(level));
+		System.out.println("Median General TGFD Support: " + this.getMedianGeneralTgfdSupportsList(level));
+	}
+
+	public void printTimeStatisticsForThisSnapshot(int level) {
+		System.out.println("----------------Time Statistics for vSpawn level "+level+"-----------------");
+		printWithTime("Total vSpawn", this.getTotalVSpawnTime(level));
+		printWithTime("Total Matching", this.getTotalMatchingTime(level));
+		printWithTime("Total Visited Path Checking", this.getTotalVisitedPathCheckingTime(level));
+		printWithTime("Total Superset Path Checking Time", this.getTotalSupersetPathCheckingTime(level));
+		printWithTime("Total Find Entities ", this.getTotalFindEntitiesTime(level));
+		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime(level));
+		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime(level));
+	}
+
 	public void printTimeStatistics() {
 		System.out.println("----------------Total Time Statistics-----------------");
-		printWithTime("Total vSpawn", this.getTotalVSpawnTime());
-		printWithTime("Total Matching", this.getTotalMatchingTime());
-		printWithTime("Total Visited Path Checking", this.getTotalVisitedPathCheckingTime());
-		printWithTime("Total Superset Path Checking Time", this.getTotalSupersetPathCheckingTime());
-		printWithTime("Total Find Entities ", this.getTotalFindEntitiesTime());
-		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime());
-		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime());
+		printWithTime("Total Histogram", this.getTotalHistogramTime());
+		printWithTime("Total vSpawn", this.getTotalVSpawnTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Matching", this.getTotalMatchingTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Visited Path Checking", this.getTotalVisitedPathCheckingTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Superset Path Checking", this.getTotalSupersetPathCheckingTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Find Entities ", this.getTotalFindEntitiesTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime().stream().reduce(0L, Long::sum));
 	}
 
 	private int findAllMatchesOfK1patternInSnapshotUsingCenterVertices(PatternTreeNode patternTreeNode, Map<String, List<Integer>> entityURIs, GraphLoader currentSnapshot, Set<Set<ConstantLiteral>> matchesSet, ArrayList<DataVertex> matchesOfCenterVertexInCurrentSnapshot, DataVertex dataVertex, int timestamp) {
@@ -889,33 +927,36 @@ public class TgfdDiscovery {
 		System.out.println("Median Edge Support: " + medianEdgeSupport);
 	}
 
-	private void printSupportStatistics() {
-		System.out.println("----------------Statistics for vSpawn level "+ this.getCurrentVSpawnLevel() +"-----------------");
+	private void printSupportStatisticsForThisSnapshot() {
+		System.out.println("----------------Support Statistics for vSpawn level "+this.getCurrentVSpawnLevel()+"-----------------");
 
-		Collections.sort(this.patternSupportsList);
-		Collections.sort(this.constantTgfdSupportsList);
-		Collections.sort(this.generalTgfdSupportsList);
+		Collections.sort(this.patternSupportsListForThisSnapshot);
+		Collections.sort(this.constantTgfdSupportsListForThisSnapshot);
+		Collections.sort(this.generalTgfdSupportsListForThisSnapshot);
 
-		double patternSupportsList = 0;
-		if (this.patternSupportsList.size() > 0) {
-			patternSupportsList = this.patternSupportsList.size() % 2 != 0 ? this.patternSupportsList.get(this.patternSupportsList.size() / 2) : ((this.patternSupportsList.get(this.patternSupportsList.size() / 2) + this.patternSupportsList.get(this.patternSupportsList.size() / 2 - 1)) / 2);
+		double medianPatternSupport = 0;
+		if (this.patternSupportsListForThisSnapshot.size() > 0) {
+			medianPatternSupport = this.patternSupportsListForThisSnapshot.size() % 2 != 0 ? this.patternSupportsListForThisSnapshot.get(this.patternSupportsListForThisSnapshot.size() / 2) : ((this.patternSupportsListForThisSnapshot.get(this.patternSupportsListForThisSnapshot.size() / 2) + this.patternSupportsListForThisSnapshot.get(this.patternSupportsListForThisSnapshot.size() / 2 - 1)) / 2);
 		}
-		double constantTgfdSupportsList = 0;
-		if (this.constantTgfdSupportsList.size() > 0) {
-			constantTgfdSupportsList = this.constantTgfdSupportsList.size() % 2 != 0 ? this.constantTgfdSupportsList.get(this.constantTgfdSupportsList.size() / 2) : ((this.constantTgfdSupportsList.get(this.constantTgfdSupportsList.size() / 2) + this.constantTgfdSupportsList.get(this.constantTgfdSupportsList.size() / 2 - 1)) / 2);
+		this.addToMedianPatternSupportsList(medianPatternSupport);
+		double medianConstantTgfdSupport = 0;
+		if (this.constantTgfdSupportsListForThisSnapshot.size() > 0) {
+			medianConstantTgfdSupport = this.constantTgfdSupportsListForThisSnapshot.size() % 2 != 0 ? this.constantTgfdSupportsListForThisSnapshot.get(this.constantTgfdSupportsListForThisSnapshot.size() / 2) : ((this.constantTgfdSupportsListForThisSnapshot.get(this.constantTgfdSupportsListForThisSnapshot.size() / 2) + this.constantTgfdSupportsListForThisSnapshot.get(this.constantTgfdSupportsListForThisSnapshot.size() / 2 - 1)) / 2);
 		}
-		double generalTgfdSupportsList = 0;
-		if (this.generalTgfdSupportsList.size() > 0) {
-			generalTgfdSupportsList = this.generalTgfdSupportsList.size() % 2 != 0 ? this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2) : ((this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2) + this.generalTgfdSupportsList.get(this.generalTgfdSupportsList.size() / 2 - 1)) / 2);
+		this.addToMedianConstantTgfdSupportsList(medianConstantTgfdSupport);
+		double medianGeneralTgfdSupport = 0;
+		if (this.generalTgfdSupportsListForThisSnapshot.size() > 0) {
+			medianGeneralTgfdSupport = this.generalTgfdSupportsListForThisSnapshot.size() % 2 != 0 ? this.generalTgfdSupportsListForThisSnapshot.get(this.generalTgfdSupportsListForThisSnapshot.size() / 2) : ((this.generalTgfdSupportsListForThisSnapshot.get(this.generalTgfdSupportsListForThisSnapshot.size() / 2) + this.generalTgfdSupportsListForThisSnapshot.get(this.generalTgfdSupportsListForThisSnapshot.size() / 2 - 1)) / 2);
 		}
+		this.addToMedianGeneralTgfdSupportsList(medianGeneralTgfdSupport);
 
-		System.out.println("Median Pattern Support: " + patternSupportsList);
-		System.out.println("Median Constant TGFD Support: " + constantTgfdSupportsList);
-		System.out.println("Median General TGFD Support: " + generalTgfdSupportsList);
+		System.out.println("Median Pattern Support: " + medianPatternSupport);
+		System.out.println("Median Constant TGFD Support: " + medianConstantTgfdSupport);
+		System.out.println("Median General TGFD Support: " + medianGeneralTgfdSupport);
 		// Reset for each level of vSpawn
-		this.patternSupportsList = new ArrayList<>();
-		this.constantTgfdSupportsList = new ArrayList<>();
-		this.generalTgfdSupportsList = new ArrayList<>();
+		this.patternSupportsListForThisSnapshot = new ArrayList<>();
+		this.constantTgfdSupportsListForThisSnapshot = new ArrayList<>();
+		this.generalTgfdSupportsListForThisSnapshot = new ArrayList<>();
 	}
 
 	public void markAsKexperiment() {
@@ -1429,7 +1470,8 @@ public class TgfdDiscovery {
 
 		this.findAndSetNumOfSnapshots();
 
-		printWithTime("All snapshots histogram", (System.currentTimeMillis() - histogramTime));
+		this.setTotalHistogramTime(System.currentTimeMillis() - histogramTime);
+		printWithTime("All snapshots histogram", getTotalHistogramTime());
 		printHistogram();
 		printHistogramStatistics();
 	}
@@ -1464,9 +1506,10 @@ public class TgfdDiscovery {
 		String yAttrName = attributes.getRhs().getAttrName();
 		Set<ConstantLiteral> xAttributes = attributes.getLhs();
 		Map<Set<ConstantLiteral>, Map<ConstantLiteral, List<Integer>>> entitiesWithRHSvalues = new HashMap<>();
-		int t = 2015;
-		for (Set<Set<ConstantLiteral>> matchesInOneTimeStamp : matchesPerTimestamps) {
-			System.out.println("---------- Attribute values in " + t + " ---------- ");
+
+		for (int timestamp = 0; timestamp < matchesPerTimestamps.size(); timestamp++) {
+			Set<Set<ConstantLiteral>> matchesInOneTimeStamp = matchesPerTimestamps.get(timestamp);
+			System.out.println("---------- Attribute values in t = " + timestamp + " ---------- ");
 			int numOfMatches = 0;
 			if (matchesInOneTimeStamp.size() > 0) {
 				for(Set<ConstantLiteral> match : matchesInOneTimeStamp) {
@@ -1490,21 +1533,20 @@ public class TgfdDiscovery {
 						entitiesWithRHSvalues.put(entity, new HashMap<>());
 					}
 					if (!entitiesWithRHSvalues.get(entity).containsKey(rhs)) {
-						entitiesWithRHSvalues.get(entity).put(rhs, new ArrayList<>());
+						entitiesWithRHSvalues.get(entity).put(rhs, createEmptyArrayListOfSize(matchesPerTimestamps.size()));
 					}
-					entitiesWithRHSvalues.get(entity).get(rhs).add(t);
+					entitiesWithRHSvalues.get(entity).get(rhs).set(timestamp, entitiesWithRHSvalues.get(entity).get(rhs).get(timestamp)+1);
 					numOfMatches++;
 				}
 			}
 			System.out.println("Number of matches: " + numOfMatches);
-			t++;
 		}
 		if (entitiesWithRHSvalues.size() == 0) return null;
 
 		Comparator<Entry<ConstantLiteral, List<Integer>>> comparator = new Comparator<Entry<ConstantLiteral, List<Integer>>>() {
 			@Override
 			public int compare(Entry<ConstantLiteral, List<Integer>> o1, Entry<ConstantLiteral, List<Integer>> o2) {
-				return o2.getValue().size() - o1.getValue().size();
+				return o2.getValue().stream().reduce(0, Integer::sum) - o1.getValue().stream().reduce(0, Integer::sum);
 			}
 		};
 
@@ -1546,7 +1588,7 @@ public class TgfdDiscovery {
 		boolean pathAlreadyVisited = visitedPaths.contains(path);
 		visitedPathCheckingTime = System.currentTimeMillis() - visitedPathCheckingTime;
 		printWithTime("visitedPathChecking", visitedPathCheckingTime);
-		setTotalVisitedPathCheckingTime(getTotalVisitedPathCheckingTime() + visitedPathCheckingTime);
+		addToTotalVisitedPathCheckingTime(visitedPathCheckingTime);
 		return pathAlreadyVisited;
 	}
 
@@ -1577,7 +1619,7 @@ public class TgfdDiscovery {
 		Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> entities = findEntities(literalPath, matchesPerTimestamps);
 		findEntitiesTime = System.currentTimeMillis() - findEntitiesTime;
 		printWithTime("findEntitiesTime", findEntitiesTime);
-		setTotalFindEntitiesTime(getTotalFindEntitiesTime() + findEntitiesTime);
+		addToTotalFindEntitiesTime(findEntitiesTime);
 		if (entities == null) {
 			System.out.println("No entities found during entity discovery.");
 			if (this.hasSupportPruning()) {
@@ -1593,11 +1635,7 @@ public class TgfdDiscovery {
 
 		// Find Constant TGFDs
 		Map<Pair,ArrayList<TreeSet<Pair>>> deltaToPairsMap = new HashMap<>();
-		long discoverConstantTGFDsTime = System.currentTimeMillis();
 		ArrayList<TGFD> constantTGFDs = discoverConstantTGFDs(patternNode, literalPath.getRhs(), entities, deltaToPairsMap);
-		discoverConstantTGFDsTime = System.currentTimeMillis() - discoverConstantTGFDsTime;
-		printWithTime("discoverConstantTGFDsTime", discoverConstantTGFDsTime);
-		setTotalDiscoverConstantTGFDsTime(getTotalDiscoverConstantTGFDsTime() + discoverConstantTGFDsTime);
 		// TO-DO: Try discover general TGFD even if no constant TGFD candidate met support threshold
 		System.out.println("Constant TGFDs discovered: " + constantTGFDs.size());
 		tgfds.addAll(constantTGFDs);
@@ -1610,7 +1648,7 @@ public class TgfdDiscovery {
 			ArrayList<TGFD> generalTGFDs = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap, literalTreeNode);
 			discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
 			printWithTime("discoverGeneralTGFDTime", discoverGeneralTGFDTime);
-			setTotalDiscoverGeneralTGFDTime(getTotalDiscoverGeneralTGFDTime() + discoverGeneralTGFDTime);
+			addToTotalDiscoverGeneralTGFDTime(discoverGeneralTGFDTime);
 			if (generalTGFDs.size() > 0) {
 				System.out.println("Discovered " + generalTGFDs.size() + " general TGFDs for this dependency.");
 				if (this.hasMinimalityPruning()) {
@@ -1719,7 +1757,7 @@ public class TgfdDiscovery {
 			System.out.println("Satisfying pairs: " + intersection.getValue());
 			double support = this.calculateSupport(numberOfSatisfyingPairs, entitiesSize);
 			System.out.println("Candidate general TGFD support: " + support);
-			this.generalTgfdSupportsList.add(support);
+			this.generalTgfdSupportsListForThisSnapshot.add(support);
 
 			Delta delta = new Delta(Period.ofYears(generalMin), Period.ofYears(generalMax), Duration.ofDays(365));
 
@@ -1774,9 +1812,11 @@ public class TgfdDiscovery {
 	}
 
 	private ArrayList<TGFD> discoverConstantTGFDs(PatternTreeNode patternNode, ConstantLiteral yLiteral, Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> entities, Map<Pair, ArrayList<TreeSet<Pair>>> deltaToPairsMap) {
+		long discoverConstantTGFDsTime = System.currentTimeMillis();
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 		String yVertexType = yLiteral.getVertexType();
 		String yAttrName = yLiteral.getAttrName();
+		long supersetPathCheckingTimeForThisTGFD = 0;
 		for (Entry<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> entityEntry : entities.entrySet()) {
 			VF2PatternGraph newPattern = patternNode.getPattern().copy();
 			Dependency newDependency = new Dependency();
@@ -1879,7 +1919,7 @@ public class TgfdDiscovery {
 			}
 			deltaToPairsMap.get(mostSupportedDelta).add(mostSupportedSatisfyingPairs);
 
-			this.constantTgfdSupportsList.add(candidateTGFDsupport); // Statistics
+			this.constantTgfdSupportsListForThisSnapshot.add(candidateTGFDsupport); // Statistics
 
 			int minDistance = mostSupportedDelta.min();
 			int maxDistance = mostSupportedDelta.max();
@@ -1887,10 +1927,16 @@ public class TgfdDiscovery {
 			System.out.println("Constant TGFD delta: "+candidateTGFDdelta);
 			constantPath.setDelta(candidateTGFDdelta);
 
+			long supersetPathCheckingTime = System.currentTimeMillis();
 			if (this.hasMinimalityPruning() && constantPath.isSuperSetOfPathAndSubsetOfDelta(patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
 				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
 				continue;
 			}
+			supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
+			supersetPathCheckingTimeForThisTGFD += supersetPathCheckingTime;
+			printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
+			addToTotalSupersetPathCheckingTime(supersetPathCheckingTime);
+
 			// Only output constant TGFDs that satisfy support
 			if (candidateTGFDsupport < this.getTgfdTheta()) {
 				if (this.hasSupportPruning() && candidateTGFDdelta.getMin().getYears() == 0 && candidateTGFDdelta.getMax().getYears() == this.getNumOfSnapshots()-1)
@@ -1905,6 +1951,11 @@ public class TgfdDiscovery {
 				if (this.hasMinimalityPruning()) patternNode.addMinimalConstantDependency(constantPath);
 			}
 		}
+
+		discoverConstantTGFDsTime = System.currentTimeMillis() - discoverConstantTGFDsTime - supersetPathCheckingTimeForThisTGFD;
+		printWithTime("discoverConstantTGFDsTime", discoverConstantTGFDsTime);
+		addToTotalDiscoverConstantTGFDsTime(discoverConstantTGFDsTime);
+
 		return tgfds;
 	}
 
@@ -2213,7 +2264,7 @@ public class TgfdDiscovery {
 						}
 						supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
 						printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
-						setTotalSupersetPathCheckingTime(getTotalSupersetPathCheckingTime() + supersetPathCheckingTime);
+						addToTotalSupersetPathCheckingTime(supersetPathCheckingTime);
 
 						System.out.println("Newly created unique literal path: " + newPath);
 
@@ -2288,20 +2339,34 @@ public class TgfdDiscovery {
 		return tgfdTheta;
 	}
 
-	public long getTotalVSpawnTime() {
+	public List<Long> getTotalVSpawnTime() {
 		return totalVSpawnTime;
 	}
 
-	public void addToTotalVSpawnTime(long vSpawnTime) {
-		this.totalVSpawnTime += vSpawnTime;
+	public Long getTotalVSpawnTime(int index) {
+		return index < this.getTotalVSpawnTime().size() ? this.getTotalVSpawnTime().get(index) : 0;
 	}
 
-	public long getTotalMatchingTime() {
+	public void addToTotalVSpawnTime(long vSpawnTime) {
+		addToValueInListAtIndex(this.getTotalVSpawnTime(), this.getCurrentVSpawnLevel(), vSpawnTime);
+	}
+
+	public List<Long> getTotalMatchingTime() {
 		return totalMatchingTime;
 	}
 
+	public Long getTotalMatchingTime(int index) {
+		return index < this.getTotalMatchingTime().size() ? this.getTotalMatchingTime().get(index) : 0;
+	}
+
 	public void addToTotalMatchingTime(long matchingTime) {
-		this.totalMatchingTime += matchingTime;
+		addToValueInListAtIndex(this.getTotalMatchingTime(), this.getCurrentVSpawnLevel(), matchingTime);
+	}
+
+	public static void addToValueInListAtIndex(List<Long> list, int index, long valueToAdd) {
+		while (list.size() <= index)
+			list.add(0L);
+		list.set(index, list.get(index)+valueToAdd);
 	}
 
 	public boolean hasSupportPruning() {
@@ -2618,44 +2683,75 @@ public class TgfdDiscovery {
 		this.maxNumOfLiterals = maxNumOfLiterals;
 	}
 
-	public long getTotalVisitedPathCheckingTime() {
+	public List<Long> getTotalVisitedPathCheckingTime() {
 		return totalVisitedPathCheckingTime;
 	}
 
-	public void setTotalVisitedPathCheckingTime(long totalVisitedPathCheckingTime) {
-		this.totalVisitedPathCheckingTime = totalVisitedPathCheckingTime;
+	public Long getTotalVisitedPathCheckingTime(int index) {
+		return returnLongAtIndexIfExistsElseZero(this.getTotalVisitedPathCheckingTime(), index);
 	}
 
-	public long getTotalSupersetPathCheckingTime() {
+	public void addToTotalVisitedPathCheckingTime(long totalVisitedPathCheckingTime) {
+		addToValueInListAtIndex(this.getTotalVisitedPathCheckingTime(), this.getCurrentVSpawnLevel(), totalVisitedPathCheckingTime);
+	}
+
+	public static void setValueInListAtIndex(List<Double> list, int index, Double value) {
+		while (list.size() <= index) {
+			list.add(0.0);
+		}
+		list.set(index, value);
+	}
+
+	public List<Long> getTotalSupersetPathCheckingTime() {
 		return totalSupersetPathCheckingTime;
 	}
 
-	public void setTotalSupersetPathCheckingTime(long totalSupersetPathCheckingTime) {
-		this.totalSupersetPathCheckingTime = totalSupersetPathCheckingTime;
+	public Long getTotalSupersetPathCheckingTime(int index) {
+		return returnLongAtIndexIfExistsElseZero(this.getTotalSupersetPathCheckingTime(), index);
 	}
 
-	public long getTotalFindEntitiesTime() {
+	public void addToTotalSupersetPathCheckingTime(long totalSupersetPathCheckingTime) {
+		addToValueInListAtIndex(this.getTotalSupersetPathCheckingTime(), this.getCurrentVSpawnLevel(), totalSupersetPathCheckingTime);
+	}
+
+	public List<Long> getTotalFindEntitiesTime() {
 		return totalFindEntitiesTime;
 	}
 
-	public void setTotalFindEntitiesTime(long totalFindEntitiesTime) {
-		this.totalFindEntitiesTime = totalFindEntitiesTime;
+	public Long getTotalFindEntitiesTime(int index) {
+		return returnLongAtIndexIfExistsElseZero(this.getTotalFindEntitiesTime(), index);
 	}
 
-	public long getTotalDiscoverConstantTGFDsTime() {
+	public void addToTotalFindEntitiesTime(long totalFindEntitiesTime) {
+		addToValueInListAtIndex(this.getTotalFindEntitiesTime(), this.getCurrentVSpawnLevel(), totalFindEntitiesTime);
+	}
+
+	public List<Long> getTotalDiscoverConstantTGFDsTime() {
 		return totalDiscoverConstantTGFDsTime;
 	}
 
-	public void setTotalDiscoverConstantTGFDsTime(long totalDiscoverConstantTGFDsTime) {
-		this.totalDiscoverConstantTGFDsTime = totalDiscoverConstantTGFDsTime;
+	public Long getTotalDiscoverConstantTGFDsTime(int index) {
+		return returnLongAtIndexIfExistsElseZero(this.getTotalDiscoverConstantTGFDsTime(), index);
 	}
 
-	public long getTotalDiscoverGeneralTGFDTime() {
+	public void addToTotalDiscoverConstantTGFDsTime(long totalDiscoverConstantTGFDsTime) {
+		addToValueInListAtIndex(this.getTotalDiscoverConstantTGFDsTime(), this.getCurrentVSpawnLevel(), totalDiscoverConstantTGFDsTime);
+	}
+
+	public List<Long> getTotalDiscoverGeneralTGFDTime() {
 		return totalDiscoverGeneralTGFDTime;
 	}
 
-	public void setTotalDiscoverGeneralTGFDTime(long totalDiscoverGeneralTGFDTime) {
-		this.totalDiscoverGeneralTGFDTime = totalDiscoverGeneralTGFDTime;
+	public Long getTotalDiscoverGeneralTGFDTime(int index) {
+		return returnLongAtIndexIfExistsElseZero(this.getTotalDiscoverGeneralTGFDTime(), index);
+	}
+
+	public void addToTotalDiscoverGeneralTGFDTime(long totalDiscoverGeneralTGFDTime) {
+		addToValueInListAtIndex(this.getTotalDiscoverGeneralTGFDTime(), this.getCurrentVSpawnLevel(), totalDiscoverGeneralTGFDTime);
+	}
+
+	public static Long returnLongAtIndexIfExistsElseZero(List<Long> list, int index) {
+		return index < list.size() ? list.get(index) : 0;
 	}
 
 	public double getPatternTheta() {
@@ -2664,6 +2760,66 @@ public class TgfdDiscovery {
 
 	public void setPatternTheta(double patternTheta) {
 		this.patternTheta = patternTheta;
+	}
+
+	public long getTotalHistogramTime() {
+		return totalHistogramTime;
+	}
+
+	public void setTotalHistogramTime(long totalHistogramTime) {
+		this.totalHistogramTime = totalHistogramTime;
+	}
+
+	public boolean isFastMatching() {
+		return fastMatching;
+	}
+
+	public void setFastMatching(boolean fastMatching) {
+		this.fastMatching = fastMatching;
+	}
+
+	public List<Double> getMedianPatternSupportsList() {
+		return medianPatternSupportsList;
+	}
+
+	public Double getMedianPatternSupportsList(int index) {
+		return returnDoubleAtIndexIfExistsElseZero(this.getMedianPatternSupportsList(), index);
+	}
+
+	public void addToMedianPatternSupportsList(double medianPatternSupport) {
+		setValueInListAtIndex(this.getMedianPatternSupportsList(), this.getCurrentVSpawnLevel(), medianPatternSupport);
+	}
+
+	public List<Double> getMedianConstantTgfdSupportsList() {
+		return medianConstantTgfdSupportsList;
+	}
+
+	public Double getMedianConstantTgfdSupportsList(int index) {
+		return returnDoubleAtIndexIfExistsElseZero(this.getMedianConstantTgfdSupportsList(), index);
+	}
+
+	public void addToMedianConstantTgfdSupportsList(double medianConstantTgfdSupport) {
+		setValueInListAtIndex(this.getMedianConstantTgfdSupportsList(), this.getCurrentVSpawnLevel(), medianConstantTgfdSupport);
+	}
+
+	public List<Double> getMedianGeneralTgfdSupportsList() {
+		return medianGeneralTgfdSupportsList;
+	}
+
+	public Double getMedianGeneralTgfdSupportsList(int index) {
+		return returnDoubleAtIndexIfExistsElseZero(this.getMedianGeneralTgfdSupportsList(), index);
+	}
+
+	public void addToMedianGeneralTgfdSupportsList(double medianGeneralTgfdSupport) {
+		setValueInListAtIndex(this.getMedianGeneralTgfdSupportsList(), this.getCurrentVSpawnLevel(), medianGeneralTgfdSupport);
+	}
+
+	public static Double returnDoubleAtIndexIfExistsElseZero(List<Double> list, int index) {
+		return index < list.size() ? list.get(index) : 0;
+	}
+
+	public Set<String> getInterestSet() {
+		return interestSet;
 	}
 
 	public static class Pair implements Comparable<Pair> {
@@ -2848,7 +3004,7 @@ public class TgfdDiscovery {
 		int S = this.vertexHistogram.get(centerVertexType);
 		double patternSupport = calculateSupport(numOfPossiblePairs, S);
 		patternTreeNode.setPatternSupport(patternSupport);
-		this.patternSupportsList.add(patternSupport);
+		this.patternSupportsListForThisSnapshot.add(patternSupport);
 	}
 
 	private double calculateSupport(double numerator, double S) {
@@ -2896,7 +3052,8 @@ public class TgfdDiscovery {
 			this.getkRuntimes().add(System.currentTimeMillis() - this.getStartTime());
 			this.printTgfdsToFile(this.getExperimentName(), this.getTgfds().get(this.getCurrentVSpawnLevel()));
 			if (this.iskExperiment()) this.printExperimentRuntimestoFile();
-			this.printSupportStatistics();
+			this.printSupportStatisticsForThisSnapshot();
+			this.printTimeStatisticsForThisSnapshot(this.getCurrentVSpawnLevel());
 			this.setCurrentVSpawnLevel(this.getCurrentVSpawnLevel() + 1);
 			if (this.getCurrentVSpawnLevel() > this.getK()) {
 				return null;
