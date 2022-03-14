@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class TgfdDiscovery {
 	public static final int DEFAULT_NUM_OF_SNAPSHOTS = 3;
@@ -102,6 +103,7 @@ public class TgfdDiscovery {
 	private ArrayList<Double> generalTgfdSupportsListForThisSnapshot = new ArrayList<>();
 	private final ArrayList<Double> vertexFrequenciesList = new ArrayList<>();
 	private final ArrayList<Double> edgeFrequenciesList = new ArrayList<>();
+	private final List<Long> totalSupergraphCheckingTime = new ArrayList<>();
 	private final List<Long> totalVisitedPathCheckingTime = new ArrayList<>();
 	private final List<Long> totalMatchingTime = new ArrayList<>();
 	private final List<Long> totalSupersetPathCheckingTime = new ArrayList<>();
@@ -313,24 +315,23 @@ public class TgfdDiscovery {
 			this.printTgfdsToFile(this.getExperimentName(), this.getTgfds().get(this.getCurrentVSpawnLevel()));
 		}
 		this.getkRuntimes().add(System.currentTimeMillis() - this.getStartTime());
-		if (this.isGeneratek0Tgfds()) {
-			this.printSupportStatisticsForThisSnapshot();
-			this.printTimeStatisticsForThisSnapshot(this.getCurrentVSpawnLevel());
-		}
+		this.printSupportStatisticsForThisSnapshot();
+		this.printTimeStatisticsForThisSnapshot(this.getCurrentVSpawnLevel());
 		this.patternTree.addLevel();
 		this.setCurrentVSpawnLevel(this.getCurrentVSpawnLevel() + 1);
 	}
 
 	@Override
 	public String toString() {
-		String[] info = {"G"+this.getGraphSize()
+		String[] infoArray = {"G"+this.getGraphSize()
 				, "t" + this.getT()
 				, "k" + this.getCurrentVSpawnLevel()
-				, "pTheta" + this.getPatternTheta()
+				, this.getMaxNumOfLiterals() > 0 ? MAX_LIT_PARAM + this.getMaxNumOfLiterals() : ""
+				, this.getPatternTheta() != this.getTgfdTheta() ? "pTheta" + this.getPatternTheta() : ""
 				, "theta" + this.getTgfdTheta()
 				, "gamma" + this.getGamma()
-				, MAX_LIT_PARAM + this.getMaxNumOfLiterals()
 				, "freqSet" + (this.getFrequentSetSize() == Integer.MAX_VALUE ? "All" : this.getFrequentSetSize())
+				, this.interestSet.size() > 0 ? "interestLabels" : ""
 				, (this.isFastMatching() ? "fast" : "")
 				, (this.isValidationSearch() ? "validation" : "")
 				, (this.useChangeFile() ? "changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "")
@@ -342,7 +343,8 @@ public class TgfdDiscovery {
 				, (this.isDissolveSuperVerticesBasedOnCount() ? "simplifySuperNodes"+(INDIVIDUAL_VERTEX_INDEGREE_FLOOR) : "")
 				, (this.getTimeAndDateStamp() == null ? "" : this.getTimeAndDateStamp())
 		};
-		return String.join("-", info);
+		List<String> list = Stream.of(infoArray).filter(s -> !s.equals("")).collect(Collectors.toList());
+		return String.join("-", list);
 	}
 
 	public void printTgfdsToFile(String experimentName, ArrayList<TGFD> tgfds) {
@@ -386,45 +388,27 @@ public class TgfdDiscovery {
 		tgfdDiscovery.initialize(tgfdDiscovery.getGraphs());
 		while (tgfdDiscovery.getCurrentVSpawnLevel() <= tgfdDiscovery.getK()) {
 
-			System.out.println("VSpawn level " + tgfdDiscovery.getCurrentVSpawnLevel());
-			System.out.println("Previous level node index " + tgfdDiscovery.getPreviousLevelNodeIndex());
-			System.out.println("Candidate edge index " + tgfdDiscovery.getCandidateEdgeIndex());
-
 			PatternTreeNode patternTreeNode = null;
-			long vSpawnTime = System.currentTimeMillis();
 			while (patternTreeNode == null && tgfdDiscovery.getCurrentVSpawnLevel() <= tgfdDiscovery.getK()) {
 				patternTreeNode = tgfdDiscovery.vSpawn();
 			}
-			vSpawnTime = System.currentTimeMillis()-vSpawnTime;
 
 			if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK())
 				break;
 
-			TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
-			tgfdDiscovery.addToTotalVSpawnTime(vSpawnTime);
-
-			long matchingTime = System.currentTimeMillis();
-
 			assert patternTreeNode != null;
 			List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
+			long matchingTime = System.currentTimeMillis();
 			if (tgfdDiscovery.isValidationSearch()) {
 				matchesPerTimestamps = tgfdDiscovery.getMatchesForPattern(tgfdDiscovery.getGraphs(), patternTreeNode);
-				matchingTime = System.currentTimeMillis() - matchingTime;
-				TgfdDiscovery.printWithTime("getMatchesForPattern", (matchingTime));
-				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
-			}
-			else if (tgfdDiscovery.useChangeFile()) {
+			} else if (tgfdDiscovery.useChangeFile()) {
 				matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
-				matchingTime = System.currentTimeMillis() - matchingTime;
-				TgfdDiscovery.printWithTime("getMatchesUsingChangeFiles", (matchingTime));
-				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
-			}
-			else {
+			} else {
 				matchesPerTimestamps = tgfdDiscovery.findMatchesUsingCenterVertices(tgfdDiscovery.getGraphs(), patternTreeNode);
-				matchingTime = System.currentTimeMillis() - matchingTime;
-				TgfdDiscovery.printWithTime("findMatchesUsingCenterVertices", (matchingTime));
-				tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 			}
+			matchingTime = System.currentTimeMillis() - matchingTime;
+			TgfdDiscovery.printWithTime("Pattern matching", (matchingTime));
+			tgfdDiscovery.addToTotalMatchingTime(matchingTime);
 
 			if (tgfdDiscovery.doesNotSatisfyTheta(patternTreeNode)) {
 				System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
@@ -459,11 +443,12 @@ public class TgfdDiscovery {
 
 	public void printTimeStatisticsForThisSnapshot(int level) {
 		System.out.println("----------------Time Statistics for vSpawn level "+level+"-----------------");
-		printWithTime("Total vSpawn", this.getTotalVSpawnTime(level));
+		printWithTime("Total vSpawn", this.getTotalVSpawnTime(level)-this.getTotalSupergraphCheckingTime(level));
+		printWithTime("Total Supergraph Checking", this.getTotalSupergraphCheckingTime(level));
 		printWithTime("Total Matching", this.getTotalMatchingTime(level));
 		printWithTime("Total Visited Path Checking", this.getTotalVisitedPathCheckingTime(level));
-		printWithTime("Total Superset Path Checking Time", this.getTotalSupersetPathCheckingTime(level));
-		printWithTime("Total Find Entities ", this.getTotalFindEntitiesTime(level));
+		printWithTime("Total Superset Path Checking", this.getTotalSupersetPathCheckingTime(level));
+		printWithTime("Total Find Entities", this.getTotalFindEntitiesTime(level));
 		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime(level));
 		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime(level));
 	}
@@ -471,11 +456,12 @@ public class TgfdDiscovery {
 	public void printTimeStatistics() {
 		System.out.println("----------------Total Time Statistics-----------------");
 		printWithTime("Total Histogram", this.getTotalHistogramTime());
-		printWithTime("Total vSpawn", this.getTotalVSpawnTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total vSpawn", this.getTotalVSpawnTime().stream().reduce(0L, Long::sum)-this.getTotalSupergraphCheckingTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Supergraph Checking", this.getTotalSupergraphCheckingTime().stream().reduce(0L, Long::sum));
 		printWithTime("Total Matching", this.getTotalMatchingTime().stream().reduce(0L, Long::sum));
 		printWithTime("Total Visited Path Checking", this.getTotalVisitedPathCheckingTime().stream().reduce(0L, Long::sum));
 		printWithTime("Total Superset Path Checking", this.getTotalSupersetPathCheckingTime().stream().reduce(0L, Long::sum));
-		printWithTime("Total Find Entities ", this.getTotalFindEntitiesTime().stream().reduce(0L, Long::sum));
+		printWithTime("Total Find Entities", this.getTotalFindEntitiesTime().stream().reduce(0L, Long::sum));
 		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime().stream().reduce(0L, Long::sum));
 		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime().stream().reduce(0L, Long::sum));
 	}
@@ -1583,15 +1569,6 @@ public class TgfdDiscovery {
 		return literals;
 	}
 
-	public boolean isPathVisited(AttributeDependency path, HashSet<AttributeDependency> visitedPaths) {
-		long visitedPathCheckingTime = System.currentTimeMillis();
-		boolean pathAlreadyVisited = visitedPaths.contains(path);
-		visitedPathCheckingTime = System.currentTimeMillis() - visitedPathCheckingTime;
-		printWithTime("visitedPathChecking", visitedPathCheckingTime);
-		addToTotalVisitedPathCheckingTime(visitedPathCheckingTime);
-		return pathAlreadyVisited;
-	}
-
 	public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
 		ArrayList<TGFD> tgfds = new ArrayList<>();
 
@@ -1928,14 +1905,18 @@ public class TgfdDiscovery {
 			constantPath.setDelta(candidateTGFDdelta);
 
 			long supersetPathCheckingTime = System.currentTimeMillis();
+			boolean isNotMinimal = false;
 			if (this.hasMinimalityPruning() && constantPath.isSuperSetOfPathAndSubsetOfDelta(patternNode.getAllMinimalConstantDependenciesOnThisPath())) { // Ensures we don't expand constant TGFDs from previous iterations
 				System.out.println("Candidate constant TGFD " + constantPath + " is a superset of an existing minimal constant TGFD");
-				continue;
+				isNotMinimal = true;
 			}
 			supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
 			supersetPathCheckingTimeForThisTGFD += supersetPathCheckingTime;
 			printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
 			addToTotalSupersetPathCheckingTime(supersetPathCheckingTime);
+
+			if (isNotMinimal)
+				continue;
 
 			// Only output constant TGFDs that satisfy support
 			if (candidateTGFDsupport < this.getTgfdTheta()) {
@@ -2200,7 +2181,7 @@ public class TgfdDiscovery {
 
 		System.out.println("Performing HSpawn for " + patternTreeNode.getPattern());
 
-		HashSet<ConstantLiteral> activeAttributes = getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), false);
+		List<ConstantLiteral> activeAttributesInPattern = new ArrayList<>(getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), false));
 
 		LiteralTree literalTree = new LiteralTree();
 		int hSpawnLimit;
@@ -2211,12 +2192,14 @@ public class TgfdDiscovery {
 		}
 		for (int j = 0; j < hSpawnLimit; j++) {
 
-			System.out.println("HSpawn level " + j + "/" + hSpawnLimit);
+			System.out.println("HSpawn level " + j + "/" + (hSpawnLimit-1));
 
 			if (j == 0) {
 				literalTree.addLevel();
-				for (ConstantLiteral literal: activeAttributes) {
+				for (int index = 0; index < activeAttributesInPattern.size(); index++) {
+					ConstantLiteral literal = activeAttributesInPattern.get(index);
 					literalTree.createNodeAtLevel(j, literal, null);
+					System.out.println("Created root "+index+"/"+activeAttributesInPattern.size()+" of literal forest.");
 				}
 			} else {
 				ArrayList<LiteralTreeNode> literalTreePreviousLevel = literalTree.getLevel(j - 1);
@@ -2227,55 +2210,79 @@ public class TgfdDiscovery {
 				literalTree.addLevel();
 				HashSet<AttributeDependency> visitedPaths = new HashSet<>(); //TO-DO: Can this be implemented as HashSet to improve performance?
 				ArrayList<TGFD> currentLevelTGFDs = new ArrayList<>();
-				for (LiteralTreeNode previousLevelLiteral : literalTreePreviousLevel) {
-					System.out.println("Creating literal tree node " + literalTree.getLevel(j).size() + "/" + (literalTreePreviousLevel.size() * (literalTreePreviousLevel.size()-1)));
+				for (int literalTreePreviousLevelIndex = 0; literalTreePreviousLevelIndex < literalTreePreviousLevel.size(); literalTreePreviousLevelIndex++) {
+					System.out.println("Expanding previous level literal tree path " + (literalTreePreviousLevelIndex+1) + "/" + literalTreePreviousLevel.size()+"...");
+
+					LiteralTreeNode previousLevelLiteral = literalTreePreviousLevel.get(literalTreePreviousLevelIndex);
+					ArrayList<ConstantLiteral> parentsPathToRoot = previousLevelLiteral.getPathToRoot(); //TO-DO: Can this be implemented as HashSet to improve performance?
+					System.out.println("Literal path: "+parentsPathToRoot);
+
 					if (previousLevelLiteral.isPruned()) {
-						System.out.println("Could not expand pruned literal path "+previousLevelLiteral.getPathToRoot());
+						System.out.println("Could not expand pruned literal path.");
 						continue;
 					}
-					for (ConstantLiteral literal: activeAttributes) {
-						ArrayList<ConstantLiteral> parentsPathToRoot = previousLevelLiteral.getPathToRoot(); //TO-DO: Can this be implemented as HashSet to improve performance?
+					for (int index = 0; index < activeAttributesInPattern.size(); index++) {
+						ConstantLiteral literal = activeAttributesInPattern.get(index);
+						System.out.println("Adding active attribute "+(index+1)+"/"+activeAttributesInPattern.size()+" to path...");
+						System.out.println("Literal: "+literal);
 						if (this.isOnlyInterestingTGFDs() && j < patternTreeNode.getGraph().vertexSet().size()) { // Ensures all vertices are involved in dependency
 							if (isUsedVertexType(literal.getVertexType(), parentsPathToRoot)) continue;
 						}
 
-						if (parentsPathToRoot.contains(literal)) continue;
+						if (parentsPathToRoot.contains(literal)) {
+							System.out.println("Skip. Literal already exists in path.");
+							continue;
+						}
 
 						// Check if path to candidate leaf node is unique
-						AttributeDependency newPath = new AttributeDependency(previousLevelLiteral.getPathToRoot(),literal);
+						AttributeDependency newPath = new AttributeDependency(parentsPathToRoot,literal);
 						System.out.println("New candidate literal path: " + newPath);
-						if (isPathVisited(newPath, visitedPaths)) { // TO-DO: Is this relevant anymore?
+
+						long visitedPathCheckingTime = System.currentTimeMillis();
+						boolean isVistedPath = false;
+						if (visitedPaths.contains(newPath)) { // TO-DO: Is this relevant anymore?
 							System.out.println("Skip. Duplicate literal path.");
-							continue;
+							isVistedPath = true;
 						}
+						visitedPathCheckingTime = System.currentTimeMillis() - visitedPathCheckingTime;
+						printWithTime("visitedPathChecking", visitedPathCheckingTime);
+						addToTotalVisitedPathCheckingTime(visitedPathCheckingTime);
+
+						if (isVistedPath)
+							continue;
 
 						long supersetPathCheckingTime = System.currentTimeMillis();
+						boolean isSuperSetPath = false;
 						if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getZeroEntityDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
 							System.out.println("Skip. Candidate literal path is a superset of zero-entity dependency.");
-							continue;
+							isSuperSetPath = true;
 						}
-						if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
+						else if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
 							System.out.println("Skip. Candidate literal path is a superset of low-support dependency.");
-							continue;
+							isSuperSetPath = true;
 						}
-						if (this.hasMinimalityPruning() && newPath.isSuperSetOfPath(patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
+						else if (this.hasMinimalityPruning() && newPath.isSuperSetOfPath(patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
 							System.out.println("Skip. Candidate literal path is a superset of minimal dependency.");
-							continue;
+							isSuperSetPath = true;
 						}
 						supersetPathCheckingTime = System.currentTimeMillis()-supersetPathCheckingTime;
 						printWithTime("supersetPathCheckingTime", supersetPathCheckingTime);
 						addToTotalSupersetPathCheckingTime(supersetPathCheckingTime);
 
-						System.out.println("Newly created unique literal path: " + newPath);
+						if (isSuperSetPath)
+							continue;
 
 						// Add leaf node to tree
 						LiteralTreeNode literalTreeNode = literalTree.createNodeAtLevel(j, literal, previousLevelLiteral);
+						System.out.println("Added candidate literal path to tree.");
 
 						visitedPaths.add(newPath);
 
 						if (this.isOnlyInterestingTGFDs()) { // Ensures all vertices are involved in dependency
-                            if (literalPathIsMissingTypesInPattern(literalTreeNode.getPathToRoot(), patternTreeNode.getGraph().vertexSet()))
+                            if (literalPathIsMissingTypesInPattern(literalTreeNode.getPathToRoot(), patternTreeNode.getGraph().vertexSet())) {
+								System.out.println("Skip Delta Discovery. Literal path does not involve all pattern vertices.");
 								continue;
+							}
 						}
 
 						System.out.println("Performing Delta Discovery at HSpawn level " + j);
@@ -2300,6 +2307,7 @@ public class TgfdDiscovery {
 	private static boolean isUsedVertexType(String vertexType, ArrayList<ConstantLiteral> parentsPathToRoot) {
 		for (ConstantLiteral literal : parentsPathToRoot) {
 			if (literal.getVertexType().equals(vertexType)) {
+				System.out.println("Skip. Literal has a vertex type that is already part of interesting dependency.");
 				return true;
 			}
 		}
@@ -2325,6 +2333,7 @@ public class TgfdDiscovery {
 
 	public void setCurrentVSpawnLevel(int currentVSpawnLevel) {
 		this.currentVSpawnLevel = currentVSpawnLevel;
+		System.out.println("VSpawn level " + this.getCurrentVSpawnLevel());
 	}
 
 	public int getK() {
@@ -2348,6 +2357,7 @@ public class TgfdDiscovery {
 	}
 
 	public void addToTotalVSpawnTime(long vSpawnTime) {
+		TgfdDiscovery.printWithTime("vSpawn", vSpawnTime);
 		addToValueInListAtIndex(this.getTotalVSpawnTime(), this.getCurrentVSpawnLevel(), vSpawnTime);
 	}
 
@@ -2683,6 +2693,18 @@ public class TgfdDiscovery {
 		this.maxNumOfLiterals = maxNumOfLiterals;
 	}
 
+	public List<Long> getTotalSupergraphCheckingTime() {
+		return totalSupergraphCheckingTime;
+	}
+
+	public Long getTotalSupergraphCheckingTime(int index) {
+		return returnLongAtIndexIfExistsElseZero(this.getTotalSupergraphCheckingTime(), index);
+	}
+
+	public void addToTotalSupergraphCheckingTime(long supergraphCheckingTime) {
+		addToValueInListAtIndex(this.getTotalSupergraphCheckingTime(), this.getCurrentVSpawnLevel(), supergraphCheckingTime);
+	}
+
 	public List<Long> getTotalVisitedPathCheckingTime() {
 		return totalVisitedPathCheckingTime;
 	}
@@ -2691,8 +2713,8 @@ public class TgfdDiscovery {
 		return returnLongAtIndexIfExistsElseZero(this.getTotalVisitedPathCheckingTime(), index);
 	}
 
-	public void addToTotalVisitedPathCheckingTime(long totalVisitedPathCheckingTime) {
-		addToValueInListAtIndex(this.getTotalVisitedPathCheckingTime(), this.getCurrentVSpawnLevel(), totalVisitedPathCheckingTime);
+	public void addToTotalVisitedPathCheckingTime(long visitedPathCheckingTime) {
+		addToValueInListAtIndex(this.getTotalVisitedPathCheckingTime(), this.getCurrentVSpawnLevel(), visitedPathCheckingTime);
 	}
 
 	public static void setValueInListAtIndex(List<Double> list, int index, Double value) {
@@ -2710,8 +2732,8 @@ public class TgfdDiscovery {
 		return returnLongAtIndexIfExistsElseZero(this.getTotalSupersetPathCheckingTime(), index);
 	}
 
-	public void addToTotalSupersetPathCheckingTime(long totalSupersetPathCheckingTime) {
-		addToValueInListAtIndex(this.getTotalSupersetPathCheckingTime(), this.getCurrentVSpawnLevel(), totalSupersetPathCheckingTime);
+	public void addToTotalSupersetPathCheckingTime(long supersetPathCheckingTime) {
+		addToValueInListAtIndex(this.getTotalSupersetPathCheckingTime(), this.getCurrentVSpawnLevel(), supersetPathCheckingTime);
 	}
 
 	public List<Long> getTotalFindEntitiesTime() {
@@ -2722,8 +2744,8 @@ public class TgfdDiscovery {
 		return returnLongAtIndexIfExistsElseZero(this.getTotalFindEntitiesTime(), index);
 	}
 
-	public void addToTotalFindEntitiesTime(long totalFindEntitiesTime) {
-		addToValueInListAtIndex(this.getTotalFindEntitiesTime(), this.getCurrentVSpawnLevel(), totalFindEntitiesTime);
+	public void addToTotalFindEntitiesTime(long findEntitiesTime) {
+		addToValueInListAtIndex(this.getTotalFindEntitiesTime(), this.getCurrentVSpawnLevel(), findEntitiesTime);
 	}
 
 	public List<Long> getTotalDiscoverConstantTGFDsTime() {
@@ -2734,8 +2756,8 @@ public class TgfdDiscovery {
 		return returnLongAtIndexIfExistsElseZero(this.getTotalDiscoverConstantTGFDsTime(), index);
 	}
 
-	public void addToTotalDiscoverConstantTGFDsTime(long totalDiscoverConstantTGFDsTime) {
-		addToValueInListAtIndex(this.getTotalDiscoverConstantTGFDsTime(), this.getCurrentVSpawnLevel(), totalDiscoverConstantTGFDsTime);
+	public void addToTotalDiscoverConstantTGFDsTime(long discoverConstantTGFDsTime) {
+		addToValueInListAtIndex(this.getTotalDiscoverConstantTGFDsTime(), this.getCurrentVSpawnLevel(), discoverConstantTGFDsTime);
 	}
 
 	public List<Long> getTotalDiscoverGeneralTGFDTime() {
@@ -2746,8 +2768,8 @@ public class TgfdDiscovery {
 		return returnLongAtIndexIfExistsElseZero(this.getTotalDiscoverGeneralTGFDTime(), index);
 	}
 
-	public void addToTotalDiscoverGeneralTGFDTime(long totalDiscoverGeneralTGFDTime) {
-		addToValueInListAtIndex(this.getTotalDiscoverGeneralTGFDTime(), this.getCurrentVSpawnLevel(), totalDiscoverGeneralTGFDTime);
+	public void addToTotalDiscoverGeneralTGFDTime(long discoverGeneralTGFDTime) {
+		addToValueInListAtIndex(this.getTotalDiscoverGeneralTGFDTime(), this.getCurrentVSpawnLevel(), discoverGeneralTGFDTime);
 	}
 
 	public static Long returnLongAtIndexIfExistsElseZero(List<Long> list, int index) {
@@ -2902,8 +2924,8 @@ public class TgfdDiscovery {
 			this.addToTotalVSpawnTime(finalVspawnTime);
 			TgfdDiscovery.printWithTime("vSpawn", finalVspawnTime);
 
+			final long matchingStartTime = System.currentTimeMillis();
 			if (!this.isGeneratek0Tgfds()) {
-				final long extractListOfCenterVerticesTime = System.currentTimeMillis();
 				ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertexPerTimestamp;
 				if (this.reUseMatches()) {
 					// TO-DO: Implement pattern support calculation here using entityURIs?
@@ -2914,18 +2936,21 @@ public class TgfdDiscovery {
 						System.out.println(entry);
 					}
 					this.setPatternSupport(entityURIs, patternTreeNode);
-					printWithTime("extractListOfCenterVerticesTime", (System.currentTimeMillis() - extractListOfCenterVerticesTime));
 					int numOfMatches = 0;
 					for (ArrayList<DataVertex> matchesOfThisCenterVertex : matchesOfThisCenterVertexPerTimestamp) {
 						numOfMatches += matchesOfThisCenterVertex.size();
 					}
 					System.out.println("Number of center vertex matches found containing active attributes: " + numOfMatches);
+
+					final long matchingEndTime = System.currentTimeMillis() - matchingStartTime;
+					printWithTime("matchingTime", matchingEndTime);
+					this.addToTotalMatchingTime(matchingEndTime);
+
 					if (doesNotSatisfyTheta(patternTreeNode)) {
 						patternTreeNode.setIsPruned();
 					}
 				}
 			} else {
-				final long matchingTime = System.currentTimeMillis();
 				List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
 				if (this.isValidationSearch()) {
 					matchesPerTimestamps = this.getMatchesForPattern(this.getGraphs(), patternTreeNode);
@@ -2965,6 +2990,11 @@ public class TgfdDiscovery {
 					patternTreeNode.setListOfCenterVertices(matchesOfThisCenterVertexPerTimestamp);
 					this.setPatternSupport(entityURIs, patternTreeNode);
 				}
+
+				final long matchingEndTime = System.currentTimeMillis() - matchingStartTime;
+				printWithTime("matchingTime", matchingEndTime);
+				this.addToTotalMatchingTime(matchingEndTime);
+
 				if (doesNotSatisfyTheta(patternTreeNode)) {
 					patternTreeNode.setIsPruned();
 				} else {
@@ -2973,9 +3003,6 @@ public class TgfdDiscovery {
 					printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
 					this.getTgfds().get(0).addAll(tgfds);
 				}
-				final long finalMatchingTime = System.currentTimeMillis() - matchingTime;
-				printWithTime("matchingTime", finalMatchingTime);
-				this.addToTotalMatchingTime(finalMatchingTime);
 			}
 		}
 		System.out.println("GenTree Level " + this.getCurrentVSpawnLevel() + " size: " + this.patternTree.getLevel(this.getCurrentVSpawnLevel()).size());
@@ -3043,19 +3070,24 @@ public class TgfdDiscovery {
 
 	public PatternTreeNode vSpawn() {
 
+		long vSpawnTime = System.currentTimeMillis();
+
 		if (this.getCandidateEdgeIndex() > this.sortedFrequentEdgesHistogram.size()-1) {
 			this.setCandidateEdgeIndex(0);
 			this.setPreviousLevelNodeIndex(this.getPreviousLevelNodeIndex() + 1);
 		}
 
-		if (this.getPreviousLevelNodeIndex() >= this.patternTree.getLevel(this.getCurrentVSpawnLevel() -1).size()) {
+		if (this.getPreviousLevelNodeIndex() >= this.patternTree.getLevel(this.getCurrentVSpawnLevel()-1).size()) {
 			this.getkRuntimes().add(System.currentTimeMillis() - this.getStartTime());
 			this.printTgfdsToFile(this.getExperimentName(), this.getTgfds().get(this.getCurrentVSpawnLevel()));
 			if (this.iskExperiment()) this.printExperimentRuntimestoFile();
 			this.printSupportStatisticsForThisSnapshot();
 			this.printTimeStatisticsForThisSnapshot(this.getCurrentVSpawnLevel());
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			this.setCurrentVSpawnLevel(this.getCurrentVSpawnLevel() + 1);
+			vSpawnTime = System.currentTimeMillis();
 			if (this.getCurrentVSpawnLevel() > this.getK()) {
+				this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 				return null;
 			}
 			this.patternTree.addLevel();
@@ -3065,25 +3097,27 @@ public class TgfdDiscovery {
 
 		System.out.println("Performing VSpawn");
 		System.out.println("VSpawn Level " + this.getCurrentVSpawnLevel());
-//		System.gc();
 
 		ArrayList<PatternTreeNode> previousLevel = this.patternTree.getLevel(this.getCurrentVSpawnLevel() - 1);
 		if (previousLevel.size() == 0) {
+			System.out.println("Previous level of vSpawn contains no pattern nodes.");
 			this.setPreviousLevelNodeIndex(this.getPreviousLevelNodeIndex() + 1);
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			return null;
 		}
 		PatternTreeNode previousLevelNode = previousLevel.get(this.getPreviousLevelNodeIndex());
-		System.out.println("Processing previous level node " + this.getPreviousLevelNodeIndex() + "/" + previousLevel.size());
+		System.out.println("Processing previous level node " + this.getPreviousLevelNodeIndex() + "/" + (previousLevel.size()-1));
 		System.out.println("Performing VSpawn on pattern: " + previousLevelNode.getPattern());
 
 		System.out.println("Level " + (this.getCurrentVSpawnLevel() - 1) + " pattern: " + previousLevelNode.getPattern());
 		if (this.hasSupportPruning() && previousLevelNode.isPruned()) {
 			System.out.println("Marked as pruned. Skip.");
 			this.setPreviousLevelNodeIndex(this.getPreviousLevelNodeIndex() + 1);
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			return null;
 		}
 
-		System.out.println("Processing candidate edge " + this.getCandidateEdgeIndex() + "/" + this.sortedFrequentEdgesHistogram.size());
+		System.out.println("Processing candidate edge " + this.getCandidateEdgeIndex() + "/" + (this.sortedFrequentEdgesHistogram.size()-1));
 		Map.Entry<String, Integer> candidateEdge = this.sortedFrequentEdgesHistogram.get(this.getCandidateEdgeIndex());
 		String candidateEdgeString = candidateEdge.getKey();
 		System.out.println("Candidate edge:" + candidateEdgeString);
@@ -3102,6 +3136,7 @@ public class TgfdDiscovery {
 		if (sourceVertexType.equals(targetVertexType)) {
 			System.out.println("Candidate edge contains duplicate vertex types. Skip.");
 			this.setCandidateEdgeIndex(this.getCandidateEdgeIndex() + 1);
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			return null;
 		}
 		String edgeType = candidateEdgeString.split(" ")[1];
@@ -3111,12 +3146,14 @@ public class TgfdDiscovery {
 			System.out.println("Candidate edge: " + candidateEdge.getKey());
 			System.out.println("already exists in pattern");
 			this.setCandidateEdgeIndex(this.getCandidateEdgeIndex() + 1);
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			return null;
 		}
 
 		if (isMultipleEdge(previousLevelNode.getPattern(), sourceVertexType, targetVertexType)) {
 			System.out.println("We do not support multiple edges between existing vertices.");
 			this.setCandidateEdgeIndex(this.getCandidateEdgeIndex() + 1);
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			return null;
 		}
 
@@ -3127,6 +3164,7 @@ public class TgfdDiscovery {
 			System.out.println("Candidate edge: " + candidateEdge.getKey());
 			System.out.println("does not extend from pattern");
 			this.setCandidateEdgeIndex(this.getCandidateEdgeIndex() + 1);
+			this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 			return null;
 		}
 
@@ -3247,6 +3285,7 @@ public class TgfdDiscovery {
 			}
 			this.setCandidateEdgeIndex(this.getCandidateEdgeIndex() + 1);
 		}
+		this.addToTotalVSpawnTime(System.currentTimeMillis()-vSpawnTime);
 		return patternTreeNode;
 	}
 
