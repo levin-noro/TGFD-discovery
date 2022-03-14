@@ -63,18 +63,16 @@ public class AttributeDependency {
     }
 
     public boolean isSuperSetOfPath(ArrayList<AttributeDependency> zeroEntityDependenciesOnThisPath) {
-        boolean isPruned = false;
         for (AttributeDependency prunedPath : zeroEntityDependenciesOnThisPath) {
             if (this.getRhs().equals(prunedPath.getRhs()) && this.getLhs().containsAll(prunedPath.getLhs())) {
                 System.out.println("Candidate path " + this + " is a superset of pruned path " + prunedPath);
-                isPruned = true;
+                return true;
             }
         }
-        return isPruned;
+        return false;
     }
 
     public boolean isSuperSetOfPathAndSubsetOfDelta(ArrayList<AttributeDependency> minimalDependenciesOnThisPath) {
-        boolean isPruned = false;
         for (AttributeDependency prunedPath : minimalDependenciesOnThisPath) {
             if (this.getRhs().equals(prunedPath.getRhs()) && this.getLhs().containsAll(prunedPath.getLhs())) {
                 System.out.println("Candidate path " + this + " is a superset of pruned path " + prunedPath);
@@ -82,11 +80,11 @@ public class AttributeDependency {
                     System.out.println("Candidate path delta " + this.getDelta()
                             + "\n with pruned path delta " + prunedPath.getDelta()
                             + ".");
-                    isPruned = true;
+                    return true;
                 }
             }
         }
-        return isPruned;
+        return false;
     }
 
     @Override

@@ -3251,51 +3251,63 @@ public class TgfdDiscovery {
 	}
 
 	private boolean isIsomorphicPattern(VF2PatternGraph newPattern, PatternTree patternTree) {
-		final long isIsomorphicPatternCheckTime = System.currentTimeMillis();
-	    System.out.println("Checking if following pattern is isomorphic\n" + newPattern);
+		final long isIsomorphicPatternCheckStartTime = System.currentTimeMillis();
+	    System.out.println("Checking if the pattern is isomorphic...");
 	    ArrayList<String> newPatternEdges = new ArrayList<>();
         newPattern.getPattern().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
         boolean isIsomorphic = false;
 		for (PatternTreeNode otherPattern: patternTree.getLevel(this.getCurrentVSpawnLevel())) {
-//			VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(newPattern.getPattern(), otherPattern.getPattern(), false);
-//			if (results.isomorphismExists()) {
             ArrayList<String> otherPatternEdges = new ArrayList<>();
             otherPattern.getGraph().edgeSet().forEach((edge) -> {otherPatternEdges.add(edge.toString());});
-//            if (newPattern.toString().equals(otherPattern.getPattern().toString())) {
             if (newPatternEdges.containsAll(otherPatternEdges)) {
 				System.out.println("Candidate pattern: " + newPattern);
 				System.out.println("is an isomorph of current VSpawn level pattern: " + otherPattern.getPattern());
 				isIsomorphic = true;
+				break;
 			}
 		}
-		printWithTime("isIsomorphicPatternCheck", System.currentTimeMillis()-isIsomorphicPatternCheckTime);
+		final long isomorphicCheckingTime = System.currentTimeMillis() - isIsomorphicPatternCheckStartTime;
+		printWithTime("isIsomorphicPatternCheck", isomorphicCheckingTime);
+		addToTotalSupergraphCheckingTime(isomorphicCheckingTime);
 		return isIsomorphic;
 	}
 
+	// TO-DO: Should this be done using real subgraph isomorphism instead of strings?
 	private boolean isSuperGraphOfPrunedPattern(VF2PatternGraph newPattern, PatternTree patternTree) {
-		final long isSuperGraphOfPrunedPatternTime = System.currentTimeMillis();
+		final long supergraphCheckingStartTime = System.currentTimeMillis();
         ArrayList<String> newPatternEdges = new ArrayList<>();
         newPattern.getPattern().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
 		int i = this.getCurrentVSpawnLevel();
 		boolean isSupergraph = false;
-		while (i > 0) {
-			for (PatternTreeNode otherPattern : patternTree.getLevel(i)) {
-				if (otherPattern.isPruned()) {
-//					VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(newPattern.getPattern(), otherPattern.getPattern(), false);
-//			        if (results.isomorphismExists()) {
-//                    if (newPattern.toString().equals(otherPattern.getPattern().toString())) {
-                    ArrayList<String> otherPatternEdges = new ArrayList<>();
-                    otherPattern.getGraph().edgeSet().forEach((edge) -> {otherPatternEdges.add(edge.toString());});
-                    if (newPatternEdges.containsAll(otherPatternEdges)) {
-                        System.out.println("Candidate pattern: " + newPattern);
-						System.out.println("is a superset of pruned subgraph pattern: " + otherPattern.getPattern());
-						isSupergraph = true;
+		while (i >= 0) {
+			for (PatternTreeNode treeNode : patternTree.getLevel(i)) {
+				if (treeNode.isPruned()) {
+					if (treeNode.getPattern().getCenterVertexType().equals(newPattern.getCenterVertexType())) {
+						if (i == 0) {
+							isSupergraph = true;
+						} else {
+							ArrayList<String> otherPatternEdges = new ArrayList<>();
+							treeNode.getGraph().edgeSet().forEach((edge) -> {
+								otherPatternEdges.add(edge.toString());
+							});
+							if (newPatternEdges.containsAll(otherPatternEdges)) {
+								isSupergraph = true;
+							}
+						}
+						if (isSupergraph) {
+							System.out.println("Candidate pattern: " + newPattern);
+							System.out.println("is a supergraph of pruned subgraph pattern: " + treeNode.getPattern());
+							break;
+						}
 					}
 				}
 			}
+			if (isSupergraph) break;
 			i--;
 		}
-		printWithTime("isSuperGraphOfPrunedPattern", System.currentTimeMillis()-isSuperGraphOfPrunedPatternTime);
+		final long supergraphCheckingTime = System.currentTimeMillis() - supergraphCheckingStartTime;
+		printWithTime("Supergraph checking", supergraphCheckingTime);
+		addToTotalSupergraphCheckingTime(supergraphCheckingTime);
 		return isSupergraph;
 	}
 
