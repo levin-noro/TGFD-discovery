@@ -16,7 +16,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -77,7 +76,7 @@ public class IMDBLoader extends GraphLoader{
                     }
                     DataVertex subjectVertex = getDataVertex(subjectType, subjectNodeURI);
                     objectNodeURI = object.asLiteral().getString().toLowerCase();
-                    subjectVertex.addAttribute(new Attribute(predicate, objectNodeURI));
+                    subjectVertex.putAttributeIfAbsent(new Attribute(predicate, objectNodeURI));
                 } else {
 
                     objectNodeURI = object.toString().toLowerCase();
@@ -105,20 +104,13 @@ public class IMDBLoader extends GraphLoader{
                             }
                         } else if (validTypes.size() > 1) {
                             if (!validTypes.contains(subjectType) || !validTypes.contains(objectType)) {
-//                                System.out.println(stmt);
-                                dissolveIntoAttributeIfSuperNode(subjectType, subjectNodeURI, objectType, objectNodeURI);
                                 continue;
                             }
                         }
                     }
-                    if (!objectType.equals("country") && !objectType.equals("genre")
-                            && !subjectType.equals("country") && !subjectType.equals("genre")) {
                         DataVertex subjectVertex = getDataVertex(subjectType, subjectNodeURI);
                         DataVertex objectVertex = getDataVertex(objectType, objectNodeURI);
                         graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge(predicate));
-                    } else {
-                        dissolveIntoAttributeIfSuperNode(subjectType, subjectNodeURI, objectType, objectNodeURI);
-                    }
                 }
                 graphSize++;
             }
@@ -129,16 +121,6 @@ public class IMDBLoader extends GraphLoader{
         catch (Exception e)
         {
             System.out.println(e.getMessage());
-        }
-    }
-
-    private void dissolveIntoAttributeIfSuperNode(String subjectType, String subjectID, String objectType, String objectID) {
-        if (objectType.equals("country") || objectType.equals("genre")) {
-            DataVertex subjectVertex = getDataVertex(subjectType, subjectID);
-            subjectVertex.addAttribute(new Attribute(objectType + "value", objectID));
-        } else if (subjectType.equals("country") || subjectType.equals("genre")) {
-            DataVertex objectVertex = getDataVertex(objectType, objectID);
-            objectVertex.addAttribute(new Attribute(subjectType + "value", subjectID));
         }
     }
 
