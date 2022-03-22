@@ -144,14 +144,14 @@ public class TgfdDiscovery {
 			this.path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
 			if (!Files.isDirectory(Path.of(this.getPath()))) {
 				System.out.println(Path.of(this.getPath()) + " is not a valid directory.");
-				return;
+				System.exit(1);
 			}
 			this.setGraphSize(Path.of(this.getPath()).getFileName().toString());
 		}
 
 		if (!cmd.hasOption("loader")) {
 			System.out.println("No specifiedLoader is specified.");
-			return;
+			System.exit(1);
 		} else {
 			this.setLoader(cmd.getOptionValue("loader"));
 		}
@@ -302,8 +302,8 @@ public class TgfdDiscovery {
 			cmd = parser.parse(options, args);
 		} catch (ParseException e) {
 			e.printStackTrace();
+			System.exit(1);
 		}
-		assert cmd != null;
 		return cmd;
 	}
 
@@ -365,7 +365,6 @@ public class TgfdDiscovery {
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
-//		System.gc();
 	}
 
 	public void printExperimentRuntimestoFile() {
@@ -396,7 +395,9 @@ public class TgfdDiscovery {
 			if (tgfdDiscovery.getCurrentVSpawnLevel() > tgfdDiscovery.getK())
 				break;
 
-			assert patternTreeNode != null;
+			if (patternTreeNode == null)
+				throw new NullPointerException("patternTreeNode == null");
+
 			List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
 			long matchingTime = System.currentTimeMillis();
 			if (tgfdDiscovery.isValidationSearch()) {
@@ -3037,14 +3038,16 @@ public class TgfdDiscovery {
 	private double calculateSupport(double numerator, double S) {
 		System.out.println("S = "+S);
 		double denominator = S * CombinatoricsUtils.binomialCoefficient(this.getNumOfSnapshots()+1,2);
-		assert numerator <= denominator;
+		if (numerator > denominator)
+			throw new IllegalArgumentException("numerator > denominator");
 		double support = numerator / denominator;
 		System.out.println("Support: " + numerator + " / " + denominator + " = " + support);
 		return support;
 	}
 
 	private boolean doesNotSatisfyTheta(PatternTreeNode patternTreeNode) {
-		assert patternTreeNode.getPatternSupport() != null;
+		if (patternTreeNode.getPatternSupport() == null)
+			throw new IllegalArgumentException("patternTreeNode.getPatternSupport() == null");
 		return patternTreeNode.getPatternSupport() < this.getPatternTheta();
 	}
 
@@ -3262,7 +3265,8 @@ public class TgfdDiscovery {
 							maxDegreeTypes.put(newV, this.getVertexTypesToAvgInDegreeMap().get(type));
 						}
 					}
-					assert maxDegreeTypes.size() > 0;
+					if (maxDegreeTypes.size() <= 0)
+						throw new IllegalArgumentException("maxDegreeTypes.size() <= 0");
 					List<Entry<Vertex, Double>> entries = new ArrayList<>(maxDegreeTypes.entrySet());
 					entries.sort(new Comparator<Entry<Vertex, Double>>() {
 						@Override
