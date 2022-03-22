@@ -557,7 +557,8 @@ public class TgfdDiscovery {
 			int numOfMatchesInTimestamp = 0; int processedCount = 0;
 			for (DataVertex dataVertex: centerVertexMatchesInThisTimestamp) {
 				int numOfMatchesFound;
-				assert this.getCurrentVSpawnLevel() > 0;
+				if (this.getCurrentVSpawnLevel() < 1)
+					throw new IllegalArgumentException("this.getCurrentVSpawnLevel() < 1");
 				if (this.getCurrentVSpawnLevel() == 1) {
 					numOfMatchesFound = findAllMatchesOfK1patternInSnapshotUsingCenterVertices(patternTreeNode, entityURIs, currentSnapshot, matchesSet, newMatchesOfCenterVertexInCurrentSnapshot, dataVertex, year);
 				} else {
