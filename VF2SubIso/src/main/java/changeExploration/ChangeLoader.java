@@ -3,6 +3,7 @@ package changeExploration;
 import Infra.Attribute;
 import Infra.DataVertex;
 import org.jetbrains.annotations.NotNull;
+import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
@@ -16,29 +17,29 @@ public class ChangeLoader {
 
     private HashMap<Integer,HashSet<Change>> allGroupedChanges;
 
-    public ChangeLoader(org.json.simple.JSONArray jsonArray)
+    public ChangeLoader(JSONArray jsonArray, boolean considerEdgeChanges)
     {
         this.allChanges = new ArrayList<>();
         allGroupedChanges = new HashMap<>();
-        loadChanges(jsonArray);
+        loadChanges(jsonArray, considerEdgeChanges);
     }
 
     public List<Change> getAllChanges() {
         return allChanges;
     }
 
-    private void loadChanges(org.json.simple.JSONArray jsonArray) {
+    private void loadChanges(JSONArray jsonArray, boolean considerEdgeChanges) {
         for (Object o : jsonArray) {
             JSONObject object = (JSONObject) o;
 
-            org.json.simple.JSONArray allRelevantTGFDs=(org.json.simple.JSONArray)object.get("tgfds");
-            HashSet <String> relevantTGFDs=new HashSet <>();
+            org.json.simple.JSONArray allRelevantTGFDs = (org.json.simple.JSONArray) object.get("tgfds");
+            HashSet <String> relevantTGFDs = new HashSet<>();
             for (Object TGFDName : allRelevantTGFDs)
                 relevantTGFDs.add((String) TGFDName);
 
             ChangeType type = ChangeType.valueOf((String) object.get("typeOfChange"));
             int id=Integer.parseInt(object.get("id").toString());
-            if(type==ChangeType.deleteEdge || type==ChangeType.insertEdge)
+            if (considerEdgeChanges && (type==ChangeType.deleteEdge || type==ChangeType.insertEdge))
             {
                 String src=(String) object.get("src");
                 String dst=(String) object.get("dst");
@@ -50,7 +51,7 @@ public class ChangeLoader {
                     allGroupedChanges.put(change.getId(),new HashSet<>());
                 allGroupedChanges.get(change.getId()).add(change);
             }
-            else if(type==ChangeType.changeAttr || type==ChangeType.deleteAttr || type==ChangeType.insertAttr)
+            else if (type==ChangeType.changeAttr || type==ChangeType.deleteAttr || type==ChangeType.insertAttr)
             {
                 String uri=(String) object.get("uri");
                 JSONObject attrObject=(JSONObject) object.get("attribute");

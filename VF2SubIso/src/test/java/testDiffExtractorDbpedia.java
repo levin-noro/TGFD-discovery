@@ -107,10 +107,14 @@ public class testDiffExtractorDbpedia {
         Object[] ids = dataModelHashMap.keySet().toArray();
         Arrays.sort(ids);
         DBPediaLoader first, second = null;
+
+        //TODO: Is this code needed?
         TgfdDiscovery tgfdDiscovery = new TgfdDiscovery();
         tgfdDiscovery.setLoader("dbpedia");
         tgfdDiscovery.setDBpediaTimestampsAndFilePaths(path);
-        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
+        tgfdDiscovery.loadGraphsAndComputeHistogram2();
+//        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
+
         List<Change> allChanges;
         int t1, t2 = 0;
         for (int i = 0; i < ids.length; i += 2) {
@@ -215,28 +219,32 @@ public class testDiffExtractorDbpedia {
 
         System.out.println("Number of changes: " + allChanges.size());
         int numOfChangesToConsider = (int) (allChanges.size() * PERCENT);
+        System.out.println("Percentage of changes to consider: "+PERCENT);
         System.out.println("Number of changes considered: " + numOfChangesToConsider);
         if (PERCENT < 1.0) {
+            System.out.println("Shuffling changes");
             Collections.shuffle(allChanges);
         }
         List<Change> changesToConsider = allChanges.subList(0, numOfChangesToConsider);
 
-        System.out.println("Printing the changes: " + t1 + " -> " + t2);
-
+        System.out.println("Sorting changes");
         HashMap<ChangeType, Integer> map = new HashMap<>();
         map.put(ChangeType.deleteAttr, 1);
         map.put(ChangeType.insertAttr, 2);
         map.put(ChangeType.changeAttr, 2);
+        map.put(ChangeType.changeType, 5);
         map.put(ChangeType.deleteEdge, 3);
         map.put(ChangeType.insertEdge, 4);
-        map.put(ChangeType.deleteVertex, 5);
-        map.put(ChangeType.insertVertex, 5);
+        map.put(ChangeType.deleteVertex, 6);
+        map.put(ChangeType.insertVertex, 6);
         changesToConsider.sort(new Comparator<Change>() {
             @Override
             public int compare(Change o1, Change o2) {
                 return map.get(o1.getTypeOfChange()).compareTo(map.get(o2.getTypeOfChange()));
             }
         });
+
+        System.out.println("Printing the changes: " + t1 + " -> " + t2);
         try {
             FileWriter file = new FileWriter("./changes_t" + t1 + "_t" + t2 + "_" + tgfdName + ".json");
             file.write("[");

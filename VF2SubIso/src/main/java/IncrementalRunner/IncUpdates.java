@@ -5,6 +5,7 @@ import changeExploration.*;
 import Infra.*;
 import org.jgrapht.Graph;
 import org.jgrapht.GraphMapping;
+import org.jgrapht.graph.DefaultDirectedGraph;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,7 +33,79 @@ public class IncUpdates {
         }
     }
 
-    public HashMap<String,IncrementalChange> updateGraphByGroupOfChanges(HashSet<Change> changes, HashMap<String,TGFD> tgfdsByName)
+    public void updateEntireGraph(List<Change> allChanges) {
+        for (Change change: allChanges) {
+            if (change instanceof VertexChange) {
+                if (change.getTypeOfChange() == ChangeType.insertVertex){
+                    baseGraph.addVertex(((VertexChange) change).getVertex());
+                } else if (change.getTypeOfChange() == ChangeType.deleteVertex) {
+                    baseGraph.deleteVertex(((VertexChange) change).getVertex());
+                }
+            }
+            else if(change instanceof EdgeChange) {
+                EdgeChange edgeChange = (EdgeChange) change;
+                DataVertex v1 = (DataVertex) baseGraph.getNode(edgeChange.getSrc());
+                DataVertex v2 = (DataVertex) baseGraph.getNode(edgeChange.getDst());
+                if (v1 == null || v2 == null) {
+                    // Node doesn't exist in the base graph, we need to igonre the change
+                    // We keep the number of these ignored edges in a variable
+                    continue;
+                }
+                if (edgeChange.getTypeOfChange()== ChangeType.insertEdge) {
+                    baseGraph.addEdge(v1, v2, new RelationshipEdge(edgeChange.getLabel()));
+                }
+                else if (edgeChange.getTypeOfChange()== ChangeType.deleteEdge) {
+                    baseGraph.removeEdge(v1, v2, new RelationshipEdge(edgeChange.getLabel()));
+                }
+                else
+                    throw new IllegalArgumentException("The change is instance of EdgeChange, but type of change is: " + change.getTypeOfChange());
+            }
+            else if (change instanceof AttributeChange || change instanceof TypeChange) {
+                String uri;
+                if (change instanceof AttributeChange)
+                    uri = ((AttributeChange) change).getUri();
+                else
+                    uri = ((TypeChange) change).getPreviousVertex().getVertexURI();
+                DataVertex v1=(DataVertex) baseGraph.getNode(uri);
+                if (v1 == null) {
+                    // Node doesn't exist in the base graph, we need to igonre the change
+                    // We store the number of these ignored changes
+                    continue;
+                }
+                if (change instanceof AttributeChange) {
+                    AttributeChange attributeChange = (AttributeChange) change;
+
+                    if (attributeChange.getTypeOfChange() == ChangeType.changeAttr || attributeChange.getTypeOfChange() == ChangeType.insertAttr) {
+                        v1.putAttribute(attributeChange.getAttribute());
+                    } else if (attributeChange.getTypeOfChange() == ChangeType.deleteAttr) {
+                        v1.deleteAttribute(attributeChange.getAttribute());
+                    }
+                } else {
+                    Set<String> removedTypes = new HashSet<>();
+                    DataVertex newVertex = ((TypeChange)change).getNewVertex();
+                    for (String oldVertexType: v1.getTypes()) {
+                        if (!newVertex.getTypes().contains(oldVertexType)) {
+                            removedTypes.add(oldVertexType);
+                        }
+                    }
+                    Set<String> newTypes = new HashSet<>();
+                    for (String newVertexType: newVertex.getTypes()) {
+                        if (!v1.getTypes().contains(newVertexType)) {
+                            newTypes.add(newVertexType);
+                        }
+                    }
+                    for (String removedType: removedTypes) {
+                        v1.getTypes().remove(removedType);
+                    }
+                    for (String newType: newTypes) {
+                        v1.getTypes().add(newType);
+                    }
+                }
+            }
+        }
+    }
+
+    public HashMap<String,IncrementalChange> updateGraphByGroupOfChanges(HashSet<Change> changes, HashMap<String, TGFD> tgfdsByName, boolean performVertexChange)
     {
         // Remove TGFDs from the Affected TGFD lists of the change if that TGFD is not loaded.
         changes.forEach(change -> change
@@ -44,7 +117,32 @@ public class IncUpdates {
 
         Change change=changes.iterator().next();
 
-        if(change instanceof EdgeChange)
+        if (performVertexChange && change instanceof VertexChange) {
+            VertexChange vertexChange = (VertexChange) change;
+            // TODO: If findRelevantTGFDs returns 0 should we skip?
+            if (change.getTypeOfChange() == ChangeType.deleteVertex) {
+                DataVertex v1 = (DataVertex) baseGraph.getNode(vertexChange.getVertex().getVertexURI());
+                if (v1 == null)
+                    return null;
+                if (change.getTGFDs().size() == 0)
+                    findRelevantTGFDs(vertexChange,v1);
+                if (change.getTGFDs().size() == 0)
+                    return null;
+                return updateGraphByVertex(v1,change,change.getTGFDs(),tgfdsByName, false);
+            } else if (change.getTypeOfChange() == ChangeType.insertVertex) {
+                if (change.getTGFDs().size() == 0)
+                    findRelevantTGFDs(vertexChange, ((VertexChange) change).getVertex());
+                if (change.getTGFDs().size() == 0)
+                    return null;
+                DataVertex v1 = (DataVertex) baseGraph.getNode(vertexChange.getVertex().getVertexURI());
+                if (v1 != null) // if a node with identical uri wasn't deleted before, delete it now
+                    baseGraph.deleteVertex(v1);
+                return updateGraphByVertex(((VertexChange) change).getVertex(),change,change.getTGFDs(),tgfdsByName, true);
+            }
+            else
+                return null;
+        }
+        else if(change instanceof EdgeChange)
         {
             EdgeChange edgeChange=(EdgeChange) change;
             DataVertex v1= (DataVertex) baseGraph.getNode(edgeChange.getSrc());
@@ -62,13 +160,13 @@ public class IncUpdates {
                 findRelevantTGFDs(edgeChange,v1);
                 findRelevantTGFDs(edgeChange,v2);
             }
-
-            if(edgeChange.getTypeOfChange()== ChangeType.insertEdge)
+            // TODO: If change.getTGFDs().size() is still 0, can we return null?
+            if (edgeChange.getTypeOfChange()== ChangeType.insertEdge)
                 return updateGraphByEdge(v1,v2,new RelationshipEdge(edgeChange.getLabel()),change.getTGFDs(),tgfdsByName,true);
-            else if(edgeChange.getTypeOfChange()== ChangeType.deleteEdge)
+            else if (edgeChange.getTypeOfChange()== ChangeType.deleteEdge)
                 return updateGraphByEdge(v1,v2,new RelationshipEdge(edgeChange.getLabel()),change.getTGFDs(),tgfdsByName,false);
             else
-                throw new IllegalArgumentException("The change is instnace of EdgeChange, but type of change is: " + edgeChange.getTypeOfChange());
+                throw new IllegalArgumentException("The change is instance of EdgeChange, but type of change is: " + edgeChange.getTypeOfChange());
         }
         else if(change instanceof AttributeChange || change instanceof TypeChange)
         {
@@ -99,10 +197,56 @@ public class IncUpdates {
                     }
                 }
             }
+            // TODO: If change.getTGFDs().size() is still 0, can we return null?
             return updateGraphBySetOfAttributes(v1,changes,affectedTGFDs,tgfdsByName,includesTypeChange);
         }
         else
             return null;
+    }
+
+    private HashMap<String, IncrementalChange> updateGraphByVertex(DataVertex v1, Change change, Set<String> affectedTGFDNames, HashMap<String, TGFD> tgfdsByName, boolean insertVertex) {
+        HashMap<String,IncrementalChange> incrementalChangeHashMap=new HashMap <>();
+        Graph<Vertex, RelationshipEdge> subgraph;
+        if (insertVertex) {
+            subgraph = new DefaultDirectedGraph<>(RelationshipEdge.class);
+            for (String tgfdName:affectedTGFDNames) {
+                Iterator<GraphMapping<Vertex, RelationshipEdge>> beforeChange = Collections.emptyIterator();
+                IncrementalChange incrementalChange = new IncrementalChange(beforeChange, tgfdsByName.get(tgfdName).getPattern());
+                incrementalChangeHashMap.put(tgfdsByName.get(tgfdName).getName(), incrementalChange);
+            }
+        } else {
+            subgraph = baseGraph.getSubGraphWithinDiameter(v1, 0, new HashSet<>(), new HashSet<>());
+            for (String tgfdName:affectedTGFDNames) {
+                Iterator<GraphMapping<Vertex, RelationshipEdge>> beforeChange = VF2.execute(subgraph,tgfdsByName.get(tgfdName).getPattern(),false);
+                IncrementalChange incrementalChange=new IncrementalChange(beforeChange,tgfdsByName.get(tgfdName).getPattern());
+                incrementalChangeHashMap.put(tgfdsByName.get(tgfdName).getName(),incrementalChange);
+            }
+        }
+
+        if (insertVertex) {
+//            subgraph.addVertex(v1);
+            baseGraph.addVertex(v1);
+            v1 = (DataVertex) baseGraph.getNode(v1.getVertexURI());
+            subgraph = baseGraph.getSubGraphWithinDiameter(v1, 0, new HashSet<>(), new HashSet<>());
+        } else {
+            subgraph.removeVertex(v1);
+            baseGraph.deleteVertex(((VertexChange) change).getVertex());
+        }
+
+        // Run VF2 again...
+        for (String tgfdName:affectedTGFDNames) {
+            Iterator<GraphMapping<Vertex, RelationshipEdge>> afterChange;
+//            if (insertVertex) {
+            afterChange = VF2.execute(subgraph,tgfdsByName.get(tgfdName).getPattern(),false);
+//            } else {
+//                afterChange = VF2.execute(subgraph,tgfdsByName.get(tgfdName).getPattern(),false);
+//            }
+
+            String res = incrementalChangeHashMap.get(tgfdsByName.get(tgfdName).getName()).addAfterMatches(afterChange);
+
+            //System.out.print("  ** Add: " + (System.currentTimeMillis()-runtime) + " - " + res + " \n");
+        }
+        return incrementalChangeHashMap;
     }
 
     public void deleteVertices(List<Change> allChange)
@@ -131,8 +275,12 @@ public class IncUpdates {
         //long runtime=System.currentTimeMillis();
         HashMap<String,IncrementalChange> incrementalChangeHashMap=new HashMap <>();
         DataVertex vertex = v1;
-        int radius = 1;
-        if (getPatternSize(affectedTGFDNames, tgfdsByName) > 1) {
+        int radius;
+        if (getPatternSize(affectedTGFDNames, tgfdsByName) < 1) {
+            radius = 0;
+        } else if (getPatternSize(affectedTGFDNames, tgfdsByName) == 1) {
+            radius = 1;
+        } else { // if (getPatternSize(affectedTGFDNames, tgfdsByName) > 1) {
             int v1Radius = getDiameter(affectedTGFDNames, tgfdsByName, v1);
             int v2Radius = getDiameter(affectedTGFDNames, tgfdsByName, v2);
             vertex = v1Radius <= v2Radius ? v1 : v2;
@@ -315,7 +463,7 @@ public class IncUpdates {
     {
         //change.addTGFD(v.getTypes().stream().filter(type -> relaventTGFDs.containsKey(type)));
         for (String type:v.getTypes())
-            if(relaventTGFDs.containsKey(type))
+            if (relaventTGFDs.containsKey(type))
                 change.addTGFD(relaventTGFDs.get(type));
     }
 

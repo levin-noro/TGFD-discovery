@@ -51,7 +51,8 @@ public class testDiffExtractorIMDB {
         tgfdDiscovery.setLoader("imdb");
         tgfdDiscovery.setStoreInMemory(false);
 
-        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
+        tgfdDiscovery.loadGraphsAndComputeHistogram2();
+//        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
 
         ArrayList<TGFD> dummyTGFDs = tgfdDiscovery.getDummyVertexTypeTGFDs();
 

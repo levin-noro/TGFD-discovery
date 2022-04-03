@@ -39,6 +39,16 @@ public class VariableLiteral extends Literal
         this.attrName_1=attrName_1;
         this.attrName_2=attrName_2;
     }
+
+    public VariableLiteral(String vertexType, String attrName)
+    {
+        super(LiteralType.Variable);
+
+        this.vertexType_1=vertexType;
+        this.vertexType_2=vertexType;
+        this.attrName_1=attrName;
+        this.attrName_2=attrName;
+    }
     //endregion
 
     //region --[Properties: Public]------------------------------------
