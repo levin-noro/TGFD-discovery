@@ -39,20 +39,26 @@ public class Delta {
                 '}';
     }
 
+    // TODO: Which unit of time should we use?
     public boolean subsetOf(Delta delta) {
-        return this.getMin().getDays() >= delta.getMin().getDays() && this.getMax().getDays() <= delta.getMax().getDays();
+        return this.getMin().getYears() >= delta.getMin().getYears() && this.getMax().getYears() <= delta.getMax().getYears();
     }
 
+    // TODO: Which unit of time should we use?
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Delta delta = (Delta) o;
-        return min.getDays() == delta.min.getDays() && max.getDays() == delta.max.getDays() && granularity.toDays() == delta.granularity.toDays();
+        return min.getYears() == delta.min.getYears() && max.getYears() == delta.max.getYears() && granularity.toDays() == delta.granularity.toDays();
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(min, max, granularity);
+    }
+
+    public int getIntervalWidth() {
+        return this.getMax().getYears();
     }
 }

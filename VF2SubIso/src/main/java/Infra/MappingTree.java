@@ -12,13 +12,16 @@ public class MappingTree {
 
     public void addLevel() {
         getTree().add(new ArrayList<>());
-//        System.out.println("TgfdDiscovery.MappingTree levels: " + getTree().size());
     }
 
     public MappingTreeNode createNodeAtLevel(int level, DataVertex dataVertex, String patternVertexType, MappingTreeNode parentNode) {
         MappingTreeNode node = new MappingTreeNode(dataVertex, patternVertexType, parentNode);
         getTree().get(level).add(node);
         return node;
+    }
+
+    public void createNodeAtLevel(int level, MappingTreeNode mappingTreeNode) {
+        getTree().get(level).add(mappingTreeNode);
     }
 
     public List<MappingTreeNode> getLevel(int i) {
