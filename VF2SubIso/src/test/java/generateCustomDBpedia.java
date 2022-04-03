@@ -20,8 +20,8 @@ public class generateCustomDBpedia {
     public static final String TYPES = "types";
     public static final String LITERALS = "literals";
     public static final String OBJECTS = "objects";
-    public static final double LOWER_THRESHOLD = 0.05;
-    public static final double UPPER_THRESHOLD = 0.1;
+    public static final double LOWER_THRESHOLD = 0.01;
+    public static final double UPPER_THRESHOLD = 0.01;
 
     public static void main(String[] args) {
         Options options = new Options();
