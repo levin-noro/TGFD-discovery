@@ -1,13 +1,13 @@
 package graphLoader;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
 import Infra.Attribute;
 import Infra.DataVertex;
 import Infra.RelationshipEdge;
 import Infra.TGFD;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
 import org.apache.commons.lang3.RandomStringUtils;
 import util.Config;
 
@@ -17,29 +17,38 @@ import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SyntheticLoader extends GraphLoader {
 
     //region --[Fields: Private]---------------------------------------
 
-    private HashMap <String,Integer> typesDistribution =new HashMap <>();
-    private HashMap <String, HashMap<String,String>> schema =new HashMap <>();
+    private final HashMap<String, Integer> typesDistribution = new HashMap<>();
+    private final HashMap<String, HashMap<String, String>> schema = new HashMap<>();
+    private final Map<String, Integer> attributeDistribution = new HashMap<>();
+    private final Map<String, Integer> edgeDistribution = new HashMap<>();
 
     //endregion
 
     //region --[Methods: Private]---------------------------------------
 
     /**
-     * @param alltgfd List of TGFDs
-     * @param dataPath Path to the Synthetic graph file
+     * @param alltgfd   List of TGFDs
+     * @param dataPaths Path to the Synthetic graph file
      */
-    public SyntheticLoader(List<TGFD> alltgfd, List<String> dataPath)
-    {
+    public SyntheticLoader(List<TGFD> alltgfd, List<String> dataPaths) {
         super(alltgfd);
+        for (String dataPath : dataPaths)
+            loadDataGraph(dataPath);
+    }
 
-        for (String dataP:dataPath) {
-            loadDataGraph(dataP);
-        }
+    /**
+     * @param dataPaths Path to the Synthetic graph file
+     */
+    public SyntheticLoader(List<String> dataPaths) {
+        super();
+        for (String dataPath : dataPaths)
+            loadDataGraph(dataPath);
     }
 
     //endregion
@@ -48,6 +57,7 @@ public class SyntheticLoader extends GraphLoader {
 
     /**
      * This method will load DBPedia graph file
+     *
      * @param dataGraphFilePath Path to the graph file
      */
     private void loadDataGraph(String dataGraphFilePath) {
@@ -56,14 +66,12 @@ public class SyntheticLoader extends GraphLoader {
             System.out.println("No Input Graph Data File Path!");
             return;
         }
-        System.out.println("Loading Synthetic Graph: "+dataGraphFilePath);
+        System.out.println("Loading Synthetic Graph: " + dataGraphFilePath);
         BufferedReader br;
-        FileReader fr=null;
-        S3Object fullObject=null;
-        try
-        {
-            if(Config.Amazon)
-            {
+        FileReader fr = null;
+        S3Object fullObject = null;
+        try {
+            if (Config.Amazon) {
                 AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
                         .withRegion(Config.region)
                         //.withCredentials(new ProfileCredentialsProvider())
@@ -71,72 +79,67 @@ public class SyntheticLoader extends GraphLoader {
                         .build();
 
                 //TODO: Need to check if the path is correct (should be in the form of bucketName/Key )
-                String bucketName=dataGraphFilePath.substring(0,dataGraphFilePath.lastIndexOf("/"));
-                String key=dataGraphFilePath.substring(dataGraphFilePath.lastIndexOf("/")+1);
-                System.out.println("Downloading the object from Amazon S3 - Bucket name: " + bucketName +" - Key: " + key);
+                String bucketName = dataGraphFilePath.substring(0, dataGraphFilePath.lastIndexOf("/"));
+                String key = dataGraphFilePath.substring(dataGraphFilePath.lastIndexOf("/") + 1);
+                System.out.println("Downloading the object from Amazon S3 - Bucket name: " + bucketName + " - Key: " + key);
                 fullObject = s3Client.getObject(new GetObjectRequest(bucketName, key));
 
                 br = new BufferedReader(new InputStreamReader(fullObject.getObjectContent()));
-            }
-            else
-            {
-                File file=new File(dataGraphFilePath);
-                fr=new FileReader(file);
-                br=new BufferedReader(fr);
+            } else {
+                File file = new File(dataGraphFilePath);
+                fr = new FileReader(file);
+                br = new BufferedReader(fr);
             }
 
 
             String line;
-            while((line=br.readLine())!=null)
-            {
-                String []rdf=line.toLowerCase().split(" ");
-                if(rdf.length==3)
-                {
-                    String []subject=rdf[0].split("_");
-                    String []object=rdf[2].split("_");
-                    if(subject.length==2 && object.length==2)
-                    {
-                        if(Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subject[0]))
+            while ((line = br.readLine()) != null) {
+                String[] rdf = line.toLowerCase().split(" ");
+                if (rdf.length == 3) {
+                    String[] subject = rdf[0].split("_");
+                    String[] object = rdf[2].split("_");
+                    if (subject.length == 2 && object.length == 2) {
+                        if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(subject[0]))
                             continue;
-                        if(Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(object[0]))
+                        if (Config.optimizedLoadingBasedOnTGFD && !validTypes.contains(object[0]))
                             continue;
 
-                        DataVertex subjectVertex= (DataVertex) graph.getNode(subject[1]);
-                        if (subjectVertex==null) {
-                            subjectVertex=new DataVertex(subject[1],subject[0]);
+                        DataVertex subjectVertex = (DataVertex) graph.getNode(subject[1]);
+                        if (subjectVertex == null) {
+                            subjectVertex = new DataVertex(subject[1], subject[0]);
                             subjectVertex.putAttributeIfAbsent(new Attribute("name", RandomStringUtils.randomAlphabetic(10)));
                             graph.addVertex(subjectVertex);
-                            if(typesDistribution.containsKey(subject[0]))
-                                typesDistribution.put(subject[0], typesDistribution.get(subject[0])+1);
+                            if (typesDistribution.containsKey(subject[0]))
+                                typesDistribution.put(subject[0], typesDistribution.get(subject[0]) + 1);
                             else
-                                typesDistribution.put(subject[0],1);
+                                typesDistribution.put(subject[0], 1);
                         }
 
                         // check if we have an attribute
-                        if (object[0].equals("string") || object[0].equals("integer") || object[0].equals("datetime"))
-                        {
+                        if (object[0].equals("string") || object[0].equals("integer") || object[0].equals("datetime")) {
                             subjectVertex.putAttributeIfAbsent(new Attribute(rdf[1], object[1]));
+                            attributeDistribution.merge(subject[0] + " " + rdf[1], 1, Integer::sum);
                             graphSize++;
                         }
-                        else // there is a node with a type
-                        {
-                            DataVertex objectVertex= (DataVertex) graph.getNode(object[1]);
-                            if (objectVertex==null) {
-                                objectVertex=new DataVertex(object[1],object[0]);
+                        else { // there is a node with a type
+                            DataVertex objectVertex = (DataVertex) graph.getNode(object[1]);
+                            if (objectVertex == null) {
+                                objectVertex = new DataVertex(object[1], object[0]);
                                 objectVertex.putAttributeIfAbsent(new Attribute("name", RandomStringUtils.randomAlphabetic(10)));
                                 graph.addVertex(objectVertex);
-                                if(typesDistribution.containsKey(object[0]))
-                                    typesDistribution.put(object[0], typesDistribution.get(object[0])+1);
+                                if (typesDistribution.containsKey(object[0]))
+                                    typesDistribution.put(object[0], typesDistribution.get(object[0]) + 1);
                                 else
-                                    typesDistribution.put(object[0],1);
+                                    typesDistribution.put(object[0], 1);
                             }
 
                             graph.addEdge(subjectVertex, objectVertex, new RelationshipEdge(rdf[1]));
+                            edgeDistribution.merge(subject[0] + " " + rdf[1] + " " + object[0], 1, Integer::sum);
                             graphSize++;
 
-                            if(!schema.containsKey(subject[0]))
-                                schema.put(subject[0],new HashMap <>());
-                            schema.get(subject[0]).put(object[0],rdf[1]);
+                            if (!schema.containsKey(subject[0]))
+                                schema.put(subject[0], new HashMap<>());
+                            schema.get(subject[0]).put(object[0], rdf[1]);
                         }
                     }
                 }
@@ -149,12 +152,17 @@ public class SyntheticLoader extends GraphLoader {
             }
             br.close();
 
-            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " +graph.getGraph().edgeSet().size());
-            System.out.println("Number of types: " + typesDistribution.size() + "\n");
-            typesDistribution.keySet().forEach(type -> System.out.print(type + ": " + typesDistribution.get(type) + " - "));
-        }
-        catch (Exception e)
-        {
+            System.out.println("Done. Nodes: " + graph.getGraph().vertexSet().size() + ",  Edges: " + graph.getGraph().edgeSet().size() + "\n");
+            System.out.println("Number of types: " + typesDistribution.size());
+            typesDistribution.keySet().forEach(type -> System.out.print(type + ": " + typesDistribution.get(type) + "\n"));
+            System.out.println();
+            System.out.println("Number of edge labels: " + edgeDistribution.size());
+            edgeDistribution.keySet().forEach(type -> System.out.print(type + ": " + edgeDistribution.get(type) + "\n"));
+            System.out.println();
+            System.out.println("Number of attributes: " + attributeDistribution.size());
+            attributeDistribution.keySet().forEach(type -> System.out.print(type + ": " + attributeDistribution.get(type) + "\n"));
+            System.out.println();
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -163,11 +171,11 @@ public class SyntheticLoader extends GraphLoader {
 
     //region --[Properties: Public]------------------------------------
 
-    public HashMap <String, Integer> getTypesDistribution() {
+    public HashMap<String, Integer> getTypesDistribution() {
         return typesDistribution;
     }
 
-    public HashMap <String, HashMap<String,String>> getSchema() {
+    public HashMap<String, HashMap<String, String>> getSchema() {
         return schema;
     }
 
