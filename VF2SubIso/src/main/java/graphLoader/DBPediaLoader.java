@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DBPediaLoader extends GraphLoader {
+    public static final String TYPE_PREDICATE_URI = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
     //region --[Methods: Private]---------------------------------------
 
@@ -135,14 +136,16 @@ public class DBPediaLoader extends GraphLoader {
             while (typeTriples.hasNext()) {
                 Statement stmt = typeTriples.nextStatement();
 
-                if (!stmt.getPredicate().getLocalName().equalsIgnoreCase("type")) continue;
+                if (!stmt.getPredicate().getURI().equals(TYPE_PREDICATE_URI))
+                    continue;
 
                 String nodeURI = stmt.getSubject().getURI().toLowerCase();
                 if (nodeURI.length() > 28) {
                     nodeURI = nodeURI.substring(28);
                 }
                 String nodeType = stmt.getObject().asResource().getLocalName().toLowerCase();
-                if (nodeType.trim().length() == 0) continue;
+                if (nodeType.trim().length() == 0)
+                    continue;
 
                 // ignore the node if the type is not in the validTypes and
                 // optimizedLoadingBasedOnTGFD is true
@@ -233,8 +236,10 @@ public class DBPediaLoader extends GraphLoader {
 
                 Statement stmt = dataTriples.nextStatement();
 
+                if (stmt.getPredicate().getURI().equals(TYPE_PREDICATE_URI))
+                    continue;
+
                 String predicate = stmt.getPredicate().getLocalName().toLowerCase();
-                if (predicate.equals("type")) continue;
 
                 String subjectNodeURI = stmt.getSubject().getURI().toLowerCase();
                 if (subjectNodeURI.length() > 28) {
