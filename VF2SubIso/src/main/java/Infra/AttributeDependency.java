@@ -2,6 +2,7 @@ package Infra;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 
 public class AttributeDependency {
@@ -9,12 +10,12 @@ public class AttributeDependency {
     ConstantLiteral rhs;
     private Delta delta;
 
-    public AttributeDependency(ArrayList<ConstantLiteral> dependency) {
+    public AttributeDependency(List<ConstantLiteral> dependency) {
         lhs = new HashSet<>(dependency.subList(0, dependency.size() - 1));
         rhs = dependency.get(dependency.size() - 1);
     }
 
-    public AttributeDependency(ArrayList<ConstantLiteral> pathToRoot, ConstantLiteral literal) {
+    public AttributeDependency(List<ConstantLiteral> pathToRoot, ConstantLiteral literal) {
         lhs = new HashSet<>(pathToRoot);
         rhs = literal;
     }
