@@ -1,4 +1,3 @@
-import graphLoader.DBPediaLoader;
 import graphLoader.IMDBLoader;
 import org.apache.commons.cli.*;
 import org.apache.jena.rdf.model.Model;
@@ -13,7 +12,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
-import static TgfdDiscovery.TgfdDiscovery.generateDbpediaTimestampToFilesMap;
 import static TgfdDiscovery.TgfdDiscovery.generateImdbTimestampToFilesMapFromPath;
 
 public class generateCustomImdb {
@@ -24,8 +22,9 @@ public class generateCustomImdb {
     public static void main(String[] args) {
         Options options = new Options();
         options.addOption("path", true, "generate graphs using files from specified path");
-        options.addOption("type", true, "generate graphs using type");
+        options.addOption("rdfType", true, "output data files using specified extension");
         options.addOption("count", true, "generate graphs based on vertex count");
+        options.addOption("t", true, "generate graphs with t snapshots");
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = null;
         try {
@@ -42,22 +41,28 @@ public class generateCustomImdb {
                 return;
             }
         }
+        String rdfType = "N-TRIPLE";
+        if (cmd.hasOption("rdfType")) {
+            rdfType = cmd.getOptionValue("rdfType");
+        }
+
+        int t = 0;
+        if (cmd.hasOption("t")) {
+            t = Integer.parseInt(cmd.getOptionValue("t"));
+        }
         List<Map.Entry<String, List<String>>> timestampToFilesMap = new ArrayList<>(generateImdbTimestampToFilesMapFromPath(path).entrySet());
         timestampToFilesMap.sort(Map.Entry.comparingByKey());
-//        if (cmd.hasOption("type")) {
-//            String[] numOfTypes = cmd.getOptionValue("type").split(",");
-//            generateCustomDBpediaBasedOnType(numOfTypes);
-//        }
+
         if (cmd.hasOption("count")) {
             String[] sizes = cmd.getOptionValue("count").split(",");
-            generateCustomDBpediaBasedOnSize2(sizes, timestampToFilesMap);
+            generateCustomDBpediaBasedOnSize2(sizes, timestampToFilesMap.subList(0, t), rdfType);
         }
     }
 
-    public static void generateCustomDBpediaBasedOnSize2(String[] args, List<Map.Entry<String, List<String>>> timestampToFilesMap) {
-        long[] sizes = new long[args.length];
+    public static void generateCustomDBpediaBasedOnSize2(String[] sizesStrings, List<Map.Entry<String, List<String>>> timestampToFilesMap, String rdfType) {
+        long[] sizes = new long[sizesStrings.length];
         for (int index = 0; index < sizes.length; index++) {
-            sizes[index] = Long.parseLong(args[index]);
+            sizes[index] = Long.parseLong(sizesStrings[index]);
         }
 
         for (Map.Entry<String, List<String>> timestampToFilesEntry : timestampToFilesMap) {
@@ -203,7 +208,8 @@ public class generateCustomImdb {
             for (int j = 0; j < sizes.length; j++) {
                 long size = sizes[j];
                 String directoryStructure = "imdb-" + size + "/";
-                String newFileName = directoryStructure + "imdb-" + timestampToFilesEntry.getKey() + ".nt";
+                String fileExtension = rdfType.equalsIgnoreCase("N-TRIPLE") ? ".nt" : ".ttl";
+                String newFileName = directoryStructure + "imdb-" + timestampToFilesEntry.getKey() + fileExtension;
                 System.out.println("Creating model for " + newFileName);
                 double percentage = percentagesForThisTimestamp.get(j);
                 Model newModel = ModelFactory.createDefaultModel();
@@ -248,7 +254,7 @@ public class generateCustomImdb {
                 try {
                     System.out.print("Writing to " + newFileName + ". ");
                     Files.createDirectories(Paths.get(directoryStructure));
-                    newModel.write(new PrintStream(newFileName), "N-TRIPLE");
+                    newModel.write(new PrintStream(newFileName), rdfType.toUpperCase());
                     System.out.println("Done.");
                     new IMDBLoader(new ArrayList<>(), Collections.singletonList(newModel));
                 } catch (IOException e) {
