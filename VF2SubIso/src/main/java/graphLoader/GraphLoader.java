@@ -17,8 +17,10 @@ public class GraphLoader {
 
     //region --[Fields: Protected]---------------------------------------
 
-    /** size of the graph: #edges + #attributes */
-    protected int graphSize=0;
+    /**
+     * size of the graph: #edges + #attributes
+     */
+    protected int graphSize = 0;
 
     // Graph instance
     protected VF2DataGraph graph;
@@ -26,7 +28,7 @@ public class GraphLoader {
     // This will be used to filter the nodes that are not from the types in our TGFD lists
     // For example, if the tgfd is about "soccerplayer" and "team", we will only load the node types of "soccerplayer" and "team"
     // The filtering will be done if "properties.myProperties.optimizedLoadingBasedOnTGFD" set to TRUE
-    protected Set <String> validTypes;
+    protected Set<String> validTypes;
 
     // Same as validTypes, this will also be used to filter the attributes that are not from the types in our TGFD lists
     // The filtering will be done if "properties.myProperties.optimizedLoadingBasedOnTGFD" set to TRUE
@@ -36,31 +38,28 @@ public class GraphLoader {
 
     //region --[Constructors]--------------------------------------------
 
-    public GraphLoader(List <TGFD> alltgfd)
-    {
-        graph=new VF2DataGraph();
-        validTypes=new HashSet <>();
-        validAttributes=new HashSet<>();
+    public GraphLoader(List<TGFD> alltgfd) {
+        graph = new VF2DataGraph();
+        validTypes = new HashSet<>();
+        validAttributes = new HashSet<>();
 
-        if(Config.optimizedLoadingBasedOnTGFD)
-            for (TGFD tgfd:alltgfd) {
+        if (Config.optimizedLoadingBasedOnTGFD)
+            for (TGFD tgfd : alltgfd) {
                 extractValidTypesFromTGFD(tgfd);
                 extractValidAttributesFromTGFD(tgfd);
             }
     }
 
-    public GraphLoader()
-    {
-        graph=new VF2DataGraph();
-        validTypes=new HashSet <>();
-        validAttributes=new HashSet<>();
+    public GraphLoader() {
+        graph = new VF2DataGraph();
+        validTypes = new HashSet<>();
+        validAttributes = new HashSet<>();
     }
 
-    public GraphLoader(VF2DataGraph graph)
-    {
-        this.graph=graph;
-        validTypes=new HashSet <>();
-        validAttributes=new HashSet<>();
+    public GraphLoader(VF2DataGraph graph) {
+        this.graph = graph;
+        validTypes = new HashSet<>();
+        validAttributes = new HashSet<>();
     }
 
     //endregion
@@ -86,36 +85,31 @@ public class GraphLoader {
 
     //region --[Private Methods]-----------------------------------------
 
-    public void updateGraphWithChanges(List<Change> changes)
-    {
-        for (Change change:changes) {
-            if(change instanceof VertexChange && change.getTypeOfChange()==ChangeType.insertVertex)
+    public void updateGraphWithChanges(List<Change> changes) {
+        for (Change change : changes) {
+            if (change instanceof VertexChange && change.getTypeOfChange() == ChangeType.insertVertex)
                 this.graph.addVertex(((VertexChange) change).getVertex());
         }
 
-        for (Change change:changes)
-        {
-            if(change instanceof EdgeChange)
-            {
-                EdgeChange edgeChange=(EdgeChange) change;
-                DataVertex v1= (DataVertex) this.graph.getNode(edgeChange.getSrc());
-                DataVertex v2= (DataVertex) this.graph.getNode(edgeChange.getDst());
-                if(v1==null || v2==null)
+        for (Change change : changes) {
+            if (change instanceof EdgeChange) {
+                EdgeChange edgeChange = (EdgeChange) change;
+                DataVertex v1 = (DataVertex) this.graph.getNode(edgeChange.getSrc());
+                DataVertex v2 = (DataVertex) this.graph.getNode(edgeChange.getDst());
+                if (v1 == null || v2 == null)
                     continue;
-                if(edgeChange.getTypeOfChange()== ChangeType.insertEdge)
-                    this.graph.addEdge(v1, v2,new RelationshipEdge(edgeChange.getLabel()));
-                else if(edgeChange.getTypeOfChange()== ChangeType.deleteEdge)
-                    this.graph.removeEdge(v1,v2,new RelationshipEdge(edgeChange.getLabel()));
-            }
-            else if(change instanceof AttributeChange)
-            {
-                AttributeChange attributeChange=(AttributeChange) change;
-                DataVertex v1=(DataVertex) this.graph.getNode(attributeChange.getUri());
-                if(v1==null)
+                if (edgeChange.getTypeOfChange() == ChangeType.insertEdge)
+                    this.graph.addEdge(v1, v2, new RelationshipEdge(edgeChange.getLabel()));
+                else if (edgeChange.getTypeOfChange() == ChangeType.deleteEdge)
+                    this.graph.removeEdge(v1, v2, new RelationshipEdge(edgeChange.getLabel()));
+            } else if (change instanceof AttributeChange) {
+                AttributeChange attributeChange = (AttributeChange) change;
+                DataVertex v1 = (DataVertex) this.graph.getNode(attributeChange.getUri());
+                if (v1 == null)
                     continue;
-                if(attributeChange.getTypeOfChange()==ChangeType.changeAttr || attributeChange.getTypeOfChange()==ChangeType.insertAttr)
+                if (attributeChange.getTypeOfChange() == ChangeType.changeAttr || attributeChange.getTypeOfChange() == ChangeType.insertAttr)
                     v1.putAttributeIfAbsent(attributeChange.getAttribute());
-                else if(attributeChange.getTypeOfChange()==ChangeType.deleteAttr)
+                else if (attributeChange.getTypeOfChange() == ChangeType.deleteAttr)
                     v1.deleteAttribute(attributeChange.getAttribute());
             }
         }
@@ -127,64 +121,60 @@ public class GraphLoader {
 
     /**
      * Extracts all the types being used in a TGFD from from X->Y dependency and the graph pattern
+     *
      * @param tgfd input TGFD
      */
-    private void extractValidTypesFromTGFD(TGFD tgfd)
-    {
-        for (Literal x:tgfd.getDependency().getX()) {
-            if(x instanceof ConstantLiteral)
+    private void extractValidTypesFromTGFD(TGFD tgfd) {
+        for (Literal x : tgfd.getDependency().getX()) {
+            if (x instanceof ConstantLiteral)
                 validTypes.add(((ConstantLiteral) x).getVertexType());
-            else if(x instanceof VariableLiteral)
-            {
+            else if (x instanceof VariableLiteral) {
                 validTypes.add(((VariableLiteral) x).getVertexType_1());
                 validTypes.add(((VariableLiteral) x).getVertexType_2());
             }
 
         }
-        for (Literal x:tgfd.getDependency().getY()) {
-            if(x instanceof ConstantLiteral)
+        for (Literal x : tgfd.getDependency().getY()) {
+            if (x instanceof ConstantLiteral)
                 validTypes.add(((ConstantLiteral) x).getVertexType());
-            else if(x instanceof VariableLiteral)
-            {
+            else if (x instanceof VariableLiteral) {
                 validTypes.add(((VariableLiteral) x).getVertexType_1());
                 validTypes.add(((VariableLiteral) x).getVertexType_2());
             }
 
         }
-        for (Vertex v:tgfd.getPattern().getPattern().vertexSet()) {
-            if(v instanceof PatternVertex)
+        for (Vertex v : tgfd.getPattern().getPattern().vertexSet()) {
+            if (v instanceof PatternVertex)
                 validTypes.addAll(v.getTypes());
         }
     }
 
     /**
      * Extracts all the attributes names being used in a TGFD from from X->Y dependency and the graph pattern
+     *
      * @param tgfd input TGFD
      */
-    private void extractValidAttributesFromTGFD(TGFD tgfd)
-    {
-        for (Literal x:tgfd.getDependency().getX()) {
-            if(x instanceof ConstantLiteral)
+    private void extractValidAttributesFromTGFD(TGFD tgfd) {
+        for (Literal x : tgfd.getDependency().getX()) {
+            if (x instanceof ConstantLiteral)
                 validAttributes.add(((ConstantLiteral) x).getAttrName());
-            else if(x instanceof VariableLiteral)
-            {
+            else if (x instanceof VariableLiteral) {
                 validAttributes.add(((VariableLiteral) x).getAttrName_1());
                 validAttributes.add(((VariableLiteral) x).getAttrName_2());
             }
 
         }
-        for (Literal x:tgfd.getDependency().getY()) {
-            if(x instanceof ConstantLiteral)
+        for (Literal x : tgfd.getDependency().getY()) {
+            if (x instanceof ConstantLiteral)
                 validAttributes.add(((ConstantLiteral) x).getAttrName());
-            else if(x instanceof VariableLiteral)
-            {
+            else if (x instanceof VariableLiteral) {
                 validAttributes.add(((VariableLiteral) x).getAttrName_1());
                 validAttributes.add(((VariableLiteral) x).getAttrName_2());
             }
 
         }
-        for (Vertex v:tgfd.getPattern().getPattern().vertexSet()) {
-            if(v instanceof PatternVertex)
+        for (Vertex v : tgfd.getPattern().getPattern().vertexSet()) {
+            if (v instanceof PatternVertex)
                 validTypes.addAll(v.getAllAttributesNames());
         }
     }
