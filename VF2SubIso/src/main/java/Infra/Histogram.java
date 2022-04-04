@@ -45,8 +45,6 @@ public class Histogram {
     private Map<String, Set<String>> vertexTypesToActiveAttributesMap;
 
     public Histogram(int T, List<Map.Entry<String, List<String>>> timestampToPathsMap, String loader, int frequentSetSize, int gamma, Set<String> interestLabelsSet) {
-        if (timestampToPathsMap.size() != T)
-            throw new IllegalArgumentException("timestampToPathsMap does not contain paths to T snapshots");
         this.T = T;
         this.histogramStarTime = System.currentTimeMillis();
         this.timestampToPathsMap = timestampToPathsMap;
@@ -97,6 +95,8 @@ public class Histogram {
     }
 
     public void computeHistogramByReadingGraphsFromFile(boolean storeInMemory, Integer superVertexDegree) {
+        if (timestampToPathsMap.size() != T)
+            throw new IllegalArgumentException("timestampToPathsMap does not contain paths to T snapshots");
         int t = 0;
         for (Map.Entry<String, List<String>> timestampToPathEntry : timestampToPathsMap) {
             GraphLoader graphLoader = createGraphForTimestamp(timestampToPathEntry);
@@ -120,6 +120,8 @@ public class Histogram {
     }
 
     public void computeHistogramByReadingGraphsFromFileAndDissolveTypes() {
+        if (timestampToPathsMap.size() != T)
+            throw new IllegalArgumentException("timestampToPathsMap does not contain paths to T snapshots");
         int t = 0;
         for (Map.Entry<String, List<String>> timestampToPathEntry : timestampToPathsMap) {
             GraphLoader graphLoader = createGraphForTimestamp(timestampToPathEntry);
