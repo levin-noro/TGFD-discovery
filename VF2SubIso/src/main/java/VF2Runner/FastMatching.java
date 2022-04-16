@@ -12,27 +12,25 @@ import java.util.stream.Collectors;
 
 public class FastMatching extends LocalizedVF2Matching {
 
-    public FastMatching(PatternTreeNode patternTreeNode, int T, boolean interestingOnly, Map<String, Set<String>> vertexTypesToAttributesMap, boolean reUseMatches) {
-        super(patternTreeNode, T, interestingOnly, vertexTypesToAttributesMap, reUseMatches);
-        System.out.println("Pattern Type: "+this.patternTreeNode.getPattern().getPatternType().name());
+    public FastMatching(VF2PatternGraph pattern, PatternTreeNode centerVertexParent, int T, boolean interestingOnly, Map<String, Set<String>> vertexTypesToAttributesMap, boolean reUseMatches) {
+        super(pattern, centerVertexParent, T, interestingOnly, vertexTypesToAttributesMap, reUseMatches);
+        System.out.println("Pattern Type: "+this.pattern.getPatternType().name());
     }
 
     public void findMatches(List<GraphLoader> graphs, int T) {
-        for (int t = 0; t < T; t++) {
+        for (int t = 0; t < T; t++)
             findMatchesInSnapshot(graphs.get(t), t);
-        }
     }
 
     public void findMatchesInSnapshot(GraphLoader graph, int t) {
-        if (this.patternTreeNode.getPattern().getPatternType() == PatternType.SingleNode) {
+        if (this.pattern.getPatternType() == PatternType.SingleNode)
             findMatchesOfSingleVertex(graph, t);
-        } else {
+        else
             findMatchesUsingEntityURIs(graph, t);
-        }
     }
 
     private void findMatchesOfSingleVertex(GraphLoader graph, int t) {
-        String patternVertexType = this.patternTreeNode.getPattern().getCenterVertexType();
+        String patternVertexType = this.pattern.getCenterVertexType();
         Set<Set<ConstantLiteral>> matchesInThisTimestamp = new HashSet<>();
         findAllMatchesOfK0patternInSnapshotUsingCenterVertices(graph, t, patternVertexType, matchesInThisTimestamp);
         System.out.println("Number of center vertex matches found containing active attributes: " + matchesInThisTimestamp.size());
@@ -45,12 +43,12 @@ public class FastMatching extends LocalizedVF2Matching {
             if (v.getTypes().contains(patternVertexType)) {
                 numOfMatches++;
                 DataVertex dataVertex = (DataVertex) v;
-                HashSet<ConstantLiteral> match = new HashSet<>();
+                Set<ConstantLiteral> match = new HashSet<>();
                 Map<String, Integer> interestingnessMap = new HashMap<>();
                 String entityURI = extractAttributes(patternVertexType, match, dataVertex, interestingnessMap);
                 if (this.interestingOnly && interestingnessMap.values().stream().anyMatch(n -> n < 2)) {
                     continue;
-                } else if (!this.interestingOnly && match.size() < this.patternTreeNode.getGraph().vertexSet().size()) {
+                } else if (!this.interestingOnly && match.size() < this.pattern.getGraph().vertexSet().size()) {
                     continue;
                 }
                 if (entityURI != null) {
@@ -68,16 +66,16 @@ public class FastMatching extends LocalizedVF2Matching {
 
         Map<String, List<Integer>> existingEntityURIs = getExistingEntityURIs(graph, t);
 
-        int processedCenterVertices = 0; int numOfMatchesFound = 0;
+        int processedCenterVertices = 0;
         for (Map.Entry<String, List<Integer>> entry: existingEntityURIs.entrySet()) {
             if (entry.getValue().get(t) > 0) {
                 String centerVertexUri = entry.getKey();
                 DataVertex centerVertex = (DataVertex) graph.getGraph().getNode(centerVertexUri);
-                ArrayList<HashSet<ConstantLiteral>> matches = new ArrayList<>();
-                findMatchesAroundThisCenterVertex(graph, t, centerVertex, matches);
-                matchesSet.addAll(matches);
-                numOfMatchesFound += matches.size();
-                if (numOfMatchesFound % 100000 == 1) System.out.println("Found "+numOfMatchesFound+" matches");
+                Set<Set<ConstantLiteral>> matchesAroundCenterVertex = new HashSet<>();
+                findMatchesAroundThisCenterVertex(graph, t, centerVertex, matchesAroundCenterVertex);
+                matchesSet.addAll(matchesAroundCenterVertex);
+                if (matchesSet.size() > 0 && matchesSet.size() % 100000 == 0)
+                    System.out.println("Found "+matchesSet.size()+" matches");
             }
             processedCenterVertices++;
             if (((int)(existingEntityURIs.size() * 0.25)) > 0 && processedCenterVertices % ((int)(existingEntityURIs.size() * 0.25)) == 0)
@@ -88,44 +86,43 @@ public class FastMatching extends LocalizedVF2Matching {
         matchesPerTimestamp.get(t).addAll(matchesSet);
     }
 
-    private void findMatchesAroundThisCenterVertex(GraphLoader currentSnapshot, int year, DataVertex dataVertex, ArrayList<HashSet<ConstantLiteral>> matches) {
-        PatternType patternType = this.patternTreeNode.getPattern().getPatternType();
+    private void findMatchesAroundThisCenterVertex(GraphLoader currentSnapshot, int year, DataVertex dataVertex, Set<Set<ConstantLiteral>> matchesAroundCenterVertex) {
+        PatternType patternType = this.pattern.getPatternType();
         switch (patternType) {
             case SingleNode -> throw new IllegalArgumentException("this.getCurrentVSpawnLevel() < 1");
-            case SingleEdge -> findAllMatchesOfK1patternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matches);
-            case DoubleEdge -> findAllMatchesOfK2PatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matches);
-            case Star -> findAllMatchesOfStarPatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matches);
-            case Line -> findAllMatchesOfLinePatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matches, false);
-            case Circle -> findAllMatchesOfLinePatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matches, true);
-            case Complex -> findAllMatchesOfPatternInThisSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matches);
+            case SingleEdge -> findAllMatchesOfK1patternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matchesAroundCenterVertex);
+            case DoubleEdge -> findAllMatchesOfK2PatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matchesAroundCenterVertex);
+            case Star -> findAllMatchesOfStarPatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matchesAroundCenterVertex);
+            case Line -> findAllMatchesOfLinePatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matchesAroundCenterVertex, false);
+            case Circle -> findAllMatchesOfLinePatternInSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matchesAroundCenterVertex, true);
+            case Complex -> findAllMatchesOfPatternInThisSnapshotUsingCenterVertex(currentSnapshot, dataVertex, year, matchesAroundCenterVertex);
             default -> throw new IllegalArgumentException("Unrecognized pattern type");
         }
     }
 
     // TODO: Does this method contain duplicate code that is common with other findMatch methods?
-    private void findAllMatchesOfPatternInThisSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex dataVertex, int timestamp, ArrayList<HashSet<ConstantLiteral>> matches) {
-        Set<String> edgeLabels = this.patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
-        int diameter = this.patternTreeNode.getPattern().getRadius();
-        Graph<Vertex, RelationshipEdge> subgraph = currentSnapshot.getGraph().getSubGraphWithinDiameter(dataVertex, diameter, edgeLabels, this.patternTreeNode.getGraph().edgeSet());
-        VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(subgraph, this.patternTreeNode.getPattern(), false);
+    private void findAllMatchesOfPatternInThisSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex dataVertex, int timestamp, Set<Set<ConstantLiteral>> matchesAroundCenterVertex) {
+        Set<String> edgeLabels = this.pattern.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
+        int diameter = this.pattern.getRadius();
+        Graph<Vertex, RelationshipEdge> subgraph = currentSnapshot.getGraph().getSubGraphWithinDiameter(dataVertex, diameter, edgeLabels, this.pattern.getGraph().edgeSet());
+        VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> results = new VF2SubgraphIsomorphism().execute2(subgraph, this.pattern, false);
 
-        if (results.isomorphismExists()) {
-            extractMatches(results.getMappings(), matches, timestamp);
-        }
+        if (results.isomorphismExists())
+            extractMatches(results.getMappings(), matchesAroundCenterVertex, timestamp);
     }
 
     // TODO: Does this method contain duplicate code that is common with other findMatch methods?
-    private void findAllMatchesOfLinePatternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex startDataVertex, int year, ArrayList<HashSet<ConstantLiteral>> matches, boolean isCyclic) {
+    private void findAllMatchesOfLinePatternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex startDataVertex, int year, Set<Set<ConstantLiteral>> matchesAroundCenterVertex, boolean isCyclic) {
 
-        Vertex startVertex = this.patternTreeNode.getPattern().getCenterVertex();
+        Vertex startVertex = this.pattern.getCenterVertex();
         String startVertexType = startVertex.getTypes().iterator().next();
 
         Vertex currentPatternVertex = startVertex;
         Set<RelationshipEdge> visited = new HashSet<>();
         List<RelationshipEdge> patternEdgePath = new ArrayList<>();
         System.out.println("Pattern edge path:");
-        while (visited.size() < this.patternTreeNode.getGraph().edgeSet().size()) {
-            for (RelationshipEdge patternEdge : this.patternTreeNode.getGraph().edgesOf(currentPatternVertex)) {
+        while (visited.size() < this.pattern.getGraph().edgeSet().size()) {
+            for (RelationshipEdge patternEdge : this.pattern.getGraph().edgesOf(currentPatternVertex)) {
                 if (!visited.contains(patternEdge)) {
                     boolean outgoing = patternEdge.getSource().equals(currentPatternVertex);
                     currentPatternVertex = outgoing ? patternEdge.getTarget() : patternEdge.getSource();
@@ -146,7 +143,7 @@ public class FastMatching extends LocalizedVF2Matching {
         System.out.println("Added node to MappingTree level "+mappingTree.getTree().size()+".");
         System.out.println("MappingTree level "+mappingTree.getTree().size()+" size = "+mappingTree.getTree().get(0).size());
 
-        for (int index = 0; index < this.patternTreeNode.getGraph().edgeSet().size(); index++) {
+        for (int index = 0; index < this.pattern.getGraph().edgeSet().size(); index++) {
 
             String currentPatternEdgeLabel = patternEdgePath.get(index).getLabel();
             PatternVertex currentPatternSourceVertex = (PatternVertex) patternEdgePath.get(index).getSource();
@@ -169,7 +166,7 @@ public class FastMatching extends LocalizedVF2Matching {
                             && dataEdge.getTarget().getTypes().contains(currentPatternTargetVertexLabel)) {
                         DataVertex otherVertex = (DataVertex) dataEdge.getTarget();
                         MappingTreeNode newMappingTreeNode = new MappingTreeNode(otherVertex, currentPatternTargetVertexLabel, currentMappingTreeNode);
-                        if (isCyclic && index == this.patternTreeNode.getGraph().edgeSet().size()-1) {
+                        if (isCyclic && index == this.pattern.getGraph().edgeSet().size()-1) {
                             if (!newMappingTreeNode.getDataVertex().getVertexURI().equals(startDataVertex.getVertexURI())) {
                                 newMappingTreeNode.setPruned(true);
                             }
@@ -185,7 +182,7 @@ public class FastMatching extends LocalizedVF2Matching {
                             && dataEdge.getTarget().getTypes().contains(currentPatternTargetVertexLabel)) {
                         DataVertex otherVertex = (DataVertex) dataEdge.getSource();
                         MappingTreeNode newMappingTreeNode = new MappingTreeNode(otherVertex, currentPatternSourceVertexLabel, currentMappingTreeNode);
-                        if (isCyclic && index == this.patternTreeNode.getGraph().edgeSet().size()-1) {
+                        if (isCyclic && index == this.pattern.getGraph().edgeSet().size()-1) {
                             if (!newMappingTreeNode.getDataVertex().getVertexURI().equals(startDataVertex.getVertexURI())) {
                                 newMappingTreeNode.setPruned(true);
                             }
@@ -198,13 +195,13 @@ public class FastMatching extends LocalizedVF2Matching {
             }
         }
 
-        if (mappingTree.getTree().size() == this.patternTreeNode.getGraph().vertexSet().size()) {
-            extractMatchesFromMappingTree(startDataVertex, year, mappingTree, matches);
+        if (mappingTree.getTree().size() == this.pattern.getGraph().vertexSet().size()) {
+            extractMatchesFromMappingTree(startDataVertex, year, mappingTree, matchesAroundCenterVertex);
         }
     }
 
     // TODO: Does this method contain duplicate code that is common with other findMatch methods?
-    private void findAllMatchesOfStarPatternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex centerDataVertex, int t, ArrayList<HashSet<ConstantLiteral>> matches) {
+    protected void findAllMatchesOfStarPatternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex centerDataVertex, int t, Set<Set<ConstantLiteral>> matchesAroundCenterVertex) {
 
         Map<PatternVertex, Set<DataVertex>> patternVertexToDataVerticesMap = getPatternVertexToDataVerticesMap(currentSnapshot, centerDataVertex);
 
@@ -227,11 +224,11 @@ public class FastMatching extends LocalizedVF2Matching {
             }
         }
 
-        extractMatchesFromMappingTree(centerDataVertex, t, mappingTree, matches);
+        extractMatchesFromMappingTree(centerDataVertex, t, mappingTree, matchesAroundCenterVertex);
     }
 
-    private void extractMatchesFromMappingTree(DataVertex centerDataVertex, int t, MappingTree mappingTree, ArrayList<HashSet<ConstantLiteral>> matches) {
-        Set<Vertex> patternVertexSet = this.patternTreeNode.getGraph().vertexSet();
+    private void extractMatchesFromMappingTree(DataVertex centerDataVertex, int t, MappingTree mappingTree, Set<Set<ConstantLiteral>> matchesAroundCenterVertex) {
+        Set<Vertex> patternVertexSet = this.pattern.getGraph().vertexSet();
         Set<ConstantLiteral> centerDataVertexLiterals = getCenterDataVertexLiterals(centerDataVertex);
         for (MappingTreeNode leafNode: mappingTree.getLevel(mappingTree.getTree().size()-1).stream().filter(mappingTreeNode -> !mappingTreeNode.isPruned()).collect(Collectors.toList())) {
             Set<MappingTreeNode> mapping = leafNode.getPathToRoot();
@@ -265,22 +262,22 @@ public class FastMatching extends LocalizedVF2Matching {
             } else if (match.size() <= patternVertexSet.size()) {
                 continue;
             }
-            matches.add(match);
+            matchesAroundCenterVertex.add(match);
         }
 
         String entityURI = centerDataVertex.getVertexURI();
         // TODO: The following lines are common among all findMatch methods. Can they be combined?
-        if (matches.size() > 0) { // equivalent to entityURI != null
+        if (matchesAroundCenterVertex.size() > 0) { // equivalent to entityURI != null
             this.entityURIs.putIfAbsent(entityURI, TgfdDiscovery.createEmptyArrayListOfSize(this.T));
-            this.entityURIs.get(entityURI).set(t, this.entityURIs.get(entityURI).get(t)+matches.size());
+            this.entityURIs.get(entityURI).set(t, this.entityURIs.get(entityURI).get(t)+matchesAroundCenterVertex.size());
         }
     }
 
-    private void findAllMatchesOfK1patternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex dataVertex, int timestamp, ArrayList<HashSet<ConstantLiteral>> matches) {
-        String centerVertexType = this.patternTreeNode.getPattern().getCenterVertexType();
-        Set<String> edgeLabels = this.patternTreeNode.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
-        String sourceType = this.patternTreeNode.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
-        String targetType = this.patternTreeNode.getGraph().edgeSet().iterator().next().getTarget().getTypes().iterator().next();
+    protected void findAllMatchesOfK1patternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex dataVertex, int timestamp, Set<Set<ConstantLiteral>> matchesAroundCenterVertex) {
+        String centerVertexType = this.pattern.getCenterVertexType();
+        Set<String> edgeLabels = this.pattern.getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
+        String sourceType = this.pattern.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
+        String targetType = this.pattern.getGraph().edgeSet().iterator().next().getTarget().getTypes().iterator().next();
 
         Set<RelationshipEdge> edgeSet;
         if (centerVertexType.equals(sourceType)) {
@@ -289,12 +286,12 @@ public class FastMatching extends LocalizedVF2Matching {
             edgeSet = currentSnapshot.getGraph().getGraph().incomingEdgesOf(dataVertex).stream().filter(e -> edgeLabels.contains(e.getLabel()) && e.getSource().getTypes().contains(sourceType)).collect(Collectors.toSet());
         }
 
-        extractMatches(edgeSet, matches, timestamp);
+        extractMatches(edgeSet, matchesAroundCenterVertex, timestamp);
     }
 
     // Use this for k=2 instead of findAllMatchesOfStarPattern to avoid overhead of creating a MappingTree
-    private void findAllMatchesOfK2PatternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex dataVertex, int t, ArrayList<HashSet<ConstantLiteral>> matches) {
-        Set<Vertex> patternVertexSet = this.patternTreeNode.getGraph().vertexSet();
+    private void findAllMatchesOfK2PatternInSnapshotUsingCenterVertex(GraphLoader currentSnapshot, DataVertex dataVertex, int t, Set<Set<ConstantLiteral>> matchesAroundCenterVertex) {
+        Set<Vertex> patternVertexSet = this.pattern.getGraph().vertexSet();
 
         Map<PatternVertex, Set<DataVertex>> patternVertexToDataVerticesMap = getPatternVertexToDataVerticesMap(currentSnapshot, dataVertex);
 
@@ -343,21 +340,21 @@ public class FastMatching extends LocalizedVF2Matching {
                 } else if (match.size() <= patternVertexSet.size()) {
                     continue;
                 }
-                matches.add(match);
+                matchesAroundCenterVertex.add(match);
             }
         }
         String entityURI = dataVertex.getVertexURI();
-        if (matches.size() > 0) { // equivalent to entityURI != null
+        if (matchesAroundCenterVertex.size() > 0) { // equivalent to entityURI != null
             this.entityURIs.putIfAbsent(entityURI, TgfdDiscovery.createEmptyArrayListOfSize(this.T));
-            this.entityURIs.get(entityURI).set(t, this.entityURIs.get(entityURI).get(t)+matches.size());
+            this.entityURIs.get(entityURI).set(t, this.entityURIs.get(entityURI).get(t)+matchesAroundCenterVertex.size());
         }
     }
 
     @NotNull
     private Map<PatternVertex, Set<DataVertex>> getPatternVertexToDataVerticesMap(GraphLoader currentSnapshot, DataVertex dataVertex) {
         Map<PatternVertex, Set<DataVertex>> patternVertexToDataVerticesMap = new HashMap<>();
-        Vertex centerPatternVertex = this.patternTreeNode.getPattern().getCenterVertex();
-        for (RelationshipEdge patternEdge: this.patternTreeNode.getPattern().getPattern().incomingEdgesOf(centerPatternVertex)) {
+        Vertex centerPatternVertex = this.pattern.getCenterVertex();
+        for (RelationshipEdge patternEdge: this.pattern.getGraph().incomingEdgesOf(centerPatternVertex)) {
             PatternVertex nonCenterPatternVertex = (PatternVertex) patternEdge.getSource();
             patternVertexToDataVerticesMap.put(nonCenterPatternVertex, new HashSet<>());
             for (RelationshipEdge dataEdge: currentSnapshot.getGraph().getGraph().incomingEdgesOf(dataVertex)) {
@@ -367,7 +364,7 @@ public class FastMatching extends LocalizedVF2Matching {
                 }
             }
         }
-        for (RelationshipEdge patternEdge: this.patternTreeNode.getPattern().getPattern().outgoingEdgesOf(centerPatternVertex)) {
+        for (RelationshipEdge patternEdge: this.pattern.getGraph().outgoingEdgesOf(centerPatternVertex)) {
             PatternVertex nonCenterPatternVertex = (PatternVertex) patternEdge.getTarget();
             patternVertexToDataVerticesMap.put(nonCenterPatternVertex, new HashSet<>());
             for (RelationshipEdge dataEdge: currentSnapshot.getGraph().getGraph().outgoingEdgesOf(dataVertex)) {
@@ -383,7 +380,7 @@ public class FastMatching extends LocalizedVF2Matching {
     @NotNull
     private Set<ConstantLiteral> getCenterDataVertexLiterals(DataVertex dataVertex) {
         Set<ConstantLiteral> centerDataVertexLiterals = new HashSet<>();
-        String centerVertexType = this.patternTreeNode.getPattern().getCenterVertexType();
+        String centerVertexType = this.pattern.getCenterVertexType();
         for (String matchedAttrName: dataVertex.getAllAttributesNames()) {
             for (ConstantLiteral activeAttribute : getActiveAttributesInPattern(true)) {
                 if (!centerVertexType.equals(activeAttribute.getVertexType())) continue;
@@ -396,10 +393,10 @@ public class FastMatching extends LocalizedVF2Matching {
         return centerDataVertexLiterals;
     }
 
-    private void extractMatches(Set<RelationshipEdge> edgeSet, ArrayList<HashSet<ConstantLiteral>> matches, int timestamp) {
-        String patternEdgeLabel = this.patternTreeNode.getGraph().edgeSet().iterator().next().getLabel();
-        String sourceVertexType = this.patternTreeNode.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
-        String targetVertexType = this.patternTreeNode.getGraph().edgeSet().iterator().next().getTarget().getTypes().iterator().next();
+    private void extractMatches(Set<RelationshipEdge> edgeSet, Set<Set<ConstantLiteral>> matchesAroundCenterVertex, int timestamp) {
+        String patternEdgeLabel = this.pattern.getGraph().edgeSet().iterator().next().getLabel();
+        String sourceVertexType = this.pattern.getGraph().edgeSet().iterator().next().getSource().getTypes().iterator().next();
+        String targetVertexType = this.pattern.getGraph().edgeSet().iterator().next().getTarget().getTypes().iterator().next();
         for (RelationshipEdge edge: edgeSet) {
             String matchedEdgeLabel = edge.getLabel();
             Set<String> matchedSourceVertexType = edge.getSource().getTypes();
@@ -410,22 +407,16 @@ public class FastMatching extends LocalizedVF2Matching {
                 String entityURI = extractMatch(edge.getSource(), sourceVertexType, edge.getTarget(), targetVertexType, literalsInMatch, interestingnessMap);
                 if (this.interestingOnly && interestingnessMap.values().stream().anyMatch(n -> n < 2)) {
                     continue;
-                } else if (!this.interestingOnly && literalsInMatch.size() < this.patternTreeNode.getGraph().vertexSet().size()) {
+                } else if (!this.interestingOnly && literalsInMatch.size() < this.pattern.getGraph().vertexSet().size()) {
                     continue;
                 }
                 if (entityURI != null) {
                     this.entityURIs.putIfAbsent(entityURI, TgfdDiscovery.createEmptyArrayListOfSize(this.T));
                     this.entityURIs.get(entityURI).set(timestamp, this.entityURIs.get(entityURI).get(timestamp)+1);
                 }
-                matches.add(literalsInMatch);
+                matchesAroundCenterVertex.add(literalsInMatch);
             }
         }
-        matches.sort(new Comparator<HashSet<ConstantLiteral>>() {
-            @Override
-            public int compare(HashSet<ConstantLiteral> o1, HashSet<ConstantLiteral> o2) {
-                return o1.size() - o2.size();
-            }
-        });
     }
 
     private String extractMatch(Vertex currentSourceVertex, String sourceVertexType, Vertex currentTargetVertex, String targetVertexType, HashSet<ConstantLiteral> match, Map<String, Integer> interestingnessMap) {

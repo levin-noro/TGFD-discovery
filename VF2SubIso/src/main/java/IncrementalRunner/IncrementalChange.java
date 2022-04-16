@@ -31,7 +31,7 @@ public class IncrementalChange {
 
     public Set<ConstantLiteral> extractMatch(GraphMapping<Vertex, RelationshipEdge> mapping) {
         Set<ConstantLiteral> match = new HashSet<>();
-        for (Vertex v: pattern.getPattern().vertexSet()) {
+        for (Vertex v: pattern.getGraph().vertexSet()) {
             Vertex currentMatchedVertex = mapping.getVertexCorrespondence(v, false);
             if (currentMatchedVertex == null) continue;
             String patternVertexType = v.getTypes().iterator().next();

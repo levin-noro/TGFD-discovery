@@ -420,7 +420,7 @@ public class IncUpdates {
         int maxDiameter=0;
         for (String tgfdName:affectedTGFDNames) {
             VF2PatternGraph pattern = tgfdsByName.get(tgfdName).getPattern();
-            Graph<Vertex,RelationshipEdge> patternGraph = pattern.getPattern();
+            Graph<Vertex,RelationshipEdge> patternGraph = pattern.getGraph();
             if (patternGraph.edgeSet().size() == 1) {
                 return pattern.getRadius();
             } else {
@@ -440,21 +440,21 @@ public class IncUpdates {
 
     private Set<String> getEdgeLabels(Set<String> affectedTGFDNames, HashMap<String, TGFD> tgfdsByName) {
         for (String tgfdName:affectedTGFDNames) {
-            return tgfdsByName.get(tgfdName).getPattern().getPattern().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
+            return tgfdsByName.get(tgfdName).getPattern().getGraph().edgeSet().stream().map(RelationshipEdge::getLabel).collect(Collectors.toSet());
         }
         return new HashSet<>();
     }
 
     private Set<RelationshipEdge> getPatternEdgeSet(Set<String> affectedTGFDNames, HashMap<String, TGFD> tgfdsByName) {
         for (String tgfdName:affectedTGFDNames) {
-            return tgfdsByName.get(tgfdName).getPattern().getPattern().edgeSet();
+            return tgfdsByName.get(tgfdName).getPattern().getGraph().edgeSet();
         }
         return new HashSet<>();
     }
 
     private int getPatternSize(Set<String> affectedTGFDNames, HashMap<String, TGFD> tgfdsByName) {
         for (String tgfdName:affectedTGFDNames) {
-            return tgfdsByName.get(tgfdName).getPattern().getPattern().edgeSet().size();
+            return tgfdsByName.get(tgfdName).getPattern().getGraph().edgeSet().size();
         }
         return 0;
     }
@@ -493,7 +493,7 @@ public class IncUpdates {
                 addRelevantType(((VariableLiteral) y).getVertexType_2(),tgfd.getName());
             }
         }
-        for (Vertex v:tgfd.getPattern().getPattern().vertexSet()) {
+        for (Vertex v:tgfd.getPattern().getGraph().vertexSet()) {
             if(v instanceof PatternVertex)
                 for (String type:v.getTypes())
                     addRelevantType(type,tgfd.getName());

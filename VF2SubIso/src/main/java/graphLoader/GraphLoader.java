@@ -143,7 +143,7 @@ public class GraphLoader {
             }
 
         }
-        for (Vertex v : tgfd.getPattern().getPattern().vertexSet()) {
+        for (Vertex v : tgfd.getPattern().getGraph().vertexSet()) {
             if (v instanceof PatternVertex)
                 validTypes.addAll(v.getTypes());
         }
@@ -173,7 +173,7 @@ public class GraphLoader {
             }
 
         }
-        for (Vertex v : tgfd.getPattern().getPattern().vertexSet()) {
+        for (Vertex v : tgfd.getPattern().getGraph().vertexSet()) {
             if (v instanceof PatternVertex)
                 validTypes.addAll(v.getAllAttributesNames());
         }

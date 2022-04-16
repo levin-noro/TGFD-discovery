@@ -43,7 +43,7 @@ public class VF2SubgraphIsomorphism {
 
         long startTime = System.currentTimeMillis();
         inspector = new VF2SubgraphIsomorphismInspector<>(
-                dataGraph.getGraph(), pattern.getPattern(),
+                dataGraph.getGraph(), pattern.getGraph(),
                 myVertexComparator, myEdgeComparator, cacheEdges);
 
         System.out.println("Search Cost: " + (System.currentTimeMillis() - startTime));
@@ -56,7 +56,7 @@ public class VF2SubgraphIsomorphism {
                     System.out.println("---------- Match found ---------- ");
                     GraphMapping<Vertex, RelationshipEdge> mappings = iterator.next();
 
-                    for (Vertex v : pattern.getPattern().vertexSet()) {
+                    for (Vertex v : pattern.getGraph().vertexSet()) {
                         Vertex currentMatchedVertex = mappings.getVertexCorrespondence(v, false);
                         if (currentMatchedVertex != null) {
                             System.out.println(v + " --> " + currentMatchedVertex);
@@ -80,7 +80,7 @@ public class VF2SubgraphIsomorphism {
     public VF2AbstractIsomorphismInspector<Vertex, RelationshipEdge> execute2(VF2DataGraph dataGraph, VF2PatternGraph pattern, boolean cacheEdges) {
         System.out.println("Graph Size :" + dataGraph.getGraph().vertexSet().size());
         inspector = new VF2SubgraphIsomorphismInspector<>(
-                dataGraph.getGraph(), pattern.getPattern(),
+                dataGraph.getGraph(), pattern.getGraph(),
                 myVertexComparator, myEdgeComparator, cacheEdges);
         return inspector;
     }
@@ -90,7 +90,7 @@ public class VF2SubgraphIsomorphism {
 //        System.out.println("Graph Size :" + dataGraph.vertexSet().size());
         long startTime = System.currentTimeMillis();
         inspector = new VF2SubgraphIsomorphismInspector<>(
-                dataGraph, pattern.getPattern(),
+                dataGraph, pattern.getGraph(),
                 myVertexComparator, myEdgeComparator, cacheEdges);
 //        System.out.println("Search Cost: " + (System.currentTimeMillis() - startTime));
         return inspector;
@@ -103,7 +103,7 @@ public class VF2SubgraphIsomorphism {
 
         long startTime = System.currentTimeMillis();
         inspector = new VF2SubgraphIsomorphismInspector<>(
-                dataGraph.getGraph(), pattern.getPattern(),
+                dataGraph.getGraph(), pattern.getGraph(),
                 myVertexComparator, myEdgeComparator, cacheEdges);
 
         System.out.println("Search Cost: " + (System.currentTimeMillis() - startTime));
@@ -115,7 +115,7 @@ public class VF2SubgraphIsomorphism {
                     System.out.println("---------- Match found ---------- ");
                     GraphMapping<Vertex, RelationshipEdge> mappings = iterator.next();
 
-                    for (Vertex v : pattern.getPattern().vertexSet()) {
+                    for (Vertex v : pattern.getGraph().vertexSet()) {
                         Vertex currentMatchedVertex = mappings.getVertexCorrespondence(v, false);
                         if (currentMatchedVertex != null) {
                             System.out.println(v + " --> " + currentMatchedVertex);
@@ -142,7 +142,7 @@ public class VF2SubgraphIsomorphism {
 
         long startTime = System.currentTimeMillis();
         inspector = new VF2SubgraphIsomorphismInspector<>(
-                dataGraph.getGraph(), pattern.getPattern(),
+                dataGraph.getGraph(), pattern.getGraph(),
                 myVertexComparator, myEdgeComparator, cacheEdges);
 
         System.out.println("Search Cost: " + (System.currentTimeMillis() - startTime));
@@ -155,7 +155,7 @@ public class VF2SubgraphIsomorphism {
                     System.out.println("---------- Match found ---------- ");
                     GraphMapping<Vertex, RelationshipEdge> mappings = iterator.next();
 
-                    for (Vertex v : pattern.getPattern().vertexSet()) {
+                    for (Vertex v : pattern.getGraph().vertexSet()) {
                         Vertex currentMatchedVertex = mappings.getVertexCorrespondence(v, false);
                         if (currentMatchedVertex != null) {
                             System.out.println(v + " --> " + currentMatchedVertex);
@@ -182,7 +182,7 @@ public class VF2SubgraphIsomorphism {
 
         long startTime = System.currentTimeMillis();
         inspector = new VF2SubgraphIsomorphismInspector<>(
-                dataGraph, pattern.getPattern(),
+                dataGraph, pattern.getGraph(),
                 myVertexComparator, myEdgeComparator, cacheEdges);
 
         if(Config.printDetailedMatchingResults)
@@ -196,7 +196,7 @@ public class VF2SubgraphIsomorphism {
                     System.out.println("---------- Match found ---------- ");
                     GraphMapping<Vertex, RelationshipEdge> mappings = iterator.next();
 
-                    for (Vertex v : pattern.getPattern().vertexSet()) {
+                    for (Vertex v : pattern.getGraph().vertexSet()) {
                         Vertex currentMatchedVertex = mappings.getVertexCorrespondence(v, false);
                         if (currentMatchedVertex != null) {
                             System.out.println(v + " --> " + currentMatchedVertex);
