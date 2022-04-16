@@ -6,6 +6,7 @@ import Infra.*;
 import VF2Runner.FastMatching;
 import VF2Runner.LocalizedVF2Matching;
 import VF2Runner.VF2SubgraphIsomorphism;
+import VF2Runner.WindmillMatching;
 import changeExploration.*;
 import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
@@ -533,9 +534,12 @@ public class TgfdDiscovery {
 
 		LocalizedVF2Matching localizedVF2Matching;
 		if (this.isFastMatching())
-			localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
+				localizedVF2Matching = new WindmillMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			else
+				localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 		else
-			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
 		localizedVF2Matching.findMatches(graphs, this.getT());
 
@@ -742,7 +746,8 @@ public class TgfdDiscovery {
 			int numOfMatches = 0;
 			if (matchesInOneTimeStamp.size() > 0) {
 				for(Set<ConstantLiteral> match : matchesInOneTimeStamp) {
-					if (match.size() < attributes.size()) continue;
+					if (match.size() < attributes.size())
+						continue;
 					Set<ConstantLiteral> entity = new HashSet<>();
 					ConstantLiteral rhs = null;
 					for (ConstantLiteral literalInMatch : match) {
@@ -751,26 +756,27 @@ public class TgfdDiscovery {
 							continue;
 						}
 						for (ConstantLiteral attribute : xAttributes) {
-							if (literalInMatch.getVertexType().equals(attribute.getVertexType()) && literalInMatch.getAttrName().equals(attribute.getAttrName())) {
-								entity.add(new ConstantLiteral(literalInMatch.getVertexType(), literalInMatch.getAttrName(), literalInMatch.getAttrValue()));
-							}
+							if (literalInMatch.getVertexType().equals(attribute.getVertexType()) && literalInMatch.getAttrName().equals(attribute.getAttrName()))
+								entity.add(literalInMatch);
 						}
 					}
-					if (entity.size() < xAttributes.size() || rhs == null) continue;
+					if (entity.size() < xAttributes.size() || rhs == null)
+						continue;
 
-					if (!entitiesWithRHSvalues.containsKey(entity)) {
+					if (!entitiesWithRHSvalues.containsKey(entity))
 						entitiesWithRHSvalues.put(entity, new HashMap<>());
-					}
-					if (!entitiesWithRHSvalues.get(entity).containsKey(rhs)) {
+
+					if (!entitiesWithRHSvalues.get(entity).containsKey(rhs))
 						entitiesWithRHSvalues.get(entity).put(rhs, createEmptyArrayListOfSize(matchesPerTimestamps.size()));
-					}
+
 					entitiesWithRHSvalues.get(entity).get(rhs).set(timestamp, entitiesWithRHSvalues.get(entity).get(rhs).get(timestamp)+1);
 					numOfMatches++;
 				}
 			}
 			System.out.println("Number of matches: " + numOfMatches);
 		}
-		if (entitiesWithRHSvalues.size() == 0) return null;
+		if (entitiesWithRHSvalues.size() == 0)
+			return null;
 
 		Comparator<Entry<ConstantLiteral, List<Integer>>> comparator = new Comparator<Entry<ConstantLiteral, List<Integer>>>() {
 			@Override
@@ -820,7 +826,7 @@ public class TgfdDiscovery {
 		VF2PatternGraph patternForDependency = patternNode.getPattern().copy();
 		Set<ConstantLiteral> attributesSetForDependency = new HashSet<>(literalPath.getLhs());
 		attributesSetForDependency.add(literalPath.getRhs());
-		for (Vertex v : patternForDependency.getPattern().vertexSet()) {
+		for (Vertex v : patternForDependency.getGraph().vertexSet()) {
 			String vType = new ArrayList<>(v.getTypes()).get(0);
 			for (ConstantLiteral attribute : attributesSetForDependency) {
 				if (vType.equals(attribute.getVertexType())) {
@@ -889,7 +895,7 @@ public class TgfdDiscovery {
 
 		System.out.println("Number of delta: " + deltaToPairsMap.keySet().size());
 		for (Pair deltaPair : deltaToPairsMap.keySet()) {
-			System.out.println("constant delta: " + deltaPair);
+			System.out.println("Constant delta: " + deltaPair);
 		}
 
 		System.out.println("Delta to Pairs map...");
@@ -1019,7 +1025,7 @@ public class TgfdDiscovery {
 			VF2PatternGraph newPattern = patternNode.getPattern().copy();
 			Dependency newDependency = new Dependency();
 			AttributeDependency constantPath = new AttributeDependency();
-			for (Vertex v : newPattern.getPattern().vertexSet()) {
+			for (Vertex v : newPattern.getGraph().vertexSet()) {
 				String vType = new ArrayList<>(v.getTypes()).get(0);
 				if (vType.equalsIgnoreCase(yVertexType)) { // TODO: What if our pattern has duplicate vertex types?
 					v.putAttributeIfAbsent(new Attribute(yAttrName));
@@ -1474,7 +1480,8 @@ public class TgfdDiscovery {
 						System.out.println("Adding active attribute "+(index+1)+"/"+activeAttributesInPattern.size()+" to path...");
 						System.out.println("Literal: "+literal);
 						if (this.isOnlyInterestingTGFDs() && j < patternTreeNode.getGraph().vertexSet().size()) { // Ensures all vertices are involved in dependency
-							if (isUsedVertexType(literal.getVertexType(), parentsPathToRoot)) continue;
+							if (isUsedVertexType(literal.getVertexType(), parentsPathToRoot))
+								continue;
 						}
 
 						if (parentsPathToRoot.contains(literal)) {
@@ -2216,11 +2223,9 @@ public class TgfdDiscovery {
 				}
 				else if (this.useChangeFile()) {
 					this.getMatchesUsingChangeFiles3(patternTreeNode);
-				}
 				else {
-					// TODO: Implement pattern support calculation here using entityURIs?
 					Map<String, List<Integer>> entityURIs = new HashMap<>();
-					LocalizedVF2Matching localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+					LocalizedVF2Matching localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 					for (int t = 0; t < this.getT(); t++)
 						localizedVF2Matching.extractListOfCenterVerticesInSnapshot(patternTreeNode.getPattern().getCenterVertexType(), entityURIs, t, this.getGraphs().get(t));
 
@@ -2244,18 +2249,16 @@ public class TgfdDiscovery {
 				}
 			} else {
 				List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
-				if (this.isValidationSearch()) {
+				if (this.isValidationSearch())
 					matchesPerTimestamps = this.getMatchesForPatternUsingVF2(patternTreeNode);
-				}
-				else if (this.useChangeFile()) {
+				else if (this.useChangeFile())
 					matchesPerTimestamps = this.getMatchesUsingChangeFiles3(patternTreeNode);
-				}
 				else {
 					LocalizedVF2Matching localizedVF2Matching;
 					if (this.isFastMatching())
-						localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+						localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 					else
-						localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+						localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
 					localizedVF2Matching.findMatches(this.getGraphs(), this.getT());
 
@@ -2275,9 +2278,9 @@ public class TgfdDiscovery {
 				printWithTime("matchingTime", matchingEndTime);
 				this.addToTotalMatchingTime(matchingEndTime);
 
-				if (doesNotSatisfyTheta(patternTreeNode)) {
+				if (doesNotSatisfyTheta(patternTreeNode))
 					patternTreeNode.setIsPruned();
-				} else {
+				else {
 					final long hSpawnStartTime = System.currentTimeMillis();
 					ArrayList<TGFD> tgfds = this.hSpawn(patternTreeNode, matchesPerTimestamps);
 					printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
@@ -2302,9 +2305,9 @@ public class TgfdDiscovery {
 		for (Entry<String, List<Integer>> entityUriEntry : entityURIs.entrySet()) {
 			int numberOfAcrossMatchesOfEntity = (int) entityUriEntry.getValue().stream().filter(x -> x > 0).count();
 			int k = 2;
-			if (numberOfAcrossMatchesOfEntity >= k) {
+			if (numberOfAcrossMatchesOfEntity >= k)
 				numOfPossiblePairs += CombinatoricsUtils.binomialCoefficient(numberOfAcrossMatchesOfEntity, k);
-			}
+
 			int numberOfWithinMatchesOfEntity = (int) entityUriEntry.getValue().stream().filter(x -> x > 1).count();
 			numOfPossiblePairs += numberOfWithinMatchesOfEntity;
 		}
@@ -2331,7 +2334,7 @@ public class TgfdDiscovery {
 	}
 
 	public static boolean isDuplicateEdge(VF2PatternGraph pattern, String edgeType, String sourceType, String targetType) {
-		for (RelationshipEdge edge : pattern.getPattern().edgeSet()) {
+		for (RelationshipEdge edge : pattern.getGraph().edgeSet()) {
 			if (edge.getLabel().equalsIgnoreCase(edgeType)) {
 				if (edge.getSource().getTypes().contains(sourceType) && edge.getTarget().getTypes().contains(targetType)) {
 					return true;
@@ -2342,7 +2345,7 @@ public class TgfdDiscovery {
 	}
 
 	public static boolean isMultipleEdge(VF2PatternGraph pattern, String sourceType, String targetType) {
-		for (RelationshipEdge edge : pattern.getPattern().edgeSet()) {
+		for (RelationshipEdge edge : pattern.getGraph().edgeSet()) {
 			if (edge.getSource().getTypes().contains(sourceType) && edge.getTarget().getTypes().contains(targetType)) {
 				return true;
 			} else if (edge.getSource().getTypes().contains(targetType) && edge.getTarget().getTypes().contains(sourceType)) {
@@ -2473,7 +2476,7 @@ public class TgfdDiscovery {
 				targetVertex = new PatternVertex(targetVertexType);
 				newPattern.addVertex(targetVertex);
 			} else {
-				for (Vertex vertex : newPattern.getPattern().vertexSet()) {
+				for (Vertex vertex : newPattern.getGraph().vertexSet()) {
 					if (vertex.getTypes().contains(targetVertexType)) {
 						targetVertex.setMarked(true);
 						targetVertex = (PatternVertex) vertex;
@@ -2486,7 +2489,7 @@ public class TgfdDiscovery {
 				sourceVertex = new PatternVertex(sourceVertexType);
 				newPattern.addVertex(sourceVertex);
 			} else {
-				for (Vertex vertex : newPattern.getPattern().vertexSet()) {
+				for (Vertex vertex : newPattern.getGraph().vertexSet()) {
 					if (vertex.getTypes().contains(sourceVertexType)) {
 						sourceVertex.setMarked(true);
 						sourceVertex = (PatternVertex) vertex;
@@ -2580,7 +2583,7 @@ public class TgfdDiscovery {
 		final long isIsomorphicPatternCheckStartTime = System.currentTimeMillis();
 	    System.out.println("Checking if the pattern is isomorphic...");
 	    ArrayList<String> newPatternEdges = new ArrayList<>();
-        newPattern.getPattern().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
+        newPattern.getGraph().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
         boolean isIsomorphic = false;
 		for (PatternTreeNode otherPattern: patternTree.getLevel(this.getCurrentVSpawnLevel())) {
             ArrayList<String> otherPatternEdges = new ArrayList<>();
@@ -2602,7 +2605,7 @@ public class TgfdDiscovery {
 	private boolean isSuperGraphOfPrunedPattern(VF2PatternGraph newPattern, PatternTree patternTree) {
 		final long supergraphCheckingStartTime = System.currentTimeMillis();
         ArrayList<String> newPatternEdges = new ArrayList<>();
-        newPattern.getPattern().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
+        newPattern.getGraph().edgeSet().forEach((edge) -> {newPatternEdges.add(edge.toString());});
 		int i = this.getCurrentVSpawnLevel();
 		boolean isSupergraph = false;
 		while (i >= 0) {
@@ -2638,7 +2641,7 @@ public class TgfdDiscovery {
 	}
 
 	private PatternVertex isDuplicateVertex(VF2PatternGraph newPattern, String vertexType) {
-		for (Vertex v: newPattern.getPattern().vertexSet()) {
+		for (Vertex v: newPattern.getGraph().vertexSet()) {
 			if (v.getTypes().contains(vertexType)) {
 				return (PatternVertex) v;
 			}
@@ -2764,16 +2767,24 @@ public class TgfdDiscovery {
 	}
 
 	public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles3(PatternTreeNode patternTreeNode) {
+		Set<String> vertexSets = patternTreeNode.getGraph().vertexSet().stream().map(vertex -> vertex.getTypes().iterator().next()).collect(Collectors.toSet());
 		LocalizedVF2Matching localizedVF2Matching;
 		if (this.isFastMatching())
-			localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
+				localizedVF2Matching = new WindmillMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			else
+				localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 		else
-			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
 		GraphLoader graph = loadFirstSnapshot();
 		localizedVF2Matching.findMatchesInSnapshot(graph, 0);
 		for (int t = 1; t < this.getT(); t++) {
-			updateGraphUsingChangefile(graph, t);
+			if (this.isUseTypeChangeFile())
+				updateGraphUsingChangefileTypes(graph, t, vertexSets);
+			else
+				updateGraphUsingChangefileAll(graph, t, vertexSets);
+
 			localizedVF2Matching.findMatchesInSnapshot(graph, t);
 		}
 		Map<String, List<Integer>> entityURIs = localizedVF2Matching.getEntityURIs();
@@ -2792,11 +2803,25 @@ public class TgfdDiscovery {
 		return localizedVF2Matching.getMatchesPerTimestamp();
 	}
 
-	protected void updateGraphUsingChangefile(GraphLoader graph, int t) {
+	protected void updateGraphUsingChangefileAll(GraphLoader graph, int t, Set<String> vertexSets) {
 		System.out.println("-----------Snapshot (" + (t + 1) + ")-----------");
 		String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
 		JSONArray jsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
-		ChangeLoader changeLoader = new ChangeLoader(jsonArray, true);
+		ChangeLoader changeLoader = new ChangeLoader(jsonArray, vertexSets, true);
+		IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), new ArrayList<>());
+		sortChanges(changeLoader.getAllChanges());
+		incUpdatesOnDBpedia.updateEntireGraph(changeLoader.getAllChanges());
+	}
+
+	protected void updateGraphUsingChangefileTypes(GraphLoader graph, int t, Set<String> vertexSets) {
+		JSONArray jsonArray = new JSONArray();
+		for (String type: vertexSets) {
+			System.out.println("-----------Snapshot (" + (t + 1) + ")-----------");
+			String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + "-" + type + ".json";
+			JSONArray typeJsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
+			jsonArray.addAll(typeJsonArray);
+		}
+		ChangeLoader changeLoader = new ChangeLoader(jsonArray, null, true);
 		IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), new ArrayList<>());
 		sortChanges(changeLoader.getAllChanges());
 		incUpdatesOnDBpedia.updateEntireGraph(changeLoader.getAllChanges());
@@ -2842,9 +2867,12 @@ public class TgfdDiscovery {
 //		}
 		LocalizedVF2Matching localizedVF2Matching;
 		if (this.isFastMatching())
-			localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
+				localizedVF2Matching = new WindmillMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			else
+				localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 		else
-			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
 		GraphLoader graph = loadFirstSnapshot();
 		localizedVF2Matching.findMatchesInSnapshot(graph, 0);
@@ -2888,7 +2916,7 @@ public class TgfdDiscovery {
 					changesJsonArray = readJsonArrayFromFile(changeFilePath);
 				}
 			}
-			ChangeLoader changeLoader = new ChangeLoader(changesJsonArray, this.getCurrentVSpawnLevel() != 0);
+			ChangeLoader changeLoader = new ChangeLoader(changesJsonArray, null, this.getCurrentVSpawnLevel() != 0);
 			HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
 			System.out.println("Total number of changes in changefile: " + newChanges.size());
 
@@ -3166,7 +3194,7 @@ public class TgfdDiscovery {
 //		Config.optimizedLoadingBasedOnTGFD = false;
 
 		if (this.isDissolveSuperVerticesBasedOnCount())
-			this.dissolveSuperVerticesBasedOnCount(graph);
+			dissolveSuperVerticesBasedOnCount(graph, INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR);
 
 		printWithTime("Load graph (1)", System.currentTimeMillis()- startTime);
 		return graph;

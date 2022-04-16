@@ -3,7 +3,6 @@ package Infra;
 import org.jgrapht.Graph;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class PatternTreeNode {
     private VF2PatternGraph pattern;
@@ -35,45 +34,13 @@ public class PatternTreeNode {
     }
 
     public Graph<Vertex, RelationshipEdge> getGraph() {
-        return pattern.getPattern();
+        return pattern.getGraph();
     }
 
     private void setPattern(VF2PatternGraph pattern) {
         this.pattern = pattern;
         this.pattern.assignPatternType();
 //        this.checkIfCyclesExist();
-    }
-
-//    private void assignPatternType() {
-//        int patternSize = this.getPattern().getSize();
-//        if (patternSize < 1)
-//            this.setPatternType(PatternType.SingleNode);
-//        else if (patternSize == 1)
-//            this.setPatternType(PatternType.SingleEdge);
-//        else {
-//            if (patternSize == 2)
-//                this.setPatternType(PatternType.DoubleEdge);
-//            else { // > 2
-//                if (this.getGraph().edgesOf(this.getPattern().getCenterVertex()).size() == patternSize) // TODO: getCenterVertex can return null
-//                    this.setPatternType(PatternType.Star);
-//                else if (isLinePattern())
-//                    this.setPatternType(PatternType.Line);
-//                else if (isCirclePattern())
-//                    this.setPatternType(PatternType.Circle);
-//                else
-//                    this.setPatternType(PatternType.Complex);
-//            }
-//        }
-//        System.out.println("PatternType: "+ this.getPatternType().name());
-//    }
-
-    private boolean isLinePattern() {
-        List<Integer> degrees = this.getGraph().vertexSet().stream().map(vertex -> this.getGraph().edgesOf(vertex).size()).collect(Collectors.toList());
-        return degrees.stream().filter(degree -> degree == 1).count() == 2 && degrees.stream().filter(degree -> degree == 2).count() == this.getGraph().vertexSet().size() - 2;
-    }
-
-    private boolean isCirclePattern() {
-        return this.getGraph().vertexSet().stream().allMatch(vertex -> this.getGraph().edgesOf(vertex).size() == 2);
     }
 
     private void checkIfCyclesExist() {
@@ -125,7 +92,7 @@ public class PatternTreeNode {
     @Override
     public String toString() {
         return "PatternTreeNode{" +
-                "pattern=" + (pattern.getPattern().edgeSet().size() > 0 ? pattern : pattern.getPattern().vertexSet()) +
+                "pattern=" + (pattern.getGraph().edgeSet().size() > 0 ? pattern : pattern.getGraph().vertexSet()) +
                 ",\n support=" + patternSupport +
                 '}';
     }

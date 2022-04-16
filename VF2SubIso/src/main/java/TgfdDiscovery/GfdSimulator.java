@@ -5,6 +5,7 @@ import Infra.*;
 import VF2Runner.FastMatching;
 import VF2Runner.LocalizedVF2Matching;
 import VF2Runner.VF2SubgraphIsomorphism;
+import VF2Runner.WindmillMatching;
 import changeExploration.ChangeLoader;
 import graphLoader.GraphLoader;
 import graphLoader.SyntheticLoader;
@@ -174,7 +175,7 @@ public class GfdSimulator extends TgfdDiscovery {
                     Map<String, List<Integer>> entityURIs = new HashMap<>();
 //					ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertexPerTimestamp = extractListOfCenterVerticesAcrossAllSnapshots(graphs, patternVertexType, entityURIs);
 //					patternTreeNode.setListOfCenterVertices(matchesOfThisCenterVertexPerTimestamp);
-                    LocalizedVF2Matching localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+                    LocalizedVF2Matching localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
                     for (int t = 0; t < this.getT(); t++)
                         localizedVF2Matching.extractListOfCenterVerticesInSnapshot(patternTreeNode.getPattern().getCenterVertexType(), entityURIs, t, this.getGraphs().get(t));
 
@@ -218,9 +219,12 @@ public class GfdSimulator extends TgfdDiscovery {
 
                     LocalizedVF2Matching localizedVF2Matching;
                     if (this.isFastMatching())
-                        localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+                        if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
+                            localizedVF2Matching = new WindmillMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+                        else
+                            localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
                     else
-                        localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+                        localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
                     localizedVF2Matching.findMatches(this.getGraphs(), this.getT());
 
@@ -268,9 +272,12 @@ public class GfdSimulator extends TgfdDiscovery {
 
         LocalizedVF2Matching localizedVF2Matching;
         if (this.isFastMatching())
-            localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+            if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
+                localizedVF2Matching = new WindmillMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+            else
+                localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
         else
-            localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+            localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
         localizedVF2Matching.findMatches(graphs, this.getT());
 
@@ -330,9 +337,12 @@ public class GfdSimulator extends TgfdDiscovery {
     public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles3(PatternTreeNode patternTreeNode) {
         LocalizedVF2Matching localizedVF2Matching;
         if (this.isFastMatching())
-            localizedVF2Matching = new FastMatching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+            if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
+                localizedVF2Matching = new WindmillMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+            else
+                localizedVF2Matching = new FastMatching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
         else
-            localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode, this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
+            localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
         GraphLoader graph = this.loadFirstSnapshot();
         localizedVF2Matching.findMatchesInSnapshot(graph, 0);
@@ -494,7 +504,7 @@ public class GfdSimulator extends TgfdDiscovery {
         VF2PatternGraph patternForDependency = patternNode.getPattern().copy();
         Set<ConstantLiteral> attributesSetForDependency = new HashSet<>(literalPath.getLhs());
         attributesSetForDependency.add(literalPath.getRhs());
-        for (Vertex v : patternForDependency.getPattern().vertexSet()) {
+        for (Vertex v : patternForDependency.getGraph().vertexSet()) {
             String vType = new ArrayList<>(v.getTypes()).get(0);
             for (ConstantLiteral attribute : attributesSetForDependency) {
                 if (vType.equals(attribute.getVertexType())) {
@@ -585,7 +595,7 @@ public class GfdSimulator extends TgfdDiscovery {
             VF2PatternGraph newPattern = patternNode.getPattern().copy();
             Dependency newDependency = new Dependency();
             AttributeDependency constantPath = new AttributeDependency();
-            for (Vertex v : newPattern.getPattern().vertexSet()) {
+            for (Vertex v : newPattern.getGraph().vertexSet()) {
                 String vType = new ArrayList<>(v.getTypes()).get(0);
                 for (ConstantLiteral xLiteral : entityEntry.getKey()) {
                     if (xLiteral.getVertexType().equalsIgnoreCase(vType)) {
