@@ -913,7 +913,7 @@ public class TgfdDiscovery {
 		// TODO: Verify if TreeSet<Pair> is being sorted correctly
 		// TODO: Does this method only produce intervals (x,y), where x == y ?
 		ArrayList<Pair> currSatisfyingAttrValues = new ArrayList<>();
-		for (Pair deltaPair: deltaToPairsMap.keySet()) {
+		for (Pair deltaPair: deltaToPairsMap.keySet().stream().sorted().collect(Collectors.toList())) {
 			if (Math.max(currMin, deltaPair.min()) <= Math.min(currMax, deltaPair.max())) {
 				currMin = Math.max(currMin, deltaPair.min());
 				currMax = Math.min(currMax, deltaPair.max());
