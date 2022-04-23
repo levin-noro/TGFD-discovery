@@ -34,6 +34,9 @@ public class GraphLoader {
     // The filtering will be done if "properties.myProperties.optimizedLoadingBasedOnTGFD" set to TRUE
     protected Set<String> validAttributes;
 
+    // Types that are present in the graph
+    protected final HashSet<String> types = new HashSet<>();
+
     //endregion
 
     //region --[Constructors]--------------------------------------------
@@ -79,6 +82,13 @@ public class GraphLoader {
      */
     public int getGraphSize() {
         return graphSize;
+    }
+
+    /**
+     * @types Types that are present in the graph
+     * */
+    public HashSet<String> getTypes() {
+        return types;
     }
 
     //endregion

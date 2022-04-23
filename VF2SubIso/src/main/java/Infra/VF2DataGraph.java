@@ -33,37 +33,32 @@ public class VF2DataGraph implements Serializable {
         return graph;
     }
 
-    public void deleteVertex(DataVertex vertex)
+    public boolean deleteVertex(DataVertex vertex)
     {
-        if(nodeMap.containsKey(vertex.getVertexURI()))
-        {
-            DataVertex v = (DataVertex) this.getNode(vertex.getVertexURI());
-            if (v == null)
-                return;
-            List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.edgesOf(v));
-            for (RelationshipEdge e : edgesToDelete) {
-                graph.removeEdge(e);
-            }
-            graph.removeVertex(v);
-            nodeMap.remove(v.getVertexURI());
+        if(!nodeMap.containsKey(vertex.getVertexURI()))
+            return false;
+
+        DataVertex v = (DataVertex) this.getNode(vertex.getVertexURI());
+        if (v == null)
+            return false;
+        List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.edgesOf(v));
+        for (RelationshipEdge e : edgesToDelete) {
+            graph.removeEdge(e);
         }
-//        else
-//        {
-//            System.out.println("Node already existed, Vertex URI: " + v.getVertexURI());
-//        }
+        boolean deleteVertex = graph.removeVertex(v);
+        nodeMap.remove(v.getVertexURI());
+
+        return deleteVertex;
     }
 
-    public void addVertex(DataVertex v)
+    public boolean addVertex(DataVertex v)
     {
-        if(!nodeMap.containsKey(v.getVertexURI()))
-        {
-            graph.addVertex(v);
-            nodeMap.put(v.getVertexURI(),v);
-        }
-//        else
-//        {
-//            System.out.println("Node already existed, Vertex URI: " + v.getVertexURI());
-//        }
+        if(nodeMap.containsKey(v.getVertexURI()))
+            return false;
+
+        boolean addedVertex = graph.addVertex(v);
+        nodeMap.put(v.getVertexURI(),v);
+        return addedVertex;
     }
 
     public Vertex getNode(String vertexURI)
@@ -73,19 +68,30 @@ public class VF2DataGraph implements Serializable {
 
     public boolean addEdge(DataVertex v1, DataVertex v2, RelationshipEdge edge)
     {
-        return graph.addEdge(v1,v2,edge);
+        boolean addedEdge = graph.addEdge(v1, v2, edge);
+        if (!addedEdge) { // if multiple edges exist between v1 and v2, keep edge that is alphabetically first
+            for (RelationshipEdge e: graph.getAllEdges(v1,v2)) { // In VF2, there can only be 1 edge between v1 and v2
+                if (e.getLabel().compareTo(edge.getLabel()) > 0) {
+                    if (removeEdge(v1, v2, e))
+                        addedEdge = graph.addEdge(v1, v2, edge);
+                    return addedEdge;
+                }
+            }
+        }
+        return addedEdge;
     }
 
-    public void removeEdge(DataVertex v1, DataVertex v2, RelationshipEdge edge)
+    public boolean removeEdge(DataVertex v1, DataVertex v2, RelationshipEdge edge)
     {
         for (RelationshipEdge e:graph.outgoingEdgesOf(v1)) {
             DataVertex target=(DataVertex) e.getTarget();
             if(target.getVertexURI().equals(v2.getVertexURI()) && edge.getLabel().equals(e.getLabel()))
             {
-                this.graph.removeEdge(e);
-                return;
+                boolean removedEdge = this.graph.removeEdge(e);
+                return removedEdge;
             }
         }
+        return false;
     }
 
     public int getSize()

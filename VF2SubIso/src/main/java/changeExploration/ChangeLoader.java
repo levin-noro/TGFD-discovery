@@ -6,10 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
 
 public class ChangeLoader {
 
@@ -17,18 +14,18 @@ public class ChangeLoader {
 
     private HashMap<Integer,HashSet<Change>> allGroupedChanges;
 
-    public ChangeLoader(JSONArray jsonArray, boolean considerEdgeChanges)
+    public ChangeLoader(JSONArray jsonArray, Set<String> vertexSets, Map<String, Set<String>> typeChangeURIs, boolean considerEdgeChanges)
     {
         this.allChanges = new ArrayList<>();
         allGroupedChanges = new HashMap<>();
-        loadChanges(jsonArray, considerEdgeChanges);
+        loadChanges(jsonArray, vertexSets, typeChangeURIs, considerEdgeChanges);
     }
 
     public List<Change> getAllChanges() {
         return allChanges;
     }
 
-    private void loadChanges(JSONArray jsonArray, boolean considerEdgeChanges) {
+    private void loadChanges(JSONArray jsonArray, Set<String> vertexSets, Map<String, Set<String>> typeChangeURIs, boolean considerEdgeChanges) {
         for (Object o : jsonArray) {
             JSONObject object = (JSONObject) o;
 
@@ -37,58 +34,84 @@ public class ChangeLoader {
             for (Object TGFDName : allRelevantTGFDs)
                 relevantTGFDs.add((String) TGFDName);
 
+            org.json.simple.JSONArray allRelevantTypes = (org.json.simple.JSONArray) object.get("types");
+            Set<String> relevantTypes = new HashSet<>();
+            for (Object type : allRelevantTypes)
+                relevantTypes.add((String) type);
+
             ChangeType type = ChangeType.valueOf((String) object.get("typeOfChange"));
-            int id=Integer.parseInt(object.get("id").toString());
-            if (considerEdgeChanges && (type==ChangeType.deleteEdge || type==ChangeType.insertEdge))
-            {
-                String src=(String) object.get("src");
-                String dst=(String) object.get("dst");
-                String label=(String) object.get("label");
-                Change change=new EdgeChange(type,id,src,dst,label);
+            int id = Integer.parseInt(object.get("id").toString());
+            if (considerEdgeChanges && (type == ChangeType.deleteEdge || type == ChangeType.insertEdge)) {
+                String srcURI = (String) object.get("src");
+                String dstURI = (String) object.get("dst");
+                if (vertexSets != null && vertexSets.stream().noneMatch(s -> relevantTypes.contains(s)))
+                    if (notURIofInterest(srcURI, vertexSets, typeChangeURIs))
+                        continue;
+                    else if (notURIofInterest(dstURI, vertexSets, typeChangeURIs))
+                        continue;
+                String label = (String) object.get("label");
+                Change change = new EdgeChange(type, id, srcURI, dstURI, label);
                 change.addTGFD(relevantTGFDs);
+                change.addTypes(relevantTypes);
                 allChanges.add(change);
-                if(!allGroupedChanges.containsKey(change.getId()))
-                    allGroupedChanges.put(change.getId(),new HashSet<>());
+                if (!allGroupedChanges.containsKey(change.getId()))
+                    allGroupedChanges.put(change.getId(), new HashSet<>());
                 allGroupedChanges.get(change.getId()).add(change);
-            }
-            else if (type==ChangeType.changeAttr || type==ChangeType.deleteAttr || type==ChangeType.insertAttr)
-            {
-                String uri=(String) object.get("uri");
-                JSONObject attrObject=(JSONObject) object.get("attribute");
-                String attrName=(String) attrObject.get("attrName");
-                String attrValue=(String) attrObject.get("attrValue");
-                Change change=new AttributeChange(type,id,uri,new Attribute(attrName,attrValue));
+            } else if (type == ChangeType.changeAttr || type == ChangeType.deleteAttr || type == ChangeType.insertAttr) {
+                String uri = (String) object.get("uri");
+                if (vertexSets != null && vertexSets.stream().noneMatch(s -> relevantTypes.contains(s)))
+                    if (notURIofInterest(uri, vertexSets, typeChangeURIs))
+                        continue;
+                JSONObject attrObject = (JSONObject) object.get("attribute");
+                String attrName = (String) attrObject.get("attrName");
+                String attrValue = (String) attrObject.get("attrValue");
+                Change change = new AttributeChange(type, id, uri, new Attribute(attrName, attrValue));
                 change.addTGFD(relevantTGFDs);
+                change.addTypes(relevantTypes);
                 allChanges.add(change);
-                if(!allGroupedChanges.containsKey(change.getId()))
-                    allGroupedChanges.put(change.getId(),new HashSet<>());
+                if (!allGroupedChanges.containsKey(change.getId()))
+                    allGroupedChanges.put(change.getId(), new HashSet<>());
                 allGroupedChanges.get(change.getId()).add(change);
-            }
-            else if (type == ChangeType.changeType) {
+            } else if (type == ChangeType.changeType) {
                 JSONObject previousVertexObj = (JSONObject) object.get("previousVertex");
                 DataVertex previousVertex = getDataVertex(previousVertexObj);
                 JSONObject newVertexObj = (JSONObject) object.get("newVertex");
                 DataVertex newVertex = getDataVertex(newVertexObj);
                 String uri = (String) object.get("uri");
+                if (vertexSets != null && vertexSets.stream().noneMatch(s -> relevantTypes.contains(s)))
+                    if (notURIofInterest(uri, vertexSets, typeChangeURIs))
+                        continue;
                 Change change = new TypeChange(type, id, previousVertex, newVertex, uri);
                 change.addTGFD(relevantTGFDs);
+                change.addTypes(relevantTypes);
                 allChanges.add(change);
-                if(!allGroupedChanges.containsKey(change.getId()))
-                    allGroupedChanges.put(change.getId(),new HashSet<>());
+                if (!allGroupedChanges.containsKey(change.getId()))
+                    allGroupedChanges.put(change.getId(), new HashSet<>());
                 allGroupedChanges.get(change.getId()).add(change);
-            }
-            else if(type==ChangeType.deleteVertex || type==ChangeType.insertVertex)
-            {
-                JSONObject vertexObj=(JSONObject) object.get("vertex");
+            } else if (type == ChangeType.deleteVertex || type == ChangeType.insertVertex) {
+                JSONObject vertexObj = (JSONObject) object.get("vertex");
+//                String uri = (String) vertexObj.get("vertexURI");
+//                if (vertexSets != null && vertexSets.stream().noneMatch(s -> relevantTypes.contains(s)))
+//                    if (!isURIofInterest(uri, vertexSets, typeChangeURIs))
+//                        continue;
                 DataVertex dataVertex = getDataVertex(vertexObj);
-                Change change=new VertexChange(type,id,dataVertex);
+                Change change = new VertexChange(type, id, dataVertex);
                 change.addTGFD(relevantTGFDs);
+                change.addTypes(relevantTypes);
                 allChanges.add(change);
-                if(!allGroupedChanges.containsKey(change.getId()))
-                    allGroupedChanges.put(change.getId(),new HashSet<>());
+                if (!allGroupedChanges.containsKey(change.getId()))
+                    allGroupedChanges.put(change.getId(), new HashSet<>());
                 allGroupedChanges.get(change.getId()).add(change);
             }
+
         }
+    }
+
+    private boolean notURIofInterest(String uri, Set<String> vertexSets, Map<String, Set<String>> typeChangeURIs) {
+        if (typeChangeURIs.containsKey(uri))
+            return vertexSets.stream().noneMatch(s -> typeChangeURIs.get(uri).contains(s));
+        else
+            return true;
     }
 
     @NotNull

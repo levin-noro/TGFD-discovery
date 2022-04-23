@@ -54,7 +54,9 @@ public class ChangeFinder {
      */
     public List<Change> findAllChanged()
     {
+        System.out.println("Looking for deletions and changes...");
         findChanges(g1,g2, ChangeType.deleteEdge, ChangeType.deleteVertex, ChangeType.deleteAttr, ChangeType.changeAttr, ChangeType.changeType);
+        System.out.println("Looking for insertions...");
         findChanges(g2,g1, ChangeType.insertEdge, ChangeType.insertVertex, ChangeType.insertAttr,null, null);
         return allChanges;
     }
@@ -89,7 +91,7 @@ public class ChangeFinder {
                 addRelevantType(((VariableLiteral) y).getVertexType_2(),tgfd.getName());
             }
         }
-        for (Vertex v:tgfd.getPattern().getPattern().vertexSet()) {
+        for (Vertex v:tgfd.getPattern().getGraph().vertexSet()) {
             if(v instanceof PatternVertex)
                 for (String type:v.getTypes())
                     addRelevantType(type,tgfd.getName());
@@ -141,6 +143,8 @@ public class ChangeFinder {
     private void findChanges(VF2DataGraph first, VF2DataGraph second, ChangeType edgeType,
                              ChangeType vertexType, ChangeType attrType, ChangeType attrChange, ChangeType typeChange)
     {
+        System.out.println("Looking for edge changes...");
+        int numOfVerticesProcessed = 0;
         for (Vertex v:first.getGraph().vertexSet()) {
             DataVertex v1=(DataVertex) v;
             for (RelationshipEdge e:first.getGraph().outgoingEdgesOf(v)) {
@@ -149,7 +153,9 @@ public class ChangeFinder {
                 {
                     Change eChange=new EdgeChange(edgeType,changeID++ ,v1.getVertexURI(),dst.getVertexURI(),e.getLabel());
                     eChange.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                    eChange.addTypes(v1.getTypes());
                     eChange.addTGFD(findRelaventTGFDs(dst.getTypes()));
+                    eChange.addTypes(dst.getTypes());
                     allChanges.add(eChange);
                     numberOfEffectiveChanges++;
                 }
@@ -157,7 +163,9 @@ public class ChangeFinder {
                 {
                     Change eChange=new EdgeChange(edgeType,changeID++ ,v1.getVertexURI(),dst.getVertexURI(),e.getLabel());
                     eChange.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                    eChange.addTypes(v1.getTypes());
                     eChange.addTGFD(findRelaventTGFDs(dst.getTypes()));
+                    eChange.addTypes(dst.getTypes());
                     allChanges.add(eChange);
                     numberOfEffectiveChanges++;
                 }
@@ -177,14 +185,21 @@ public class ChangeFinder {
                     {
                         Change eChange=new EdgeChange(edgeType,changeID++ ,v1.getVertexURI(),dst.getVertexURI(),e.getLabel());
                         eChange.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        eChange.addTypes(v1.getTypes());
                         eChange.addTGFD(findRelaventTGFDs(dst.getTypes()));
+                        eChange.addTypes(dst.getTypes());
                         allChanges.add(eChange);
                         numberOfEffectiveChanges++;
                     }
                 }
             }
+            numOfVerticesProcessed++;
+            if (numOfVerticesProcessed % 100000 == 0)
+                System.out.println("Processed "+numOfVerticesProcessed+" vertices");
         }
 
+        System.out.println("Looking for other changes...");
+        numOfVerticesProcessed = 0;
         for (Vertex v:first.getGraph().vertexSet()) {
             DataVertex v1=(DataVertex) v;
             DataVertex v2= (DataVertex) second.getNode(v1.getVertexURI());
@@ -192,15 +207,18 @@ public class ChangeFinder {
             {
                 Change vChange=new VertexChange(vertexType,changeID++ ,v1);
                 vChange.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                vChange.addTypes(v1.getTypes());
                 allChanges.add(vChange);
                 continue;
             }
             int groupedId=changeID++;
-            if (!v2.getTypes().containsAll(v1.getTypes()) && typeChange == ChangeType.changeType) {
+            if (!v2.getTypes().equals(v1.getTypes()) && typeChange == ChangeType.changeType) {
                 for (String v1Type: v1.getTypes()) {
                     if (!v2.getTypes().contains(v1Type)) {
                         Change vChange1=new TypeChange(typeChange,groupedId,v1,v2,v1.getVertexURI());
                         vChange1.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        vChange1.addTypes(v1.getTypes());
+                        vChange1.addTypes(v2.getTypes());
                         allChanges.add(vChange1);
                     }
                 }
@@ -211,12 +229,16 @@ public class ChangeFinder {
                     {
                         Change changeOfAttr=new AttributeChange(ChangeType.deleteAttr,groupedId ,v1.getVertexURI(),attr);
                         changeOfAttr.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        changeOfAttr.addTypes(v1.getTypes());
+                        changeOfAttr.addTypes(v2.getTypes());
                         allChanges.add(changeOfAttr);
                         numberOfEffectiveChanges++;
                     }
                     else if (!v2.getAttributeValueByName(attr.getAttrName()).equals(attr.getAttrValue())) {
                         Change changeOfAttr=new AttributeChange(ChangeType.changeAttr,groupedId ,v1.getVertexURI(),v2.getAllAttributesHashMap().get(attr.getAttrName()));
                         changeOfAttr.addTGFD(findRelaventTGFDs(v1.getTypes()));
+                        changeOfAttr.addTypes(v1.getTypes());
+                        changeOfAttr.addTypes(v2.getTypes());
                         allChanges.add(changeOfAttr);
                         numberOfEffectiveChanges++;
                     }
@@ -227,11 +249,16 @@ public class ChangeFinder {
                     if (!v1.hasAttribute(attr.getAttrName())) {
                         Change changeOfAttr = new AttributeChange(ChangeType.insertAttr, groupedId, v2.getVertexURI(), attr);
                         changeOfAttr.addTGFD(findRelaventTGFDs(v2.getTypes()));
+                        changeOfAttr.addTypes(v1.getTypes());
+                        changeOfAttr.addTypes(v2.getTypes());
                         allChanges.add(changeOfAttr);
                         numberOfEffectiveChanges++;
                     }
                 }
             }
+            numOfVerticesProcessed++;
+            if (numOfVerticesProcessed % 100000 == 0)
+                System.out.println("Processed "+numOfVerticesProcessed+" vertices");
         }
     }
 

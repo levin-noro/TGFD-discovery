@@ -131,6 +131,8 @@ public class TgfdDiscovery {
 	private PrintStream logStream = null;
 	private PrintStream summaryStream = null;
 	private boolean printToLogFile = false;
+	private int numOfCandidateGeneralTGFDs = 0;
+	private Map<String, Set<String>> typeChangeURIs;
 
 	public TgfdDiscovery() {
 		this.setDiscoveryStartTime(System.currentTimeMillis());
@@ -707,12 +709,28 @@ public class TgfdDiscovery {
 		Histogram histogram = new Histogram(this.getT(), this.getTimestampToFilesMap(), this.getLoader(), this.getFrequentSetSize(), this.getGamma(), this.getInterestLabelsSet());
 		Integer superVertexDegree = this.isDissolveSuperVerticesBasedOnCount() ? INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR : null;
 		if (this.useChangeFile()) {
-			List<String> changefilePaths = new ArrayList<>();
-			for (int t = 1; t < this.getT(); t++) {
-				String changeFilePath = "changes_t" + t + "_t" + (t+1) + "_" + this.getGraphSize() + ".json";
-				changefilePaths.add(changeFilePath);
-			}
-			histogram.computeHistogramUsingChangefiles(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
+//			if (this.isUseTypeChangeFile()) {
+//				Map<Integer,List<String>> changefilePaths = new HashMap<>();
+//				List<File> allFilesInDirectory = new ArrayList<>(List.of(Objects.requireNonNull(new File(".").listFiles(File::isFile))));
+//				for (File file : allFilesInDirectory) {
+//					String regex = "^changes_t([0-9]+)_t([0-9]+)_"+this.getGraphSize()+"-.+\\.json$";
+//					Pattern pattern = Pattern.compile(regex);
+//					Matcher matcher = pattern.matcher(file.getName());
+//					if (matcher.find()) {
+//						Integer timestamp = Integer.valueOf(matcher.group(1));
+//						changefilePaths.putIfAbsent(timestamp, new ArrayList<>());
+//						changefilePaths.get(timestamp).add(file.getName());
+//					}
+//				}
+//				histogram.computeHistogramUsingChangefilesTypes(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
+//			} else {
+				List<String> changefilePaths = new ArrayList<>();
+				for (int t = 1; t < this.getT(); t++) {
+					String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
+					changefilePaths.add(changeFilePath);
+				}
+				histogram.computeHistogramUsingChangefilesAll(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
+//			}
 			if (this.isStoreInMemory())
 				this.setChangeFilesMap(histogram.getChangefilesToJsonArrayMap());
 		} else {
@@ -731,7 +749,8 @@ public class TgfdDiscovery {
 		this.setVertexHistogram(histogram.getVertexHistogram());
 
 		this.setTotalHistogramTime(histogram.getTotalHistogramTime());
-		this.divertOutputToLogFile();
+
+		this.setTypeChangeURIs(histogram.getTypeChangesURIs());
 	}
 
 	public static Map<Set<ConstantLiteral>, ArrayList<Entry<ConstantLiteral, List<Integer>>>> findEntities(AttributeDependency attributes, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
@@ -2136,6 +2155,14 @@ public class TgfdDiscovery {
 		this.printToLogFile = printToLogFile;
 	}
 
+	public void setTypeChangeURIs(Map<String, Set<String>> typeChangeURIs) {
+		this.typeChangeURIs = typeChangeURIs;
+	}
+
+	public Map<String, Set<String>> getTypeChangeURIs() {
+		return typeChangeURIs;
+	}
+
 	public static class Pair implements Comparable<Pair> {
 		private final Integer min;
 		private final Integer max;
@@ -2781,9 +2808,9 @@ public class TgfdDiscovery {
 		localizedVF2Matching.findMatchesInSnapshot(graph, 0);
 		for (int t = 1; t < this.getT(); t++) {
 			if (this.isUseTypeChangeFile())
-				updateGraphUsingChangefileTypes(graph, t, vertexSets);
+				updateGraphUsingChangefiles(graph, t, vertexSets);
 			else
-				updateGraphUsingChangefileAll(graph, t, vertexSets);
+				updateGraphUsingChangefiles(graph, t, null);
 
 			localizedVF2Matching.findMatchesInSnapshot(graph, t);
 		}
@@ -2803,28 +2830,20 @@ public class TgfdDiscovery {
 		return localizedVF2Matching.getMatchesPerTimestamp();
 	}
 
-	protected void updateGraphUsingChangefileAll(GraphLoader graph, int t, Set<String> vertexSets) {
+	protected void updateGraphUsingChangefiles(GraphLoader graph, int t, Set<String> vertexSets) {
 		System.out.println("-----------Snapshot (" + (t + 1) + ")-----------");
 		String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
 		JSONArray jsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
-		ChangeLoader changeLoader = new ChangeLoader(jsonArray, vertexSets, true);
-		IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), new ArrayList<>());
-		sortChanges(changeLoader.getAllChanges());
-		incUpdatesOnDBpedia.updateEntireGraph(changeLoader.getAllChanges());
+		updateGraphUsingChanges(new ChangeLoader(jsonArray, vertexSets, (this.isUseTypeChangeFile() ? this.getTypeChangeURIs() : null), true), graph);
 	}
 
-	protected void updateGraphUsingChangefileTypes(GraphLoader graph, int t, Set<String> vertexSets) {
-		JSONArray jsonArray = new JSONArray();
-		for (String type: vertexSets) {
-			System.out.println("-----------Snapshot (" + (t + 1) + ")-----------");
-			String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + "-" + type + ".json";
-			JSONArray typeJsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
-			jsonArray.addAll(typeJsonArray);
-		}
-		ChangeLoader changeLoader = new ChangeLoader(jsonArray, null, true);
+	private void updateGraphUsingChanges(ChangeLoader jsonArray, GraphLoader graph) {
+		ChangeLoader changeLoader = jsonArray;
 		IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), new ArrayList<>());
 		sortChanges(changeLoader.getAllChanges());
 		incUpdatesOnDBpedia.updateEntireGraph(changeLoader.getAllChanges());
+		if (this.isDissolveSuperVerticesBasedOnCount())
+			dissolveSuperVerticesBasedOnCount(graph, INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR);
 	}
 
 	public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode) {
@@ -2916,7 +2935,7 @@ public class TgfdDiscovery {
 					changesJsonArray = readJsonArrayFromFile(changeFilePath);
 				}
 			}
-			ChangeLoader changeLoader = new ChangeLoader(changesJsonArray, null, this.getCurrentVSpawnLevel() != 0);
+			ChangeLoader changeLoader = new ChangeLoader(changesJsonArray, null, null, this.getCurrentVSpawnLevel() != 0);
 			HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
 			System.out.println("Total number of changes in changefile: " + newChanges.size());
 
@@ -3089,14 +3108,14 @@ public class TgfdDiscovery {
 	public static void sortChanges(List<Change> changes) {
 		System.out.println("Number of changes: "+changes.size());
 		HashMap<ChangeType, Integer> map = new HashMap<>();
-		map.put(ChangeType.deleteAttr, 2);
-		map.put(ChangeType.insertAttr, 2);
-		map.put(ChangeType.changeAttr, 2);
-		map.put(ChangeType.deleteEdge, 3);
+		map.put(ChangeType.deleteAttr, 1);
+		map.put(ChangeType.insertAttr, 3);
+		map.put(ChangeType.changeAttr, 1);
+		map.put(ChangeType.deleteEdge, 0);
 		map.put(ChangeType.insertEdge, 3);
 		map.put(ChangeType.changeType, 1);
-		map.put(ChangeType.deleteVertex, 0);
-		map.put(ChangeType.insertVertex, 0);
+		map.put(ChangeType.deleteVertex, 1);
+		map.put(ChangeType.insertVertex, 2);
 		changes.sort(new Comparator<Change>() {
 			@Override
 			public int compare(Change o1, Change o2) {
