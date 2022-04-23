@@ -513,8 +513,8 @@ public class TgfdDiscovery {
 		System.out.println("Number of consistent candidate constant TGFDs: "+this.numOfConsistentRHS);
 		System.out.println("Number of inconsistent candidate constant TGFDs: "+this.rhsInconsistencies.size());
 		System.out.println("Average number of inconsistencies per inconsistent candidate constant TGFD: "+((double)this.rhsInconsistencies.stream().reduce(0, Integer::sum) / (double)this.rhsInconsistencies.size()));
-		List<Integer> intervalWidths = this.getDiscoveredTgfds().stream().map(list -> list.stream().map(tgfd -> tgfd.getDelta().getIntervalWidth()).collect(Collectors.toList())).flatMap(List::stream).collect(Collectors.toList());//(ArrayList::listIterator).map(tgfdListIterator -> tgfdListIterator.next().getDelta().getIntervalWidth()).collect(Collectors.toList());
-		intervalWidths.sort(Comparator.naturalOrder());
+		System.out.println("Number of candidate general TGFDs: "+this.numOfCandidateGeneralTGFDs);
+		List<Integer> intervalWidths = this.getDiscoveredTgfds().stream().map(list -> list.stream().map(tgfd -> tgfd.getDelta() == null ? 0 : tgfd.getDelta().getIntervalWidth()).collect(Collectors.toList())).flatMap(List::stream).sorted(Comparator.naturalOrder()).collect(Collectors.toList());
 		if (intervalWidths.size() > 0) {
 			System.out.println("Minimum delta interval width: " + intervalWidths.get(0));
 			System.out.println("Maximum delta interval width: " + intervalWidths.get(intervalWidths.size() - 1));
@@ -889,6 +889,7 @@ public class TgfdDiscovery {
 
 		// Find general TGFDs
 		if (!deltaToPairsMap.isEmpty()) {
+			numOfCandidateGeneralTGFDs += 1;
 			long discoverGeneralTGFDTime = System.currentTimeMillis();
 			ArrayList<TGFD> generalTGFDs = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap, literalTreeNode);
 			discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
