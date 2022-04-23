@@ -15,7 +15,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.List;
 
 public class DBPediaLoader extends GraphLoader {
@@ -25,44 +24,29 @@ public class DBPediaLoader extends GraphLoader {
 
     /**
      * @param alltgfd List of TGFDs
-     * @param typesPath Path to the DBPedia type file
-     * @param dataPath Path to the DBPedia graph file
+     * @param typePaths Path to the DBPedia type file
+     * @param dataPaths Path to the DBPedia graph file
      */
-    public DBPediaLoader(List<TGFD> alltgfd, ArrayList<String> typesPath, ArrayList<String> dataPath)
+    public DBPediaLoader(List<TGFD> alltgfd, List<?> typePaths, List<?> dataPaths)
     {
         super(alltgfd);
 
-        for (String typePath:typesPath) {
-            loadNodeMapFromPath(typePath);
+        for (Object typePath:typePaths) {
+            if (typePath instanceof String)
+                loadNodeMap((String)typePath);
+            else if (typePath instanceof Model)
+                loadNodeMap((Model)typePath);
+            else
+                throw new IllegalArgumentException("unsupported object type");
         }
 
-        for (String dataP:dataPath) {
-            loadDataGraphFromPath(dataP);
-        }
-    }
-
-    public DBPediaLoader(List<TGFD> alltgfd, List<Model> typeModels, List<Model> dataModels)
-    {
-        super(alltgfd);
-
-        for (Model typeModel : typeModels) {
-            loadNodeMapFromModel(typeModel);
-        }
-
-        for (Model dataModel : dataModels) {
-            loadDataGraphFromModel(dataModel);
-        }
-    }
-
-    public DBPediaLoader(List<TGFD> dummyTGFDs, List<String> paths) {
-        super(dummyTGFDs);
-        for (String path : paths) {
-            if (path.toLowerCase().contains("literal") || path.toLowerCase().contains("object") || !path.toLowerCase().contains(".ttl")) continue;
-            loadNodeMapFromPath(path);
-        }
-        for (String path: paths) {
-            if (path.toLowerCase().contains("types") || !path.toLowerCase().contains(".ttl")) continue;
-            loadDataGraphFromPath(path);
+        for (Object dataPath:dataPaths) {
+            if (dataPath instanceof String)
+                loadDataGraph((String)dataPath);
+            else if (dataPath instanceof Model)
+                loadDataGraph((Model)dataPath);
+            else
+                throw new IllegalArgumentException("unsupported object type");
         }
     }
 
@@ -75,7 +59,7 @@ public class DBPediaLoader extends GraphLoader {
      * This will load the type file and create a DataVertex for each different subject with type of object
      * @param nodeTypesPath Path to the Type file
      */
-    private void loadNodeMapFromPath(String nodeTypesPath) {
+    private void loadNodeMap(String nodeTypesPath) {
 
         if (nodeTypesPath == null || nodeTypesPath.length() == 0) {
             System.out.println("No Input Node Types File Path!");
@@ -111,7 +95,7 @@ public class DBPediaLoader extends GraphLoader {
                 model.read(input.toUri().toString());
             }
 
-            loadNodeMapFromModel(model);
+            loadNodeMap(model);
 
             if (fullObject != null) {
                 fullObject.close();
@@ -127,7 +111,7 @@ public class DBPediaLoader extends GraphLoader {
         }
     }
 
-    private void loadNodeMapFromModel(Model model) {
+    private void loadNodeMap(Model model) {
 
         try {
 
@@ -139,7 +123,7 @@ public class DBPediaLoader extends GraphLoader {
                 if (!stmt.getPredicate().getURI().equals(TYPE_PREDICATE_URI))
                     continue;
 
-                String nodeURI = stmt.getSubject().getURI().toLowerCase();
+                String nodeURI = stmt.getSubject().getURI().toLowerCase(); //TODO: URI in some data can be case sensitive. Should we handle this?
                 if (nodeURI.length() > 28) {
                     nodeURI = nodeURI.substring(28);
                 }
@@ -161,6 +145,7 @@ public class DBPediaLoader extends GraphLoader {
                 else {
                     v.addType(nodeType);
                 }
+                types.add(nodeType);
             }
             System.out.println("Done. Number of Types: " + graph.getSize());
         }
@@ -173,7 +158,7 @@ public class DBPediaLoader extends GraphLoader {
      * This method will load DBPedia graph file
      * @param dataGraphFilePath Path to the graph file
      */
-    private void loadDataGraphFromPath(String dataGraphFilePath) {
+    private void loadDataGraph(String dataGraphFilePath) {
 
         if (dataGraphFilePath == null || dataGraphFilePath.length() == 0) {
             System.out.println("No Input Graph Data File Path!");
@@ -209,7 +194,7 @@ public class DBPediaLoader extends GraphLoader {
                 model.read(input.toUri().toString());
             }
 
-            loadDataGraphFromModel(model);
+            loadDataGraph(model);
 
             if (fullObject != null) {
                 fullObject.close();
@@ -225,7 +210,7 @@ public class DBPediaLoader extends GraphLoader {
         }
     }
 
-    private void loadDataGraphFromModel(Model model) {
+    private void loadDataGraph(Model model) {
 
         int numberOfObjectsNotFound = 0, numberOfSubjectsNotFound = 0;
 
