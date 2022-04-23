@@ -1019,12 +1019,7 @@ public class TgfdDiscovery {
 			}
 
 			if (support < this.getTgfdTheta()) {
-				if (this.hasSupportPruning() && delta.getMin().getYears() == 0 && delta.getMax().getYears() == this.getNumOfSnapshots()-1) {
-					literalTreeNode.setIsPruned();
-					patternTreeNode.addLowSupportDependency(new AttributeDependency(literalPath.getLhs(), literalPath.getRhs(), delta));
-				}
 				System.out.println("Support for candidate general TGFD is below support threshold");
-//				continue;
 			} else {
 				System.out.println("Creating new general TGFD...");
 				TGFD tgfd = new TGFD(patternTreeNode.getPattern(), delta, generalDependency, support, patternSupport, "");
@@ -1168,10 +1163,7 @@ public class TgfdDiscovery {
 
 			// Only output constant TGFDs that satisfy support
 			if (candidateTGFDsupport < this.getTgfdTheta()) {
-				if (this.hasSupportPruning() && candidateTGFDdelta.getMin().getYears() == 0 && candidateTGFDdelta.getMax().getYears() == this.getNumOfSnapshots()-1)
-					patternNode.addLowSupportDependency(new AttributeDependency(constantPath.getLhs(), constantPath.getRhs(), candidateTGFDdelta));
 				System.out.println("Could not satisfy TGFD support threshold for entity: " + entityEntry.getKey());
-//				continue;
 			} else {
 				System.out.println("Creating new constant TGFD...");
 				TGFD entityTGFD = new TGFD(newPattern, candidateTGFDdelta, newDependency, candidateTGFDsupport, patternNode.getPatternSupport(), "");
@@ -1529,10 +1521,6 @@ public class TgfdDiscovery {
 						boolean isSuperSetPath = false;
 						if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getZeroEntityDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
 							System.out.println("Skip. Candidate literal path is a superset of zero-entity dependency.");
-							isSuperSetPath = true;
-						}
-						else if (this.hasSupportPruning() && newPath.isSuperSetOfPath(patternTreeNode.getLowSupportDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have no entities
-							System.out.println("Skip. Candidate literal path is a superset of low-support dependency.");
 							isSuperSetPath = true;
 						}
 						else if (this.hasMinimalityPruning() && newPath.isSuperSetOfPath(patternTreeNode.getAllMinimalDependenciesOnThisPath())) { // Ensures we don't re-explore dependencies whose subsets have already have a general dependency
