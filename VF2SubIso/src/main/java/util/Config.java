@@ -70,9 +70,10 @@ public class Config {
             scanner = new Scanner(new File(pathToConfigFile));
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
-                String[] conf = line.toLowerCase().split(" ");
+                String[] conf = line.split(" ");
                 if (conf.length != 2)
                     continue;
+                conf[0] = conf[0].toLowerCase();
                 if (conf[0].equals("-optgraphload")) {
                     optimizedLoadingBasedOnTGFD = Boolean.parseBoolean(conf[1]);
                 } else if (conf[0].equals("-debug")) {

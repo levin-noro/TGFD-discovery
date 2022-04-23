@@ -4,6 +4,7 @@ import Infra.Vertex;
 import TgfdDiscovery.TgfdDiscovery;
 import changeExploration.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
 import graphLoader.IMDBLoader;
 import org.apache.commons.cli.CommandLine;
@@ -19,95 +20,88 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class testDiffExtractorIMDB {
-
-    private static double PERCENT = 0.05;
+public class testDiffExtractor {
 
     public static void main(String[] args) throws FileNotFoundException {
 
-        Options options = TgfdDiscovery.initializeCmdOptions();
+        Options options = new Options();
+        options.addOption("loader", true, "type of graph loader to use");
+        options.addOption("path", true, "location of files");
+        options.addOption("t", true, "number of snapshots to consider");
         options.addOption("percent", true, "percentage of changes to keep");
         options.addOption("type", false,"generate changefiles based on frequent types");
+        options.addOption("simplifySuperVertex", true, "simplify vertices that have an in-degree greater than the specified value");
         CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
+
+        String loader;
+        if (cmd.hasOption("loader"))
+            loader = cmd.getOptionValue("loader");
+        else
+            throw new IllegalArgumentException("loader not specified");
 
         String path = null;
         if (cmd.hasOption("path")) {
             path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
-            if (!Files.isDirectory(Path.of(path))) {
-                System.out.println(Path.of(path) + " is not a valid directory.");
-                return;
-            }
+            if (!Files.isDirectory(Path.of(path)))
+                throw new IllegalArgumentException(Path.of(path) + " is not a valid directory.");
         }
         boolean basedOnType = cmd.hasOption("type");
 
-        if (cmd.hasOption("percent")) {
-            PERCENT = Double.parseDouble(cmd.getOptionValue("percent"));
+        double percent;
+        if (cmd.hasOption("percent"))
+            percent = Double.parseDouble(cmd.getOptionValue("percent"));
+        else
+            throw new IllegalArgumentException("percent not specified");
+
+        Integer superVertexDegree = null;
+        if (cmd.hasOption("simplifySuperVertex"))
+            superVertexDegree = Integer.parseInt(cmd.getOptionValue("simplifySuperVertex"));
+
+        Map<String, List<String>> timestampToFilesMap = new HashMap<>();
+        switch(loader) {
+            case "dbpedia" -> timestampToFilesMap = TgfdDiscovery.generateDbpediaTimestampToFilesMap(path);
+            case "imdb" -> timestampToFilesMap = TgfdDiscovery.generateImdbTimestampToFilesMapFromPath(path);
+            default -> throw new IllegalArgumentException("unsupported loader: "+loader);
         }
 
-        assert path != null;
-
-        TgfdDiscovery tgfdDiscovery = new TgfdDiscovery();
-        tgfdDiscovery.setImdbTimestampToFilesMapFromPath(path);
-        tgfdDiscovery.setLoader("imdb");
-        tgfdDiscovery.setStoreInMemory(false);
-
-        tgfdDiscovery.loadGraphsAndComputeHistogram2();
-//        tgfdDiscovery.loadGraphsAndComputeHistogram(tgfdDiscovery.getTimestampToFilesMap());
-
-        ArrayList<TGFD> dummyTGFDs = tgfdDiscovery.getDummyVertexTypeTGFDs();
-
-        System.out.println("Searching for IMDB snapshots in path: "+path);
-        List<File> allFilesInDirectory = new ArrayList<>(List.of(Objects.requireNonNull(new File(path).listFiles(File::isFile))));
-        System.out.println("Found files: "+allFilesInDirectory);
-//		List<File> ntFilesInDirectory = allFilesInDirectory.stream().filter(file -> file.getName().endsWith("\\.nt")).sorted(Comparator.comparing(File::getName)).collect(Collectors.toList());
-        List<File> ntFilesInDirectory = new ArrayList<>();
-        for (File ntFile: allFilesInDirectory) {
-            System.out.println("Is this an .nt file? "+ntFile.getName());
-            if (ntFile.getName().endsWith(".nt")) {
-                System.out.println("Found .nt file: "+ntFile.getPath());
-                ntFilesInDirectory.add(ntFile);
-            }
-        }
-        ntFilesInDirectory.sort(Comparator.comparing(File::getName));
-        System.out.println("Found .nt files: "+ntFilesInDirectory);
-        List<String> timestamps = new ArrayList<>();
-        for (File ntFile: ntFilesInDirectory) {
-            String regex = "^imdb-([0-9]{2})([0-9]{2})([0-9]{2})\\.nt$";
-            Pattern pattern = Pattern.compile(regex);
-            Matcher matcher = pattern.matcher(ntFile.getName());
-            if (matcher.find()) {
-                String timestamp = "20"+matcher.group(1)+'-'+matcher.group(2)+'-'+matcher.group(3);
-                timestamps.add(timestamp);
-            }
-        }
-        timestamps.sort(String::compareTo);
-        System.out.println("Timestamps: "+timestamps);
+        ArrayList<Integer> logcaps = new ArrayList<>();
+        List<Map.Entry<String,List<String>>> timestampsToFilesMap = new ArrayList<>(timestampToFilesMap.entrySet());
+        timestampsToFilesMap.sort(Map.Entry.comparingByKey());
+        System.out.println("Timestamps: "+timestampsToFilesMap);
         StringBuilder str = new StringBuilder();
         int index = 1;
-        for (String timestamp: timestamps) {
-            List<String> paths = new ArrayList<>();
-            for (File ntFile : ntFilesInDirectory) {
-                String fileTimestamp = timestamp.substring(2).replaceAll("-","");
-                if (ntFile.getName().contains(fileTimestamp)) {
-                    paths.add(ntFile.getPath());
+        for (Map.Entry<String, List<String>> timestampEntry: timestampsToFilesMap) {
+            String timestamp = null;
+            switch (loader) {
+                case "imdb" -> {
+                    String regex = "^imdb-([0-9]{2})([0-9]{2})([0-9]{2})\\.nt$";
+                    Pattern pattern = Pattern.compile(regex);
+                    Matcher matcher = pattern.matcher(timestampEntry.getKey());
+                    if (matcher.find()) {
+                        timestamp = "20"+matcher.group(1)+'-'+matcher.group(2)+'-'+matcher.group(3);
+                    }
                 }
+                case "dbpedia" -> timestamp = timestampEntry.getKey()+"-01-01";
+                default -> throw new IllegalArgumentException("unsupported loader: "+loader);
             }
             str.append("-s" + index + " " + timestamp + "\n");
-            System.out.println("Paths: " + paths);
-            for (String filepath: paths) {
-                if (filepath.contains("types")) {
-                    str.append("-t" + index + " " + filepath + "\n");
-                } else {
-                    str.append("-d" + index + " " + filepath + "\n");
+            System.out.println("Paths: " + timestampEntry.getValue());
+            if (timestampEntry.getValue().size() > 1) {
+                for (String filepath: timestampEntry.getValue()) {
+                    if (filepath.contains("types")) {
+                        str.append("-t" + index + " " + filepath + "\n");
+                    } else {
+                        str.append("-d" + index + " " + filepath + "\n");
+                    }
                 }
+            } else {
+                str.append("-t" + index + " " + timestampEntry.getValue().get(0) + "\n");
+                str.append("-d" + index + " " + timestampEntry.getValue().get(0) + "\n");
             }
             index++;
-        }
-        str.append("-logcap ");
-        ArrayList<Integer> logcaps = new ArrayList<>();
-        for (String ignored : timestamps) {
             logcaps.add(1);
         }
+        str.append("-logcap ");
         str.append(logcaps.stream().map(String::valueOf).collect(Collectors.joining(",")));
 
         try {
@@ -118,7 +112,7 @@ public class testDiffExtractorIMDB {
             e.printStackTrace();
         }
 
-        System.out.println("Test extract diffs over DBpedia graph");
+        System.out.println("Test extract diffs over graph");
 
         Config.parse("conf.txt");
 
@@ -128,26 +122,16 @@ public class testDiffExtractorIMDB {
         System.out.println("Generating the diff files for snapshots in: " + path);
         System.out.println("Diff files:");
         System.out.println(Config.getAllDataPaths());
-        if (basedOnType) {
-            for (TGFD dummyTGFD : dummyTGFDs) {
-                String tgfdName = dummyTGFD.getName();
-                System.out.println("===========Dummy TGFD (" + tgfdName + ")===========");
-                String fileNameSuffix = tgfdName.replaceAll(" ", "_");
-                List<TGFD> alltgfd = Collections.singletonList(dummyTGFD);
-
-                generateChangeFiles(fileNameSuffix, alltgfd);
-            }
-        } else {
-            generateChangeFiles(tgfdDiscovery.getGraphSize(), dummyTGFDs);
-        }
+        generateChangeFiles(Path.of(path).getFileName().toString(), loader, null, percent, basedOnType, superVertexDegree);
     }
 
-    private static void generateChangeFiles(String fileNameSuffix, List<TGFD> alltgfd) {
+    private static void generateChangeFiles(String fileNameSuffix, String loader, List<TGFD> alltgfd, double percent, boolean basedOnType, Integer superVertexDegree) {
         final long dummyTgfdChangeFileGenerationTime = System.currentTimeMillis();
         Object[] ids= Config.getAllDataPaths().keySet().toArray();
         Arrays.sort(ids);
 
-        GraphLoader first, second = null;
+        GraphLoader first;
+        GraphLoader second = null;
         List<Change> allChanges;
         int t1, t2 = 0;
         for (int i = 0; i < ids.length; i += 2) {
@@ -156,10 +140,19 @@ public class testDiffExtractorIMDB {
             long startTime = System.currentTimeMillis();
 
             t1 = (int) ids[i];
-            Config.optimizedLoadingBasedOnTGFD = true;
-            first = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i]));
-//            removeDisconnectedVertices(first.getGraph());
-            Config.optimizedLoadingBasedOnTGFD = false;
+            if (alltgfd != null)
+                Config.optimizedLoadingBasedOnTGFD = true;
+
+            switch(loader) {
+                case "dbpedia" -> first = new DBPediaLoader(alltgfd, Config.getAllTypesPaths().get((int) ids[i]), Config.getAllDataPaths().get((int) ids[i]));
+                case "imdb" -> first = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i]));
+                default -> throw new IllegalArgumentException("unsupported loader: "+loader);
+            }
+
+            if (alltgfd != null)
+                Config.optimizedLoadingBasedOnTGFD = false;
+            if (superVertexDegree != null)
+                TgfdDiscovery.dissolveSuperVerticesBasedOnCount(first, superVertexDegree);
 
             printWithTime("Load graph " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - startTime);
 
@@ -167,7 +160,17 @@ public class testDiffExtractorIMDB {
                 long changeDiscoveryTime = System.currentTimeMillis();
                 ChangeFinder cFinder = new ChangeFinder(second, first, new ArrayList<>());
                 allChanges = cFinder.findAllChanged();
-                analyzeChanges(allChanges, new ArrayList<>(), second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps());
+                if (basedOnType) {
+                    Set<String> types = new HashSet<>();
+                    types.addAll(first.getTypes());
+                    types.addAll(second.getTypes());
+                    for (String type: types) {
+                        List<Change> changesForThisType = allChanges.stream().filter(change -> change.getTypes().stream().anyMatch(s -> s.equals(type))).collect(Collectors.toList());
+                        analyzeChanges(changesForThisType, new ArrayList<>(), second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix+'-'+type, Config.getDiffCaps(), percent);
+                    }
+                } else {
+                    analyzeChanges(allChanges, new ArrayList<>(), second.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t2, t1, fileNameSuffix, Config.getDiffCaps(), percent);
+                }
                 printWithTime("Change discovery " + ids[i] + " (" + Config.getTimestamps().get(ids[i]) + ")", System.currentTimeMillis() - changeDiscoveryTime);
             }
 
@@ -178,17 +181,34 @@ public class testDiffExtractorIMDB {
             startTime = System.currentTimeMillis();
 
             t2 = (int) ids[i + 1];
-            Config.optimizedLoadingBasedOnTGFD = true;
-            second = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i + 1]));
-//            removeDisconnectedVertices(second.getGraph());
-            Config.optimizedLoadingBasedOnTGFD = false;
+            if (alltgfd != null)
+                Config.optimizedLoadingBasedOnTGFD = true;
+            switch(loader) {
+                case "dbpedia" -> second = new DBPediaLoader(alltgfd, Config.getAllTypesPaths().get((int) ids[i+1]), Config.getAllDataPaths().get((int) ids[i+1]));
+                case "imdb" -> second = new IMDBLoader(alltgfd, Config.getAllDataPaths().get((int) ids[i+1]));
+                default -> throw new IllegalArgumentException("unsupported loader: "+loader);
+            }
+            if (alltgfd != null)
+                Config.optimizedLoadingBasedOnTGFD = false;
+            if (superVertexDegree != null)
+                TgfdDiscovery.dissolveSuperVerticesBasedOnCount(second, superVertexDegree);
 
             printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - startTime);
 
             long changeDiscoveryTime = System.currentTimeMillis();
             ChangeFinder cFinder = new ChangeFinder(first, second, new ArrayList<>());
             allChanges = cFinder.findAllChanged();
-            analyzeChanges(allChanges, new ArrayList<>(), first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps());
+            if (basedOnType) {
+                Set<String> types = new HashSet<>();
+                types.addAll(first.getTypes());
+                types.addAll(second.getTypes());
+                for (String type: types) {
+                    List<Change> changesForThisType = allChanges.stream().filter(change -> change.getTypes().stream().anyMatch(s -> s.equals(type))).collect(Collectors.toList());
+                    analyzeChanges(changesForThisType, new ArrayList<>(), first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix+'-'+type, Config.getDiffCaps(), percent);
+                }
+            } else {
+                analyzeChanges(allChanges, new ArrayList<>(), first.getGraphSize(), cFinder.getNumberOfEffectiveChanges(), t1, t2, fileNameSuffix, Config.getDiffCaps(), percent);
+            }
             printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - changeDiscoveryTime);
         }
         printWithTime("Changefile generation time for one edge", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
@@ -212,7 +232,7 @@ public class testDiffExtractorIMDB {
     }
 
     private static void analyzeChanges(List<Change> allChanges, List<TGFD> allTGFDs, int graphSize,
-                                       int changeSize, int timestamp1, int timestamp2, String TGFDsName, ArrayList<Double> diffCaps) {
+                                       int changeSize, int timestamp1, int timestamp2, String TGFDsName, ArrayList<Double> diffCaps, double percent) {
 //        ChangeTrimmer trimmer=new ChangeTrimmer(allChanges,allTGFDs);
 //        for (double i:diffCaps)
 //        {
@@ -224,7 +244,7 @@ public class testDiffExtractorIMDB {
 //            }
 //            else
 //            {
-                saveChanges(allChanges, timestamp1, timestamp2, TGFDsName);
+                saveChanges(allChanges, timestamp1, timestamp2, TGFDsName, percent);
 //                return;
 //            }
 //        }
@@ -271,13 +291,13 @@ public class testDiffExtractorIMDB {
         System.out.println("Attributes: +" + insertChangeAttribute + " ** -" + deleteChangeAttribute + " ** updates: " + changeAttributeValue);
     }
 
-    private static void saveChanges(List<Change> allChanges, int t1, int t2, String tgfdName) {
+    private static void saveChanges(List<Change> allChanges, int t1, int t2, String tgfdName, double percent) {
 
         System.out.println("Number of changes: " + allChanges.size());
 
-        int numOfChangesToConsider = (int) (allChanges.size() * PERCENT);
+        int numOfChangesToConsider = (int) (allChanges.size() * percent);
         System.out.println("Number of changes considered: " + numOfChangesToConsider);
-        if (PERCENT < 1.0) {
+        if (percent < 1.0) {
             Collections.shuffle(allChanges);
         }
         List<Change> changesToConsider = allChanges.subList(0, numOfChangesToConsider);
@@ -285,22 +305,10 @@ public class testDiffExtractorIMDB {
         final long printTime = System.currentTimeMillis();
         System.out.println("Printing the changes: " + t1 + " -> " + t2);
 
-        HashMap<ChangeType, Integer> map = new HashMap<>();
-        map.put(ChangeType.deleteAttr, 1);
-        map.put(ChangeType.insertAttr, 2);
-        map.put(ChangeType.changeAttr, 2);
-        map.put(ChangeType.deleteEdge, 3);
-        map.put(ChangeType.insertEdge, 4);
-        map.put(ChangeType.deleteVertex, 5);
-        map.put(ChangeType.insertVertex, 5);
-        changesToConsider.sort(new Comparator<Change>() {
-            @Override
-            public int compare(Change o1, Change o2) {
-                return map.get(o1.getTypeOfChange()).compareTo(map.get(o2.getTypeOfChange()));
-            }
-        });
+        TgfdDiscovery.sortChanges(changesToConsider);
         try {
-            FileWriter file = new FileWriter("./changes_t" + t1 + "_t" + t2 + "_" + tgfdName + ".json");
+            String fileName = "./changes_t" + t1 + "_t" + t2 + "_" + tgfdName + ".json";
+            FileWriter file = new FileWriter(fileName);
             file.write("[");
             for (int index = 0; index < changesToConsider.size(); index++) {
                 Change change = changesToConsider.get(index);
@@ -314,7 +322,7 @@ public class testDiffExtractorIMDB {
                 sw.close();
             }
             file.write("]");
-            System.out.println("Successfully wrote to the file.");
+            System.out.println("Successfully wrote to the file "+fileName);
             file.close();
         } catch (IOException e) {
             e.printStackTrace();
