@@ -2,7 +2,10 @@ package Infra;
 
 import IncrementalRunner.IncUpdates;
 import TgfdDiscovery.TgfdDiscovery;
+import changeExploration.Change;
 import changeExploration.ChangeLoader;
+import changeExploration.ChangeType;
+import changeExploration.TypeChange;
 import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
 import graphLoader.IMDBLoader;
@@ -43,6 +46,7 @@ public class Histogram {
     private ArrayList<Map.Entry<String, Integer>> sortedVertexTypesHistogram;
     private long totalHistogramTime;
     private Map<String, Set<String>> vertexTypesToActiveAttributesMap;
+    private Map<String, Set<String>> typeChangesURIs;
 
     public Histogram(int T, List<Map.Entry<String, List<String>>> timestampToPathsMap, String loader, int frequentSetSize, int gamma, Set<String> interestLabelsSet) {
         this.T = T;
@@ -68,13 +72,14 @@ public class Histogram {
         this.interestLabelsSet = interestLabelsSet;
     }
 
-    public void computeHistogramUsingChangefiles(List<String> changefilePaths, boolean storeInMemory, Integer superVertexDegree, boolean dissolveTypes) {
+    public void computeHistogramUsingChangefilesAll(List<String> changefilePaths, boolean storeInMemory, Integer superVertexDegree, boolean dissolveTypes) {
         if (changefilePaths == null || changefilePaths.size() == 0)
             throw new IllegalArgumentException("No paths specified for changefiles.");
+        System.out.println("-----------Snapshot (1)-----------");
         GraphLoader graphLoader = createGraphForTimestamp(timestampToPathsMap.get(0));
         computeHistogramOfSnapshot(graphLoader, superVertexDegree); allSnapshotsCheckList[0] = true;
         for (int i = 0; i < this.T-1; i++) {
-            System.out.println("-----------Snapshot (" + (i + 1) + ")-----------");
+            System.out.println("-----------Snapshot (" + (i + 2) + ")-----------");
             updateGraphUsingChangefile(graphLoader, changefilePaths.get(i), storeInMemory);
             computeHistogramOfSnapshot(graphLoader, superVertexDegree); allSnapshotsCheckList[i+1] = true;
         }
@@ -186,11 +191,19 @@ public class Histogram {
     private void updateGraphUsingChangefile(GraphLoader graphLoader, String changeFilePath, boolean storeInMemory) {
         final long graphUpdateTime = System.currentTimeMillis();
         JSONArray jsonArray = TgfdDiscovery.readJsonArrayFromFile(changeFilePath);
-        ChangeLoader changeLoader = new ChangeLoader(jsonArray, true);
+        ChangeLoader changeLoader = new ChangeLoader(jsonArray, null, null, true);
         IncUpdates incUpdatesOnDBpedia = new IncUpdates(graphLoader.getGraph(), new ArrayList<>());
+        this.typeChangesURIs = new HashMap<>();
+        for (Change change: changeLoader.getAllChanges()) {
+            if (change.getTypeOfChange() == ChangeType.changeType) {
+                String uri = ((TypeChange) change).getUri();
+                this.typeChangesURIs.putIfAbsent(uri, new HashSet<>());
+                this.typeChangesURIs.get(uri).addAll(change.getTypes());
+            }
+        }
         TgfdDiscovery.sortChanges(changeLoader.getAllChanges());
         incUpdatesOnDBpedia.updateEntireGraph(changeLoader.getAllChanges());
-        TgfdDiscovery.printWithTime("Single graph histogram", (System.currentTimeMillis() - graphUpdateTime));
+        TgfdDiscovery.printWithTime("Graph update time", (System.currentTimeMillis() - graphUpdateTime));
         if (storeInMemory) {
             if (this.changefilesToJsonArrayMap == null)
                 this.changefilesToJsonArrayMap = new HashMap<>();
@@ -251,7 +264,8 @@ public class Histogram {
                 this.vertexTypesToAttributesMap.putIfAbsent(vertexType, new HashSet<>());
 
                 for (String attrName: v.getAllAttributesNames()) {
-                    if (attrName.equals("uri")) continue;
+                    if (attrName.equals("uri"))
+                        continue;
                     numOfAttributesInGraph++;
                     if (this.vertexTypesToAttributesMap.containsKey(vertexType)) {
                         this.vertexTypesToAttributesMap.get(vertexType).add(attrName);
@@ -702,5 +716,9 @@ public class Histogram {
 
     public Map<String, Set<String>> getVertexTypesToActiveAttributesMap() {
         return vertexTypesToActiveAttributesMap;
+    }
+
+    public Map<String, Set<String>> getTypeChangesURIs() {
+        return typeChangesURIs;
     }
 }

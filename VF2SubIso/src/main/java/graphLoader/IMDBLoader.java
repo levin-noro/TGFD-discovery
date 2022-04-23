@@ -21,8 +21,6 @@ import java.util.List;
 
 public class IMDBLoader extends GraphLoader{
 
-    private final HashSet<String> types = new HashSet<>();
-
     public IMDBLoader(List <TGFD> alltgfd, List<?> paths) {
 
         super(alltgfd);

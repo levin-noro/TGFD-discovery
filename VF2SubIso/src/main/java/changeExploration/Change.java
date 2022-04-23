@@ -18,6 +18,9 @@ public class Change {
     /** The set of relevant TGFDs for each change based on the name of the TGFD */
     private Set <String> TGFDs=new HashSet <>();
 
+    /** The set of relevant vertex types */
+    private Set <String> types = new HashSet<>();
+
     /** Unique id of a change log. */
     private int id;
     //endregion
@@ -57,6 +60,14 @@ public class Change {
     }
 
     /**
+     * @param types Set of TGFD names to be added for a change
+     */
+    public void addTypes(Set<String> types) {
+        if (types != null)
+            this.types.addAll(types);
+    }
+
+    /**
      * @param TGFDNames Set of TGFD names to be added for a change
      */
     public void addTGFD(Stream <String> TGFDNames)
@@ -81,6 +92,10 @@ public class Change {
     /** Gets the id of the change. */
     public int getId() {
         return id;
+    }
+
+    public Set<String> getTypes() {
+        return types;
     }
 
     //endregion
