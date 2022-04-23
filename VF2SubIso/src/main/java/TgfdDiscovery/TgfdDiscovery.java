@@ -225,10 +225,7 @@ public class TgfdDiscovery {
 			case "citation" -> this.setCitationTimestampsAndFilePaths();
 			case "imdb" -> this.setImdbTimestampToFilesMapFromPath(this.getPath());
 			case "synthetic" -> this.setSyntheticTimestampToFilesMapFromPath(this.getPath());
-			default -> {
-				System.out.println("No valid loader specified.");
-				System.exit(1);
-			}
+			default -> throw new IllegalArgumentException("No valid loader specified.");
 		}
 
 		if (cmd.hasOption("interestLabels")) {
@@ -236,14 +233,13 @@ public class TgfdDiscovery {
 			this.getInterestLabelsSet().addAll(List.of(interestLabels));
 		}
 
-		if (cmd.hasOption("fast")) {
+		if (cmd.hasOption("fast"))
 			this.setFastMatching(true);
-		}
 
 		printInfo();
 	}
 
-	private void divertOutputToLogFile() {
+	protected void divertOutputToLogFile() {
 		if (isPrintToLogFile()) {
 			String fileName = "tgfd-discovery-log-" + this.getExperimentStartTimeAndDateStamp() + ".txt";
 			if (logStream == null) {
@@ -253,11 +249,11 @@ public class TgfdDiscovery {
 					e.printStackTrace();
 				}
 			}
-			divertOutputToFile(fileName, logStream);
+			divertOutputToStream(logStream);
 		}
 	}
 
-	private void divertOutputToSummaryFile() {
+	protected void divertOutputToSummaryFile() {
 		if (isPrintToLogFile()) {
 			String fileName = "tgfd-discovery-summary-" + this.getExperimentStartTimeAndDateStamp() + ".txt";
 			if (summaryStream == null) {
@@ -267,12 +263,11 @@ public class TgfdDiscovery {
 					e.printStackTrace();
 				}
 			}
-			divertOutputToFile(fileName, summaryStream);
+			divertOutputToStream(summaryStream);
 		}
 	}
 
-	private void divertOutputToFile(String fileName, PrintStream stream) {
-
+	private void divertOutputToStream(PrintStream stream) {
 		System.setOut(stream);
 	}
 
@@ -280,7 +275,7 @@ public class TgfdDiscovery {
 		this.divertOutputToSummaryFile();
 
 		String[] info = {
-				String.join("=", "loader", this.getGraphSize()),
+				String.join("=", "loader", this.getLoader()),
 				String.join("=", "|G|", this.getGraphSize()),
 				String.join("=", "t", Integer.toString(this.getT())),
 				String.join("=", "k", Integer.toString(this.getK())),
@@ -293,7 +288,7 @@ public class TgfdDiscovery {
 				String.join("=", "noMinimalityPruning", Boolean.toString(!this.hasMinimalityPruning())),
 				String.join("=", "noSupportPruning", Boolean.toString(!this.hasSupportPruning())),
 				String.join("=", "fastMatching", Boolean.toString(this.isFastMatching())),
-				String.join("=", "interestLabels", String.join(",", this.getInterestLabelsSet())),
+				String.join("=", "interestLabels", this.getInterestLabelsSet().toString()),
 		};
 
 		System.out.println(String.join(", ", info));
@@ -372,6 +367,7 @@ public class TgfdDiscovery {
 				, (this.isFastMatching() ? "fast" : "")
 				, (this.isValidationSearch() ? "validation" : "")
 				, (this.useChangeFile() ? "changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "")
+				, (!this.isStoreInMemory() ? "dontStore" : "")
 				, (!this.reUseMatches() ? "noMatchesReUsed" : "")
 				, (!this.isOnlyInterestingTGFDs() ? "uninteresting" : "")
 				, (!this.hasMinimalityPruning() ? "noMinimalityPruning" : "")
@@ -470,22 +466,21 @@ public class TgfdDiscovery {
 		System.out.println("---------------------------------------------------------------");
 		System.out.println("                          Summary                              ");
 		System.out.println("---------------------------------------------------------------");
-		for (int level = 0; level <= tgfdDiscovery.getK(); level++) {
-			tgfdDiscovery.printSupportStatisticsForThisSnapshot(level);
-			tgfdDiscovery.printTimeStatisticsForThisSnapshot(level);
-		}
 		tgfdDiscovery.printTimeStatistics();
 		System.out.println("Total execution time: "+(System.currentTimeMillis() - startTime));
 	}
 
 	public void printSupportStatisticsForThisSnapshot(int level) {
+		divertOutputToSummaryFile();
 		System.out.println("----------------Support Statistics for vSpawn level "+level+"-----------------");
 		System.out.println("Median Pattern Support: " + this.getMedianPatternSupportsList(level));
 		System.out.println("Median Constant TGFD Support: " + this.getMedianConstantTgfdSupportsList(level));
 		System.out.println("Median General TGFD Support: " + this.getMedianGeneralTgfdSupportsList(level));
+		divertOutputToLogFile();
 	}
 
 	public void printTimeStatisticsForThisSnapshot(int level) {
+		divertOutputToSummaryFile();
 		System.out.println("----------------Time Statistics for vSpawn level "+level+"-----------------");
 		printWithTime("Total vSpawn", this.getTotalVSpawnTime(level)-this.getTotalSupergraphCheckingTime(level));
 		printWithTime("Total Supergraph Checking", this.getTotalSupergraphCheckingTime(level));
@@ -495,9 +490,12 @@ public class TgfdDiscovery {
 		printWithTime("Total Find Entities", this.getTotalFindEntitiesTime(level));
 		printWithTime("Total Discover Constant TGFDs", this.getTotalDiscoverConstantTGFDsTime(level));
 		printWithTime("Total Discover General TGFD", this.getTotalDiscoverGeneralTGFDTime(level));
+		printWithTime("As of k = " + level + ", execution", this.getkRuntimes().get(level));
+		divertOutputToLogFile();
 	}
 
 	public void printTimeStatistics() {
+		divertOutputToSummaryFile();
 		System.out.println("----------------Total Time Statistics-----------------");
 		printWithTime("Total Histogram", this.getTotalHistogramTime());
 		printWithTime("Total vSpawn", this.getTotalVSpawnTime().stream().reduce(0L, Long::sum)-this.getTotalSupergraphCheckingTime().stream().reduce(0L, Long::sum));
@@ -579,6 +577,7 @@ public class TgfdDiscovery {
 	}
 
 	protected void printSupportStatisticsForThisSnapshot() {
+		divertOutputToSummaryFile();
 		System.out.println("----------------Support Statistics for vSpawn level "+this.getCurrentVSpawnLevel()+"-----------------");
 
 		Collections.sort(this.patternSupportsListForThisSnapshot);
@@ -608,6 +607,7 @@ public class TgfdDiscovery {
 		this.patternSupportsListForThisSnapshot = new ArrayList<>();
 		this.constantTgfdSupportsListForThisSnapshot = new ArrayList<>();
 		this.generalTgfdSupportsListForThisSnapshot = new ArrayList<>();
+		divertOutputToLogFile();
 	}
 
 	public void markAsKexperiment() {
@@ -668,12 +668,12 @@ public class TgfdDiscovery {
 	}
 
 	// TODO: Can this be merged with the code in histogram?
-	protected void dissolveSuperVerticesBasedOnCount(GraphLoader graph) {
+	public static void dissolveSuperVerticesBasedOnCount(GraphLoader graph, int superVertexDegree) {
 		System.out.println("Dissolving super vertices based on count...");
 		System.out.println("Initial edge count of first snapshot: "+graph.getGraph().getGraph().edgeSet().size());
 		for (Vertex v: graph.getGraph().getGraph().vertexSet()) {
-			int inDegree = graph.getGraph().getGraph().incomingEdgesOf(v).size();
-			if (inDegree > INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR) {
+			int inDegree = graph.getGraph().getGraph().incomingEdgesOf(v).size(); // TODO: Should we use general degree instead of in-degree?
+			if (inDegree > superVertexDegree) {
 				List<RelationshipEdge> edgesToDelete = new ArrayList<>(graph.getGraph().getGraph().incomingEdgesOf(v));
 				for (RelationshipEdge e : edgesToDelete) {
 					Vertex sourceVertex = e.getSource();
@@ -739,6 +739,11 @@ public class TgfdDiscovery {
 				this.setGraphs(histogram.getGraphs());
 		}
 
+		storeRelevantInformationFromHistogram(histogram);
+		this.divertOutputToLogFile();
+	}
+
+	protected void storeRelevantInformationFromHistogram(Histogram histogram) {
 		this.setVertexTypesToAvgInDegreeMap(histogram.getVertexTypesToMedianInDegreeMap());
 
 		this.setActiveAttributesSet(histogram.getActiveAttributesSet());
@@ -771,7 +776,7 @@ public class TgfdDiscovery {
 					ConstantLiteral rhs = null;
 					for (ConstantLiteral literalInMatch : match) {
 						if (literalInMatch.getVertexType().equals(yVertexType) && literalInMatch.getAttrName().equals(yAttrName)) {
-							rhs = new ConstantLiteral(literalInMatch.getVertexType(), literalInMatch.getAttrName(), literalInMatch.getAttrValue());
+							rhs = literalInMatch;
 							continue;
 						}
 						for (ConstantLiteral attribute : xAttributes) {
@@ -2223,7 +2228,7 @@ public class TgfdDiscovery {
 			PatternVertex patternVertex = new PatternVertex(patternVertexType);
 			candidatePattern.addVertex(patternVertex);
 			candidatePattern.getCenterVertexType();
-			System.out.println("VSpawnInit with single-node pattern " + (i+1) + "/" + this.getSortedVertexHistogram().size() + ": " + candidatePattern.getPattern().vertexSet());
+			System.out.println("VSpawnInit with single-node pattern " + (i+1) + "/" + this.getSortedVertexHistogram().size() + ": " + candidatePattern.getGraph().vertexSet());
 
 			PatternTreeNode patternTreeNode;
 			patternTreeNode = this.patternTree.createNodeAtLevel(this.getCurrentVSpawnLevel(), candidatePattern);
@@ -2234,10 +2239,9 @@ public class TgfdDiscovery {
 
 			final long matchingStartTime = System.currentTimeMillis();
 			if (!this.isGeneratek0Tgfds()) {
-				if (this.isValidationSearch()) {
+				if (this.isValidationSearch())
 					this.getMatchesForPatternUsingVF2(patternTreeNode);
-				}
-				else if (this.useChangeFile()) {
+				else if (this.useChangeFile())
 					this.getMatchesUsingChangeFiles3(patternTreeNode);
 				else {
 					Map<String, List<Integer>> entityURIs = new HashMap<>();
@@ -2532,53 +2536,17 @@ public class TgfdDiscovery {
 			if (this.getCurrentVSpawnLevel() == 1) {
 				newPattern.assignOptimalCenterVertex(this.getVertexTypesToAvgInDegreeMap(), this.isFastMatching());
 				patternTreeNode = new PatternTreeNode(newPattern, previousLevelNode, candidateEdgeString);
-//				for (RelationshipEdge e : newPattern.getPattern().edgeSet()) {
-//					Vertex source = e.getSource();
-//					String sourceType = source.getTypes().iterator().next();
-//					Vertex target = e.getTarget();
-//					String targetType = target.getTypes().iterator().next();
-//					Vertex centerVertex = this.getVertexTypesToAvgInDegreeMap().get(sourceType) > this.getVertexTypesToAvgInDegreeMap().get(targetType) ? source : target;
-//					newPattern.setCenterVertex(centerVertex);
-//					newPattern.setRadius(1);
-//					newPattern.setDiameter(1);
-//				}
 				this.patternTree.getTree().get(this.getCurrentVSpawnLevel()).add(patternTreeNode);
 				this.patternTree.findSubgraphParents(this.getCurrentVSpawnLevel()-1, patternTreeNode);
 				this.patternTree.findCenterVertexParent(this.getCurrentVSpawnLevel()-1, patternTreeNode, true);
 			} else {
 				newPattern.assignOptimalCenterVertex(this.getVertexTypesToAvgInDegreeMap(), this.isFastMatching());
 				boolean considerAlternativeParents = true;
-//				newPattern.getCenterVertexType(); // TODO: Should we move the following code into either VF2PatternGraph or PatternTreeNode?
 				if (this.isFastMatching() && this.getCurrentVSpawnLevel() > 2) {
 					if (newPattern.getPatternType() == PatternType.Line) {
-//						newPattern.setCenterVertex(newPattern.getFirstNode());
 						considerAlternativeParents = false;
 					}
 				}
-//				else {
-//					int minRadius = newPattern.getPattern().vertexSet().size();
-//					for (Vertex newV : newPattern.getPattern().vertexSet()) {
-//						minRadius = Math.min(minRadius, newPattern.calculateRadiusForGivenVertex(newV));
-//					}
-//					Map<Vertex, Double> maxDegreeTypes = new HashMap<>();
-//					for (Vertex newV : newPattern.getPattern().vertexSet()) {
-//						if (minRadius == newPattern.calculateRadiusForGivenVertex(newV)) {
-//							String type = newV.getTypes().iterator().next();
-//							maxDegreeTypes.put(newV, this.getVertexTypesToAvgInDegreeMap().get(type));
-//						}
-//					}
-//					if (maxDegreeTypes.size() <= 0)
-//						throw new IllegalArgumentException("maxDegreeTypes.size() <= 0");
-//					List<Entry<Vertex, Double>> entries = new ArrayList<>(maxDegreeTypes.entrySet());
-//					entries.sort(new Comparator<Entry<Vertex, Double>>() {
-//						@Override
-//						public int compare(Entry<Vertex, Double> o1, Entry<Vertex, Double> o2) {
-//							return o2.getValue().compareTo(o1.getValue());
-//						}
-//					});
-//					Vertex centerVertex = entries.get(0).getKey();
-//					newPattern.setCenterVertex(centerVertex);
-//				}
 				patternTreeNode = this.patternTree.createNodeAtLevel(this.getCurrentVSpawnLevel(), newPattern, previousLevelNode, candidateEdgeString, considerAlternativeParents);
 			}
 			System.out.println("Marking vertex " + pv.getTypes() + "as expanded.");
