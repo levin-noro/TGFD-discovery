@@ -541,6 +541,7 @@ public class TgfdDiscovery {
 		else
 			localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
+		// TODO: Should we also have a method that does not require graphs to be stored in memory?
 		localizedVF2Matching.findMatches(graphs, this.getT());
 
 		List<Set<Set<ConstantLiteral>>> matchesPerTimestamp = localizedVF2Matching.getMatchesPerTimestamp();
@@ -709,28 +710,12 @@ public class TgfdDiscovery {
 		Histogram histogram = new Histogram(this.getT(), this.getTimestampToFilesMap(), this.getLoader(), this.getFrequentSetSize(), this.getGamma(), this.getInterestLabelsSet());
 		Integer superVertexDegree = this.isDissolveSuperVerticesBasedOnCount() ? INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR : null;
 		if (this.useChangeFile()) {
-//			if (this.isUseTypeChangeFile()) {
-//				Map<Integer,List<String>> changefilePaths = new HashMap<>();
-//				List<File> allFilesInDirectory = new ArrayList<>(List.of(Objects.requireNonNull(new File(".").listFiles(File::isFile))));
-//				for (File file : allFilesInDirectory) {
-//					String regex = "^changes_t([0-9]+)_t([0-9]+)_"+this.getGraphSize()+"-.+\\.json$";
-//					Pattern pattern = Pattern.compile(regex);
-//					Matcher matcher = pattern.matcher(file.getName());
-//					if (matcher.find()) {
-//						Integer timestamp = Integer.valueOf(matcher.group(1));
-//						changefilePaths.putIfAbsent(timestamp, new ArrayList<>());
-//						changefilePaths.get(timestamp).add(file.getName());
-//					}
-//				}
-//				histogram.computeHistogramUsingChangefilesTypes(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
-//			} else {
-				List<String> changefilePaths = new ArrayList<>();
-				for (int t = 1; t < this.getT(); t++) {
-					String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
-					changefilePaths.add(changeFilePath);
-				}
-				histogram.computeHistogramUsingChangefilesAll(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
-//			}
+			List<String> changefilePaths = new ArrayList<>();
+			for (int t = 1; t < this.getT(); t++) {
+				String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
+				changefilePaths.add(changeFilePath);
+			}
+			histogram.computeHistogramUsingChangefilesAll(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
 			if (this.isStoreInMemory())
 				this.setChangeFilesMap(histogram.getChangefilesToJsonArrayMap());
 		} else {
@@ -894,7 +879,7 @@ public class TgfdDiscovery {
 
 		// Find general TGFDs
 		if (!deltaToPairsMap.isEmpty()) {
-			numOfCandidateGeneralTGFDs += 1;
+			this.numOfCandidateGeneralTGFDs += 1;
 			long discoverGeneralTGFDTime = System.currentTimeMillis();
 			ArrayList<TGFD> generalTGFDs = discoverGeneralTGFD(patternNode, patternNode.getPatternSupport(), literalPath, entities.size(), deltaToPairsMap, literalTreeNode);
 			discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
