@@ -63,8 +63,8 @@ public class AttributeDependency {
         this.delta = delta;
     }
 
-    public boolean isSuperSetOfPath(ArrayList<AttributeDependency> zeroEntityDependenciesOnThisPath) {
-        for (AttributeDependency prunedPath : zeroEntityDependenciesOnThisPath) {
+    public boolean isSuperSetOfPath(ArrayList<AttributeDependency> prunedDependencies) {
+        for (AttributeDependency prunedPath : prunedDependencies) {
             if (this.getRhs().equals(prunedPath.getRhs()) && this.getLhs().containsAll(prunedPath.getLhs())) {
                 System.out.println("Candidate path " + this + " is a superset of pruned path " + prunedPath);
                 return true;
@@ -93,7 +93,7 @@ public class AttributeDependency {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         AttributeDependency that = (AttributeDependency) o;
-        return lhs.equals(that.lhs) && rhs.equals(that.rhs) && Objects.equals(delta, that.delta);
+        return lhs.equals(that.lhs) && rhs.equals(that.rhs) && Objects.equals(delta, that.delta); // Objects.equals ensure delta is not null
     }
 
     @Override
