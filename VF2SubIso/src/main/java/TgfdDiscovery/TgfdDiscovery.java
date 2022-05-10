@@ -126,12 +126,12 @@ public class TgfdDiscovery {
 	private Model firstSnapshotDataModel = null;
 	private long totalHistogramTime = 0;
 	private final Set<String> interestLabelsSet = new HashSet<>();
-	private final List<Integer> rhsInconsistencies = new ArrayList<>();
-	private int numOfConsistentRHS = 0;
+	protected final List<Integer> rhsInconsistencies = new ArrayList<>();
+	protected int numOfConsistentRHS = 0;
 	private PrintStream logStream = null;
 	private PrintStream summaryStream = null;
 	private boolean printToLogFile = false;
-	private int numOfCandidateGeneralTGFDs = 0;
+	protected int numOfCandidateGeneralTGFDs = 0;
 	private Map<String, Set<String>> typeChangeURIs;
 
 	public TgfdDiscovery() {
