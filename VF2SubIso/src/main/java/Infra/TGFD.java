@@ -9,23 +9,6 @@ public class TGFD {
     private Double patternSupport;
     private String name="";
 
-    public TGFD (VF2PatternGraph pattern, Delta delta, Dependency dependency,String name)
-    {
-        this.delta=delta;
-        this.pattern=pattern;
-        this.dependency=dependency;
-        this.name=name;
-    }
-
-    public TGFD (VF2PatternGraph pattern, Delta delta, Dependency dependency, double support, String name)
-    {
-        this.delta = delta;
-        this.pattern = pattern;
-        this.dependency = dependency;
-        this.support = support;
-        this.name=name;
-    }
-
     public TGFD (VF2PatternGraph pattern, Delta delta, Dependency dependency, double support, double patternSupport, String name)
     {
         this.delta = delta;
