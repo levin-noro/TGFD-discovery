@@ -35,75 +35,70 @@ public class GfdSimulator extends TgfdDiscovery {
         }
 
         for (int t = 1; t <= 21; t++) {
-                final long startTime = System.currentTimeMillis();
-                GfdSimulator gfdDiscovery = new GfdSimulator(args);
-                List<String> firstSnapshotPathsEntry = gfdDiscovery.getTimestampToFilesMap().get(0).getValue();
-                GraphLoader graph = new SyntheticLoader(firstSnapshotPathsEntry);
-                for (int i = 1; i < t; i++) {
-                    gfdDiscovery.updateGraphUsingChangefile(graph, i);
+            final long startTime = System.currentTimeMillis();
+            GfdSimulator gfdDiscovery = new GfdSimulator(args);
+            gfdDiscovery.setStoreInMemory(false);
+            List<String> firstSnapshotPathsEntry = gfdDiscovery.getTimestampToFilesMap().get(0).getValue();
+            GraphLoader graph = new SyntheticLoader(firstSnapshotPathsEntry);
+            for (int i = 1; i < t; i++) {
+                gfdDiscovery.updateGraphUsingChangefiles(graph, i, null);
+            }
+            gfdDiscovery.loadGraphsAndComputeHistogram2(graph);
+            gfdDiscovery.initialize();
+            while (gfdDiscovery.getCurrentVSpawnLevel() <= gfdDiscovery.getK()) {
+
+                PatternTreeNode patternTreeNode = null;
+                while (patternTreeNode == null && gfdDiscovery.getCurrentVSpawnLevel() <= gfdDiscovery.getK())
+                    patternTreeNode = gfdDiscovery.vSpawn();
+
+                if (gfdDiscovery.getCurrentVSpawnLevel() > gfdDiscovery.getK())
+                    break;
+
+                if (patternTreeNode == null)
+                    throw new NullPointerException("patternTreeNode == null");
+
+                List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
+                long matchingTime = System.currentTimeMillis();
+                if (gfdDiscovery.isValidationSearch())
+                    matchesPerTimestamps = gfdDiscovery.getMatchesForPatternUsingVF2(patternTreeNode);
+                else
+                    matchesPerTimestamps = gfdDiscovery.findMatchesUsingCenterVertices2(gfdDiscovery.getGraphs(), patternTreeNode);
+
+                matchingTime = System.currentTimeMillis() - matchingTime;
+                TgfdDiscovery.printWithTime("Pattern matching", (matchingTime));
+                gfdDiscovery.addToTotalMatchingTime(matchingTime);
+
+                double S = gfdDiscovery.getVertexHistogram().get(patternTreeNode.getPattern().getCenterVertexType());
+                double patternSupport = GfdSimulator.calculatePatternSupport(patternTreeNode.getEntityURIs(), S, gfdDiscovery.getT());
+                gfdDiscovery.patternSupportsListForThisSnapshot.add(patternSupport);
+                patternTreeNode.setPatternSupport(patternSupport);
+
+                if (gfdDiscovery.doesNotSatisfyTheta(patternTreeNode)) {
+                    System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
+                    if (gfdDiscovery.hasSupportPruning())
+                        patternTreeNode.setIsPruned();
+                    continue;
                 }
-                gfdDiscovery.loadGraphsAndComputeHistogram2(graph);
-                gfdDiscovery.initialize();
-                while (gfdDiscovery.getCurrentVSpawnLevel() <= gfdDiscovery.getK()) {
 
-                    PatternTreeNode patternTreeNode = null;
-                    while (patternTreeNode == null && gfdDiscovery.getCurrentVSpawnLevel() <= gfdDiscovery.getK())
-                        patternTreeNode = gfdDiscovery.vSpawn();
+                if (gfdDiscovery.isSkipK1() && gfdDiscovery.getCurrentVSpawnLevel() == 1)
+                    continue;
 
-                    if (gfdDiscovery.getCurrentVSpawnLevel() > gfdDiscovery.getK())
-                        break;
+                final long hSpawnStartTime = System.currentTimeMillis();
+                ArrayList<TGFD> tgfds = gfdDiscovery.hSpawn(patternTreeNode, matchesPerTimestamps);
+                TgfdDiscovery.printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
+                gfdDiscovery.getDiscoveredTgfds().get(gfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
+            }
+            System.out.println("---------------------------------------------------------------");
+            System.out.println("                          Summary                              ");
+            System.out.println("---------------------------------------------------------------");
+            gfdDiscovery.printTimeStatistics();
+            final long endTime = System.currentTimeMillis() - startTime;
+            System.out.println("Total execution time: " + endTime);
 
-                    if (patternTreeNode == null)
-                        throw new NullPointerException("patternTreeNode == null");
-
-                    List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
-                    long matchingTime = System.currentTimeMillis();
-                    if (gfdDiscovery.isValidationSearch())
-                        matchesPerTimestamps = gfdDiscovery.getMatchesForPatternUsingVF2(patternTreeNode);
-                    else if (gfdDiscovery.useChangeFile())
-                        matchesPerTimestamps = gfdDiscovery.getMatchesUsingChangeFiles3(patternTreeNode);
-                    else
-                        matchesPerTimestamps = gfdDiscovery.findMatchesUsingCenterVertices2(gfdDiscovery.getGraphs(), patternTreeNode);
-
-                    matchingTime = System.currentTimeMillis() - matchingTime;
-                    TgfdDiscovery.printWithTime("Pattern matching", (matchingTime));
-                    gfdDiscovery.addToTotalMatchingTime(matchingTime);
-
-                    double S = gfdDiscovery.getVertexHistogram().get(patternTreeNode.getPattern().getCenterVertexType());
-                    double patternSupport = GfdSimulator.calculatePatternSupport(patternTreeNode.getEntityURIs(), S, gfdDiscovery.getT());
-                    gfdDiscovery.patternSupportsListForThisSnapshot.add(patternSupport);
-                    patternTreeNode.setPatternSupport(patternSupport);
-
-                    if (gfdDiscovery.doesNotSatisfyTheta(patternTreeNode)) {
-                        System.out.println("Mark as pruned. Real pattern support too low for pattern " + patternTreeNode.getPattern());
-                        if (gfdDiscovery.hasSupportPruning())
-                            patternTreeNode.setIsPruned();
-                        continue;
-                    }
-
-                    if (gfdDiscovery.isSkipK1() && gfdDiscovery.getCurrentVSpawnLevel() == 1)
-                        continue;
-
-                    final long hSpawnStartTime = System.currentTimeMillis();
-                    ArrayList<TGFD> tgfds = gfdDiscovery.hSpawn(patternTreeNode, matchesPerTimestamps);
-                    TgfdDiscovery.printWithTime("hSpawn", (System.currentTimeMillis() - hSpawnStartTime));
-                    gfdDiscovery.getDiscoveredTgfds().get(gfdDiscovery.getCurrentVSpawnLevel()).addAll(tgfds);
-                }
-                System.out.println("---------------------------------------------------------------");
-                System.out.println("                          Summary                              ");
-                System.out.println("---------------------------------------------------------------");
-                for (int level = 0; level <= gfdDiscovery.getK(); level++) {
-                    gfdDiscovery.printSupportStatisticsForThisSnapshot(level);
-                    gfdDiscovery.printTimeStatisticsForThisSnapshot(level);
-                }
-                gfdDiscovery.printTimeStatistics();
-                final long endTime = System.currentTimeMillis() - startTime;
-                System.out.println("Total execution time: " + endTime);
-
-                long minutes = (endTime / 1000)  / 60;
-                int seconds = (int)((endTime / 1000) % 60);
+            long minutes = (endTime / 1000)  / 60;
+            int seconds = (int)((endTime / 1000) % 60);
             try {
-                file.write("t = "+t+", "+minutes+seconds+"\n");
+                file.write("t = "+t+", "+minutes+':'+seconds+"\n");
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -153,7 +148,7 @@ public class GfdSimulator extends TgfdDiscovery {
             PatternVertex patternVertex = new PatternVertex(patternVertexType);
             candidatePattern.addVertex(patternVertex);
             candidatePattern.getCenterVertexType();
-            System.out.println("VSpawnInit with single-node pattern " + (i+1) + "/" + this.getSortedVertexHistogram().size() + ": " + candidatePattern.getPattern().vertexSet());
+            System.out.println("VSpawnInit with single-node pattern " + (i+1) + "/" + this.getSortedVertexHistogram().size() + ": " + candidatePattern.getGraph().vertexSet());
 
             PatternTreeNode patternTreeNode;
             patternTreeNode = this.patternTree.createNodeAtLevel(this.getCurrentVSpawnLevel(), candidatePattern);
@@ -279,6 +274,7 @@ public class GfdSimulator extends TgfdDiscovery {
         else
             localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
 
+        // TODO: Should we also have a method that does not require graphs to be stored in memory?
         localizedVF2Matching.findMatches(graphs, this.getT());
 
         List<Set<Set<ConstantLiteral>>> matchesPerTimestamp = localizedVF2Matching.getMatchesPerTimestamp();
@@ -350,7 +346,7 @@ public class GfdSimulator extends TgfdDiscovery {
             System.out.println("-----------Snapshot (" + (t + 1) + ")-----------");
             String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
             JSONArray jsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
-            ChangeLoader changeLoader = new ChangeLoader(jsonArray, true);
+            ChangeLoader changeLoader = new ChangeLoader(jsonArray, null, null, true);
             IncUpdates incUpdatesOnDBpedia = new IncUpdates(graph.getGraph(), new ArrayList<>());
             sortChanges(changeLoader.getAllChanges());
             incUpdatesOnDBpedia.updateEntireGraph(changeLoader.getAllChanges());
@@ -497,7 +493,7 @@ public class GfdSimulator extends TgfdDiscovery {
     }
 
     public ArrayList<TGFD> deltaDiscovery(PatternTreeNode patternNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, List<Set<Set<ConstantLiteral>>> matchesPerTimestamps) {
-        ArrayList<TGFD> tgfds = new ArrayList<>();
+        ArrayList<TGFD> gfds = new ArrayList<>();
 
         // Add dependency attributes to pattern
         // TODO: Fix - when multiple vertices in a pattern have the same type, attribute values get overwritten
@@ -531,53 +527,60 @@ public class GfdSimulator extends TgfdDiscovery {
                 System.out.println("Marked as pruned. Literal path "+literalTreeNode.getPathToRoot());
                 patternNode.addZeroEntityDependency(literalPath);
             }
-            return tgfds;
+            return gfds;
         }
         System.out.println("Number of entities discovered: " + entities.size());
 
-        System.out.println("Discovering constant TGFDs");
+        System.out.println("Discovering constant GFDs");
 
-        // Find Constant TGFDs
-//        Map<Pair,ArrayList<TreeSet<Pair>>> deltaToPairsMap = new HashMap<>();
-//        ArrayList<TGFD> constantTGFDs = discoverConstantTGFDs(patternNode, literalPath.getRhs(), entities, deltaToPairsMap);
+        // Find Constant GFDs
         List<AttributeDependency> constantPaths = new ArrayList<>();
-        List<TGFD> constantTGFDs = discoverConstantTGFDs(patternNode, entities, constantPaths);
+        List<TGFD> constantGFDs = discoverConstantGFDs(patternNode, entities, constantPaths);
 
         // TODO: Try discover general TGFD even if no constant TGFD candidate met support threshold
-        System.out.println("Constant TGFDs discovered: " + constantTGFDs.size());
-        tgfds.addAll(constantTGFDs);
+        System.out.println("Constant GFDs discovered: " + constantGFDs.size());
+        gfds.addAll(constantGFDs);
 
-        System.out.println("Discovering general TGFDs");
+        System.out.println("Discovering general GFDs");
 
         // Find general TGFDs
         if (constantPaths.size() > 0) {
-            long discoverGeneralTGFDTime = System.currentTimeMillis();
-            Dependency generalDependency = new Dependency();
-            for (ConstantLiteral constantLiteral: literalPath.getLhs())
-                generalDependency.addLiteralToX(new VariableLiteral(constantLiteral.getVertexType(),constantLiteral.getAttrName()));
-            generalDependency.addLiteralToY(new VariableLiteral(literalPath.getRhs().getVertexType(),literalPath.getRhs().getAttrName()));
-            double generalSupport = TgfdDiscovery.calculateSupport(constantPaths.size(), entities.size(), this.getT());
-            TGFD generalTGFD = new TGFD(patternForDependency, null, generalDependency, generalSupport, patternNode.getPatternSupport(), "");
-            discoverGeneralTGFDTime = System.currentTimeMillis() - discoverGeneralTGFDTime;
-            printWithTime("discoverGeneralTGFDTime", discoverGeneralTGFDTime);
-            addToTotalDiscoverGeneralTGFDTime(discoverGeneralTGFDTime);
+            this.numOfCandidateGeneralTGFDs += 1;
+            discoverGeneralGFD(patternNode, literalTreeNode, literalPath, gfds, patternForDependency, entities, constantPaths);
+        }
 
-            System.out.println("Converted constant TGFDs into a general TGFD.");
-            System.out.println(generalTGFD);
+        return gfds;
+    }
 
+    private void discoverGeneralGFD(PatternTreeNode patternTreeNode, LiteralTreeNode literalTreeNode, AttributeDependency literalPath, ArrayList<TGFD> tgfds, VF2PatternGraph patternForDependency, Map<Set<ConstantLiteral>, ArrayList<Map.Entry<ConstantLiteral, List<Integer>>>> entities, List<AttributeDependency> constantPaths) {
+        long discoverGeneralGFDTime = System.currentTimeMillis();
+        Dependency generalDependency = new Dependency();
+        for (ConstantLiteral constantLiteral: literalPath.getLhs())
+            generalDependency.addLiteralToX(new VariableLiteral(constantLiteral.getVertexType(),constantLiteral.getAttrName()));
+        generalDependency.addLiteralToY(new VariableLiteral(literalPath.getRhs().getVertexType(), literalPath.getRhs().getAttrName()));
+        double generalSupport = TgfdDiscovery.calculateSupport(constantPaths.size(), entities.size(), this.getT());
+
+        if (generalSupport < this.getTgfdTheta()) {
+            System.out.println("Support for candidate general GFD is below support threshold");
+        } else {
+            TGFD generalGFD = new TGFD(patternForDependency, null, generalDependency, generalSupport, patternTreeNode.getPatternSupport(), "");
+            System.out.println("Converted constant GFDs into a general GFD.");
+            System.out.println(generalGFD);
+            tgfds.add(generalGFD);
             if (this.hasMinimalityPruning()) {
                 literalTreeNode.setIsPruned();
                 System.out.println("Marked as pruned. Literal path " + literalTreeNode.getPathToRoot());
-                patternNode.addMinimalDependency(literalPath);
+                patternTreeNode.addMinimalDependency(literalPath);
             }
-            tgfds.add(generalTGFD);
         }
 
-        return tgfds;
+        discoverGeneralGFDTime = System.currentTimeMillis() - discoverGeneralGFDTime;
+        printWithTime("discoverGeneralTGFDTime", discoverGeneralGFDTime);
+        addToTotalDiscoverGeneralTGFDTime(discoverGeneralGFDTime);
     }
 
     @NotNull
-    private List<TGFD> discoverConstantTGFDs(PatternTreeNode patternNode, Map<Set<ConstantLiteral>, ArrayList<Map.Entry<ConstantLiteral, List<Integer>>>> entities, List<AttributeDependency> constantPaths) {
+    private List<TGFD> discoverConstantGFDs(PatternTreeNode patternNode, Map<Set<ConstantLiteral>, ArrayList<Map.Entry<ConstantLiteral, List<Integer>>>> entities, List<AttributeDependency> constantPaths) {
         List<TGFD> constantTGFDs = new ArrayList<>();
         long discoverConstantTGFDsTime = System.currentTimeMillis();
         long supersetPathCheckingTimeForThisTGFD = 0;
@@ -589,8 +592,12 @@ public class GfdSimulator extends TgfdDiscovery {
                 System.out.println(entry.getKey() + ":" + entry.getValue());
             }
 
-            if (rhsAttrValuesTimestampsSortedByFreq.size() > 1)
+            if (rhsAttrValuesTimestampsSortedByFreq.size() > 1) {
+                this.rhsInconsistencies.add(rhsAttrValuesTimestampsSortedByFreq.size());
                 continue;
+            } else {
+                this.numOfConsistentRHS += 1;
+            }
 
             VF2PatternGraph newPattern = patternNode.getPattern().copy();
             Dependency newDependency = new Dependency();
@@ -608,8 +615,6 @@ public class GfdSimulator extends TgfdDiscovery {
             }
 
             ConstantLiteral rhsLiteral = rhsAttrValuesTimestampsSortedByFreq.get(0).getKey();
-            System.out.println("Computing candidate delta for RHS value...\n" + rhsLiteral);
-            int numOfMatches = rhsAttrValuesTimestampsSortedByFreq.get(0).getValue().get(0);
             ConstantLiteral newY = new ConstantLiteral(rhsLiteral.getVertexType(), rhsLiteral.getAttrName(), rhsLiteral.getAttrValue());
             newDependency.addLiteralToY(newY);
             constantPath.setRhs(newY);
@@ -629,14 +634,12 @@ public class GfdSimulator extends TgfdDiscovery {
             if (isNotMinimal)
                 continue;
 
+            int numOfMatches = rhsAttrValuesTimestampsSortedByFreq.get(0).getValue().get(0); // There is only one timestamp
             double constantTgfdSupport = TgfdDiscovery.calculateSupport(numOfMatches, entities.size(), this.getT());
             this.constantTgfdSupportsListForThisSnapshot.add(constantTgfdSupport); // Statistics
             // Only output constant TGFDs that satisfy support
             if (constantTgfdSupport < this.getTgfdTheta()) {
-                if (this.hasSupportPruning())
-                    patternNode.addLowSupportDependency(new AttributeDependency(constantPath.getLhs(), constantPath.getRhs(), null));
                 System.out.println("Could not satisfy TGFD support threshold for entity: " + entityEntry.getKey());
-//				continue;
             } else {
                 System.out.println("Creating new constant TGFD...");
                 TGFD entityTGFD = new TGFD(newPattern, null, newDependency, constantTgfdSupport, patternNode.getPatternSupport(), "");
@@ -654,21 +657,15 @@ public class GfdSimulator extends TgfdDiscovery {
 
 
     private void loadGraphsAndComputeHistogram2(GraphLoader graph) {
+        this.divertOutputToSummaryFile();
+
         System.out.println("Computing Histogram...");
         Histogram histogram = new Histogram(this.getT(), Collections.singletonList(graph), this.getFrequentSetSize(), this.getGamma(), this.getInterestLabelsSet());
         Integer superVertexDegree = this.isDissolveSuperVerticesBasedOnCount() ? INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR : null;
         histogram.computeHistogramUsingGraphs(superVertexDegree);
         this.setGraphs(Collections.singletonList(graph));
 
-        this.setVertexTypesToAvgInDegreeMap(histogram.getVertexTypesToMedianInDegreeMap());
-
-        this.setActiveAttributesSet(histogram.getActiveAttributesSet());
-        this.setVertexTypesToActiveAttributesMap(histogram.getVertexTypesToActiveAttributesMap());
-
-        this.setSortedFrequentEdgesHistogram(histogram.getSortedFrequentEdgesHistogram());
-        this.setSortedVertexHistogram(histogram.getSortedVertexTypesHistogram());
-        this.setVertexHistogram(histogram.getVertexHistogram());
-
-        this.setTotalHistogramTime(histogram.getTotalHistogramTime());
+        storeRelevantInformationFromHistogram(histogram);
+        this.divertOutputToLogFile();
     }
 }
