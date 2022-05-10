@@ -36,8 +36,9 @@ public class ChangeLoader {
 
             org.json.simple.JSONArray allRelevantTypes = (org.json.simple.JSONArray) object.get("types");
             Set<String> relevantTypes = new HashSet<>();
-            for (Object type : allRelevantTypes)
-                relevantTypes.add((String) type);
+            if (allRelevantTypes != null)
+                for (Object type : allRelevantTypes)
+                    relevantTypes.add((String) type);
 
             ChangeType type = ChangeType.valueOf((String) object.get("typeOfChange"));
             int id = Integer.parseInt(object.get("id").toString());
