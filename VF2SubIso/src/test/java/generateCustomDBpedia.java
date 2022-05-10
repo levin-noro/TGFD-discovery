@@ -23,19 +23,14 @@ public class generateCustomDBpedia {
     public static final double LOWER_THRESHOLD = 0.01;
     public static final double UPPER_THRESHOLD = 0.01;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws ParseException {
         Options options = new Options();
         options.addOption("path", true, "generate graphs using files from specified path");
         options.addOption("type", true, "generate graphs using type");
         options.addOption("count", true, "generate graphs based on vertex count");
         CommandLineParser parser = new DefaultParser();
-        CommandLine cmd = null;
-        try {
-            cmd = parser.parse(options, args);
-        } catch (ParseException e) {
-            e.printStackTrace();
-        }
-        assert cmd != null;
+        CommandLine cmd = parser.parse(options, args);
+
         String path = null;
         if (cmd.hasOption("path")) {
             path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
