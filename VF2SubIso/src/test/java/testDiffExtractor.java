@@ -74,7 +74,7 @@ public class testDiffExtractor {
             String timestamp = null;
             switch (loader) {
                 case "imdb" -> {
-                    String regex = "^imdb-([0-9]{2})([0-9]{2})([0-9]{2})\\.nt$";
+                    String regex = "([0-9]{2})([0-9]{2})([0-9]{2})";
                     Pattern pattern = Pattern.compile(regex);
                     Matcher matcher = pattern.matcher(timestampEntry.getKey());
                     if (matcher.find()) {
@@ -211,7 +211,7 @@ public class testDiffExtractor {
             }
             printWithTime("Load graph " + ids[i + 1] + " (" + Config.getTimestamps().get(ids[i + 1]) + ")", System.currentTimeMillis() - changeDiscoveryTime);
         }
-        printWithTime("Changefile generation time for one edge", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
+        printWithTime("Single snapshot changefile generation time", (System.currentTimeMillis() - dummyTgfdChangeFileGenerationTime));
     }
 
     private static void removeDisconnectedVertices(VF2DataGraph vf2DataGraph) {
