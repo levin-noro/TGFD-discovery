@@ -305,18 +305,18 @@ public class testDiffExtractor {
         final long printTime = System.currentTimeMillis();
         System.out.println("Printing the changes: " + t1 + " -> " + t2);
 
-        TgfdDiscovery.sortChanges(changesToConsider);
+        List<Change> sortedChanges = sortChanges(changesToConsider);
         try {
             String fileName = "./changes_t" + t1 + "_t" + t2 + "_" + tgfdName + ".json";
             FileWriter file = new FileWriter(fileName);
             file.write("[");
-            for (int index = 0; index < changesToConsider.size(); index++) {
-                Change change = changesToConsider.get(index);
+            for (int index = 0; index < sortedChanges.size(); index++) {
+                Change change = sortedChanges.get(index);
                 final StringWriter sw = new StringWriter();
                 final ObjectMapper mapper = new ObjectMapper();
                 mapper.writeValue(sw, change);
                 file.write(sw.toString());
-                if (index < changesToConsider.size() - 1) {
+                if (index < sortedChanges.size() - 1) {
                     file.write(",");
                 }
                 sw.close();
@@ -328,6 +328,22 @@ public class testDiffExtractor {
             e.printStackTrace();
         }
         printWithTime("Printing", System.currentTimeMillis()-printTime);
-        printStatistics(changesToConsider);
+        printStatistics(sortedChanges);
+    }
+
+    public static List<Change> sortChanges(List<Change> changes) {
+        System.out.println("Number of changes: "+changes.size());
+        HashMap<ChangeType, Integer> map = new HashMap<>();
+        map.put(ChangeType.deleteAttr, 1);
+        map.put(ChangeType.insertAttr, 3);
+        map.put(ChangeType.changeAttr, 1);
+        map.put(ChangeType.deleteEdge, 0);
+        map.put(ChangeType.insertEdge, 3);
+        map.put(ChangeType.changeType, 1);
+        map.put(ChangeType.deleteVertex, 1);
+        map.put(ChangeType.insertVertex, 2);
+        List<Change> sortedChanges = changes.parallelStream().sorted(Comparator.comparing(o -> map.get(o.getTypeOfChange()))).collect(Collectors.toList());
+        System.out.println("Sorted changes.");
+        return sortedChanges;
     }
 }
