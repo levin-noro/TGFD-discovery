@@ -64,7 +64,7 @@ public class TgfdDiscovery {
 	private boolean validationSearch = false;
 	private String path = ".";
 	private int numOfSnapshots;
-	public static final int DEFAULT_FREQUENT_SIZE_SET = Integer.MAX_VALUE;
+	public static final int DEFAULT_FREQUENT_SIZE_SET = 25;
 	public static final int DEFAULT_GAMMA = 20;
 	public static final int DEFAULT_K = 3;
 	public static final double DEFAULT_TGFD_THETA = 0.25;
