@@ -163,7 +163,7 @@ public class GfdSimulator extends TgfdDiscovery {
                     this.getMatchesForPatternUsingVF2(patternTreeNode);
                 }
                 else if (this.useChangeFile()) {
-                    this.getMatchesUsingChangeFiles3(patternTreeNode);
+                    this.getMatchesUsingChangeFiles(patternTreeNode);
                 }
                 else {
                     // TODO: Implement pattern support calculation here using entityURIs?
@@ -203,7 +203,7 @@ public class GfdSimulator extends TgfdDiscovery {
                     matchesPerTimestamps = this.getMatchesForPatternUsingVF2(patternTreeNode);
                 }
                 else if (this.useChangeFile()) {
-                    matchesPerTimestamps = this.getMatchesUsingChangeFiles3(patternTreeNode);
+                    matchesPerTimestamps = this.getMatchesUsingChangeFiles(patternTreeNode);
                 }
                 else {
 //					ArrayList<ArrayList<DataVertex>> matchesOfThisCenterVertexPerTimestamp = new ArrayList<>();
@@ -330,7 +330,7 @@ public class GfdSimulator extends TgfdDiscovery {
     }
 
 
-    public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles3(PatternTreeNode patternTreeNode) {
+    public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode) {
         LocalizedVF2Matching localizedVF2Matching;
         if (this.isFastMatching())
             if (patternTreeNode.getPattern().getPatternType() == PatternType.Windmill)
