@@ -438,7 +438,7 @@ public class TgfdDiscovery {
 			if (tgfdDiscovery.isValidationSearch())
 				matchesPerTimestamps = tgfdDiscovery.getMatchesForPatternUsingVF2(patternTreeNode);
 			else if (tgfdDiscovery.useChangeFile())
-				matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles3(patternTreeNode);
+				matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
 			else
 				matchesPerTimestamps = tgfdDiscovery.findMatchesUsingCenterVertices2(tgfdDiscovery.getGraphs(), patternTreeNode);
 
@@ -2227,7 +2227,7 @@ public class TgfdDiscovery {
 				if (this.isValidationSearch())
 					this.getMatchesForPatternUsingVF2(patternTreeNode);
 				else if (this.useChangeFile())
-					this.getMatchesUsingChangeFiles3(patternTreeNode);
+					this.getMatchesUsingChangeFiles(patternTreeNode);
 				else {
 					Map<String, List<Integer>> entityURIs = new HashMap<>();
 					LocalizedVF2Matching localizedVF2Matching = new LocalizedVF2Matching(patternTreeNode.getPattern(), patternTreeNode.getCenterVertexParent(), this.getT(), this.isOnlyInterestingTGFDs(), this.getVertexTypesToActiveAttributesMap(), this.reUseMatches());
@@ -2257,7 +2257,7 @@ public class TgfdDiscovery {
 				if (this.isValidationSearch())
 					matchesPerTimestamps = this.getMatchesForPatternUsingVF2(patternTreeNode);
 				else if (this.useChangeFile())
-					matchesPerTimestamps = this.getMatchesUsingChangeFiles3(patternTreeNode);
+					matchesPerTimestamps = this.getMatchesUsingChangeFiles(patternTreeNode);
 				else {
 					LocalizedVF2Matching localizedVF2Matching;
 					if (this.isFastMatching())
@@ -2735,7 +2735,7 @@ public class TgfdDiscovery {
 		return numOfMatches;
 	}
 
-	public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles3(PatternTreeNode patternTreeNode) {
+	public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode) {
 		Set<String> vertexSets = patternTreeNode.getGraph().vertexSet().stream().map(vertex -> vertex.getTypes().iterator().next()).collect(Collectors.toSet());
 		LocalizedVF2Matching localizedVF2Matching;
 		if (this.isFastMatching())
@@ -2788,7 +2788,7 @@ public class TgfdDiscovery {
 			dissolveSuperVerticesBasedOnCount(graph, INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR);
 	}
 
-	public List<Set<Set<ConstantLiteral>>> getMatchesUsingChangeFiles(PatternTreeNode patternTreeNode) {
+	public List<Set<Set<ConstantLiteral>>> getMatchesUsingIncrementalMatching(PatternTreeNode patternTreeNode) {
 		// TODO: Should we use changefiles based on freq types??
 
 //		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = new ArrayList<>();
