@@ -117,7 +117,7 @@ public class IncUpdates {
 
         Change change=changes.iterator().next();
 
-        if (performVertexChange && change instanceof VertexChange) {
+        if (change instanceof VertexChange) {
             VertexChange vertexChange = (VertexChange) change;
             // TODO: If findRelevantTGFDs returns 0 should we skip?
             if (change.getTypeOfChange() == ChangeType.deleteVertex) {
@@ -129,7 +129,7 @@ public class IncUpdates {
                 if (change.getTGFDs().size() == 0)
                     return null;
                 return updateGraphByVertex(v1,change,change.getTGFDs(),tgfdsByName, false);
-            } else if (change.getTypeOfChange() == ChangeType.insertVertex) {
+            } else if (performVertexChange && change.getTypeOfChange() == ChangeType.insertVertex) {
                 if (change.getTGFDs().size() == 0)
                     findRelevantTGFDs(vertexChange, ((VertexChange) change).getVertex());
                 if (change.getTGFDs().size() == 0)
@@ -215,7 +215,7 @@ public class IncUpdates {
                 incrementalChangeHashMap.put(tgfdsByName.get(tgfdName).getName(), incrementalChange);
             }
         } else {
-            subgraph = baseGraph.getSubGraphWithinDiameter(v1, 0, new HashSet<>(), new HashSet<>());
+            subgraph = baseGraph.getSubGraphWithinDiameter(v1,getPatternSize(affectedTGFDNames,tgfdsByName),getEdgeLabels(affectedTGFDNames,tgfdsByName),getPatternEdgeSet(affectedTGFDNames,tgfdsByName));
             for (String tgfdName:affectedTGFDNames) {
                 Iterator<GraphMapping<Vertex, RelationshipEdge>> beforeChange = VF2.execute(subgraph,tgfdsByName.get(tgfdName).getPattern(),false);
                 IncrementalChange incrementalChange=new IncrementalChange(beforeChange,tgfdsByName.get(tgfdName).getPattern());

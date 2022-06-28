@@ -3,10 +3,7 @@ package TgfdDiscovery;
 import IncrementalRunner.IncUpdates;
 import IncrementalRunner.IncrementalChange;
 import Infra.*;
-import VF2Runner.FastMatching;
-import VF2Runner.LocalizedVF2Matching;
-import VF2Runner.VF2SubgraphIsomorphism;
-import VF2Runner.WindmillMatching;
+import VF2Runner.*;
 import changeExploration.*;
 import graphLoader.DBPediaLoader;
 import graphLoader.GraphLoader;
@@ -133,6 +130,7 @@ public class TgfdDiscovery {
 	private boolean printToLogFile = false;
 	protected int numOfCandidateGeneralTGFDs = 0;
 	private Map<String, Set<String>> typeChangeURIs;
+	private boolean isIncremental = false;
 
 	public TgfdDiscovery() {
 		this.setDiscoveryStartTime(System.currentTimeMillis());
@@ -187,12 +185,15 @@ public class TgfdDiscovery {
 		if (cmd.hasOption("validation")) {
 			validationSearchTemp = true;
 			reUseMatchesTemp = false;
-		} else if (cmd.hasOption(CHANGEFILE_PARAMETER_TEXT)) {
-			this.setUseChangeFile(true);
-			if (cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT).equalsIgnoreCase("type")) {
-				this.setUseTypeChangeFile(true);
-			}
 		}
+		if (cmd.hasOption(CHANGEFILE_PARAMETER_TEXT)) {
+			this.setUseChangeFile(true);
+			if (cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT).equalsIgnoreCase("type"))
+				this.setUseTypeChangeFile(true);
+		}
+		if (cmd.hasOption("incremental"))
+			this.setIncremental(true);
+
 		this.setReUseMatches(reUseMatchesTemp);
 		this.setValidationSearch(validationSearchTemp);
 
@@ -323,6 +324,7 @@ public class TgfdDiscovery {
 		options.addOption("dontStore", false, "run experiment without storing changefiles in memory, read from disk");
 		options.addOption(MAX_LIT_PARAM, true, "run experiment that outputs TGFDs with up n literals");
 		options.addOption("fast", false, "run experiment using fast matching");
+		options.addOption("incremental", false, "run experiment using incremental matching");
 		options.addOption("interestLabels", true, "run experiment using frequent sets of vertices and edges that contain labels of interest");
 		return options;
 	}
@@ -367,6 +369,7 @@ public class TgfdDiscovery {
 				, (this.isFastMatching() ? "fast" : "")
 				, (this.isValidationSearch() ? "validation" : "")
 				, (this.useChangeFile() ? "changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "")
+				, (this.isIncremental() ? "incremental" : "")
 				, (!this.isStoreInMemory() ? "dontStore" : "")
 				, (!this.reUseMatches() ? "noMatchesReUsed" : "")
 				, (!this.isOnlyInterestingTGFDs() ? "uninteresting" : "")
@@ -437,6 +440,8 @@ public class TgfdDiscovery {
 			long matchingTime = System.currentTimeMillis();
 			if (tgfdDiscovery.isValidationSearch())
 				matchesPerTimestamps = tgfdDiscovery.getMatchesForPatternUsingVF2(patternTreeNode);
+			else if (tgfdDiscovery.isIncremental())
+				matchesPerTimestamps = tgfdDiscovery.getMatchesUsingIncrementalMatching(patternTreeNode);
 			else if (tgfdDiscovery.useChangeFile())
 				matchesPerTimestamps = tgfdDiscovery.getMatchesUsingChangeFiles(patternTreeNode);
 			else
@@ -709,7 +714,7 @@ public class TgfdDiscovery {
 		System.out.println("Computing Histogram...");
 		Histogram histogram = new Histogram(this.getT(), this.getTimestampToFilesMap(), this.getLoader(), this.getFrequentSetSize(), this.getGamma(), this.getInterestLabelsSet());
 		Integer superVertexDegree = this.isDissolveSuperVerticesBasedOnCount() ? INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR : null;
-		if (this.useChangeFile()) {
+		if (this.useChangeFile() || this.isIncremental()) {
 			List<String> changefilePaths = new ArrayList<>();
 			for (int t = 1; t < this.getT(); t++) {
 				String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
@@ -749,6 +754,7 @@ public class TgfdDiscovery {
 		Set<ConstantLiteral> xAttributes = attributes.getLhs();
 		Map<Set<ConstantLiteral>, Map<ConstantLiteral, List<Integer>>> entitiesWithRHSvalues = new HashMap<>();
 
+		// TO-DO: Add support for schemaless graphs
 		for (int timestamp = 0; timestamp < matchesPerTimestamps.size(); timestamp++) {
 			Set<Set<ConstantLiteral>> matchesInOneTimeStamp = matchesPerTimestamps.get(timestamp);
 			System.out.println("---------- Attribute values in t = " + timestamp + " ---------- ");
@@ -2142,6 +2148,14 @@ public class TgfdDiscovery {
 		return typeChangeURIs;
 	}
 
+	public boolean isIncremental() {
+		return isIncremental;
+	}
+
+	public void setIncremental(boolean incremental) {
+		isIncremental = incremental;
+	}
+
 	public static class Pair implements Comparable<Pair> {
 		private final Integer min;
 		private final Integer max;
@@ -2226,6 +2240,8 @@ public class TgfdDiscovery {
 			if (!this.isGeneratek0Tgfds()) {
 				if (this.isValidationSearch())
 					this.getMatchesForPatternUsingVF2(patternTreeNode);
+				else if (this.isIncremental())
+					this.getMatchesUsingIncrementalMatching(patternTreeNode);
 				else if (this.useChangeFile())
 					this.getMatchesUsingChangeFiles(patternTreeNode);
 				else {
@@ -2256,6 +2272,8 @@ public class TgfdDiscovery {
 				List<Set<Set<ConstantLiteral>>> matchesPerTimestamps;
 				if (this.isValidationSearch())
 					matchesPerTimestamps = this.getMatchesForPatternUsingVF2(patternTreeNode);
+				else if (this.isIncremental())
+					matchesPerTimestamps = this.getMatchesUsingIncrementalMatching(patternTreeNode);
 				else if (this.useChangeFile())
 					matchesPerTimestamps = this.getMatchesUsingChangeFiles(patternTreeNode);
 				else {
@@ -2839,6 +2857,8 @@ public class TgfdDiscovery {
 		localizedVF2Matching.findMatchesInSnapshot(graph, 0);
 		List<Set<Set<ConstantLiteral>>> matchesPerTimestamps = localizedVF2Matching.getMatchesPerTimestamp();
 		Map<String, List<Integer>> entityURIs = localizedVF2Matching.getEntityURIs();
+		if (this.reUseMatches())
+			patternTreeNode.setEntityURIs(entityURIs);
 		final long totalMatchingTime = System.currentTimeMillis() - matchingStartTime;
 		printWithTime("Snapshot 1 matching", totalMatchingTime);
 		this.addToTotalMatchingTime(totalMatchingTime);
@@ -2850,34 +2870,11 @@ public class TgfdDiscovery {
 			System.out.println("-----------Snapshot (" + (i+2) + ")-----------");
 
 			final long loadChangefileStartTime = System.currentTimeMillis();
-			JSONArray changesJsonArray;
-			if (this.isUseTypeChangeFile()) {
-				System.out.println("Using type changefiles...");
-				changesJsonArray = new JSONArray();
-				for (RelationshipEdge e: patternTreeNode.getGraph().edgeSet()) {
-					for (String type: e.getSource().getTypes()) {
-						String changeFilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + type + ".json";
-						System.out.println(changeFilePath);
-						JSONArray changesJsonArrayForType;
-						if (this.isStoreInMemory()) {
-							System.out.println("Getting changefile from memory");
-							changesJsonArrayForType = this.getChangeFilesMap().get(changeFilePath);
-						} else {
-							System.out.println("Reading changefile from disk");
-							changesJsonArrayForType = readJsonArrayFromFile(changeFilePath);
-						}
-						changesJsonArray.addAll(changesJsonArrayForType);
-					}
-				}
-			} else {
-				String changeFilePath = "changes_t" + (i + 1) + "_t" + (i + 2) + "_" + this.getGraphSize() + ".json";
-				if (this.isStoreInMemory()) {
-					changesJsonArray = this.getChangeFilesMap().get(changeFilePath);
-				} else {
-					changesJsonArray = readJsonArrayFromFile(changeFilePath);
-				}
-			}
-			ChangeLoader changeLoader = new ChangeLoader(changesJsonArray, null, null, this.getCurrentVSpawnLevel() != 0);
+			String changeFilePath = "changes_t" + (i+1) + "_t" + (i + 2) + "_" + this.getGraphSize() + ".json";
+			JSONArray jsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
+			Set<String> vertexSets = patternTreeNode.getGraph().vertexSet().stream().map(vertex -> vertex.getTypes().iterator().next()).collect(Collectors.toSet());
+			ChangeLoader changeLoader = new ChangeLoader(jsonArray, (this.isUseTypeChangeFile() ? vertexSets : null), (this.isUseTypeChangeFile() ? this.getTypeChangeURIs() : null), this.getCurrentVSpawnLevel() != 0);
+
 			HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
 			System.out.println("Total number of changes in changefile: " + newChanges.size());
 
@@ -2922,14 +2919,10 @@ public class TgfdDiscovery {
 							numOfNewMatchesFoundInSnapshot++;
 							HashSet<ConstantLiteral> match = new HashSet<>();
 							Map<String, Integer> interestingnessMap = new HashMap<>();
-//							String entityURI = null;
 							for (ConstantLiteral matchedLiteral: allLiteralsInNewMatchEntry.getValue()) {
 								for (ConstantLiteral activeAttribute : getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), true)) {
 									if (!matchedLiteral.getVertexType().equals(activeAttribute.getVertexType())) continue;
 									if (!matchedLiteral.getAttrName().equals(activeAttribute.getAttrName())) continue;
-//									if (matchedLiteral.getVertexType().equals(patternTreeNode.getPattern().getCenterVertexType()) && matchedLiteral.getAttrName().equals("uri")) {
-//										entityURI = matchedLiteral.getAttrValue();
-//									}
 									ConstantLiteral xLiteral = new ConstantLiteral(matchedLiteral.getVertexType(), matchedLiteral.getAttrName(), matchedLiteral.getAttrValue());
 									interestingnessMap.merge(matchedLiteral.getVertexType(), 1, Integer::sum);
 									match.add(xLiteral);
@@ -2946,14 +2939,10 @@ public class TgfdDiscovery {
 						for (Entry<String, Set<ConstantLiteral>> allLiteralsInRemovedMatchesEntry : incrementalChangeHashMap.get(tgfdName).getRemovedMatches().entrySet()) {
 							HashSet<ConstantLiteral> match = new HashSet<>();
 							Map<String, Integer> interestingnessMap = new HashMap<>();
-//							String entityURI = null;
 							for (ConstantLiteral matchedLiteral: allLiteralsInRemovedMatchesEntry.getValue()) {
 								for (ConstantLiteral activeAttribute : getActiveAttributesInPattern(patternTreeNode.getGraph().vertexSet(), true)) {
 									if (!matchedLiteral.getVertexType().equals(activeAttribute.getVertexType())) continue;
 									if (!matchedLiteral.getAttrName().equals(activeAttribute.getAttrName())) continue;
-//									if (matchedLiteral.getVertexType().equals(patternTreeNode.getPattern().getCenterVertexType()) && matchedLiteral.getAttrName().equals("uri")) {
-//										entityURI = matchedLiteral.getAttrValue();
-//									}
 									ConstantLiteral xLiteral = new ConstantLiteral(matchedLiteral.getVertexType(), matchedLiteral.getAttrName(), matchedLiteral.getAttrValue());
 									interestingnessMap.merge(matchedLiteral.getVertexType(), 1, Integer::sum);
 									match.add(xLiteral);
