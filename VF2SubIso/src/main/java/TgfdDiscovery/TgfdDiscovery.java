@@ -47,16 +47,18 @@ public class TgfdDiscovery {
 	private static final int DEFAULT_MAX_LITERALS_NUM = 0;
 	public static final String FREQUENT_SIZE_SET_PARAM = "f";
 	public static final String MAX_LIT_PARAM = "maxLit";
+	public static final String PATH_PARAM = "path";
+	private String changefilePath = ".";
 	protected int INDIVIDUAL_SUPER_VERTEX_INDEGREE_FLOOR = 25;
 	public static double MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR = 25.0;
 	public static final double DEFAULT_MAX_SUPER_VERTEX_DEGREE = 1500.0;
 	public static final double DEFAULT_AVG_SUPER_VERTEX_DEGREE = 30.0;
-	private boolean fastMatching = false;
+	private boolean fastMatching = true;
 	private int maxNumOfLiterals = DEFAULT_MAX_LITERALS_NUM;
 	private int T = DEFAULT_NUM_OF_SNAPSHOTS;
 	private boolean dissolveSuperVerticesBasedOnCount = false;
 	private double superVertexDegree = MEDIAN_SUPER_VERTEX_TYPE_INDEGREE_FLOOR;
-	private boolean useTypeChangeFile = false;
+	private boolean useOptChangeFile = true;
 	private boolean dissolveSuperVertexTypes = false;
 	private boolean validationSearch = false;
 	private String path = ".";
@@ -149,10 +151,10 @@ public class TgfdDiscovery {
 		Options options = TgfdDiscovery.initializeCmdOptions();
 		CommandLine cmd = TgfdDiscovery.parseArgs(options, args);
 
-		if (cmd.hasOption("path")) {
-			this.path = cmd.getOptionValue("path").replaceFirst("^~", System.getProperty("user.home"));
+		if (cmd.hasOption(PATH_PARAM)) {
+			this.path = cmd.getOptionValue(PATH_PARAM).replaceFirst("^~", System.getProperty("user.home"));
 			if (!Files.isDirectory(Path.of(this.getPath()))) {
-				System.out.println(Path.of(this.getPath()) + " is not a valid directory.");
+				System.out.println("Dataset path " + Path.of(this.getPath()) + " is not a valid directory.");
 				System.exit(1);
 			}
 			this.setGraphSize(Path.of(this.getPath()).getFileName().toString());
@@ -188,8 +190,24 @@ public class TgfdDiscovery {
 		}
 		if (cmd.hasOption(CHANGEFILE_PARAMETER_TEXT)) {
 			this.setUseChangeFile(true);
-			if (cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT).equalsIgnoreCase("type"))
-				this.setUseTypeChangeFile(true);
+			if (cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT).equalsIgnoreCase("all"))
+				this.setUseOptChangeFile(false);
+			else if (cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT).equalsIgnoreCase("opt"))
+				this.setUseOptChangeFile(true);
+			else {
+				System.out.println("Invalid option \"" + cmd.getOptionValue(CHANGEFILE_PARAMETER_TEXT) + "\" for changefile.");
+				System.exit(1);
+			}
+			if (cmd.hasOption("changefilePath")) {
+				this.changefilePath = cmd.getOptionValue("changefilePath").replaceFirst("^~", System.getProperty("user.home"));
+				if (!Files.isDirectory(Path.of(this.getPath()))) {
+					System.out.println("Changefiles path " + Path.of(this.getPath()) + " is not a valid directory.");
+					System.exit(1);
+				}
+			} else {
+				System.out.println("Changefiles path not specified.");
+				System.exit(1);
+			}
 		}
 		if (cmd.hasOption("incremental"))
 			this.setIncremental(true);
@@ -234,8 +252,8 @@ public class TgfdDiscovery {
 			this.getInterestLabelsSet().addAll(List.of(interestLabels));
 		}
 
-		if (cmd.hasOption("fast"))
-			this.setFastMatching(true);
+		if (cmd.hasOption("slow"))
+			this.setFastMatching(false);
 
 		printInfo();
 	}
@@ -310,20 +328,21 @@ public class TgfdDiscovery {
 		options.addOption("a", true, "run experiment for specified active attribute set size");
 		options.addOption("theta", true, "run experiment using a specific support threshold");
 		options.addOption("pTheta", true, "run experiment using a specific pattern support threshold");
-		options.addOption("K", false, "run experiment for k = 1 to 5");
+		options.addOption("K", false, "print runtime to file after each level i, where 0 <= i <= k");
 		options.addOption(FREQUENT_SIZE_SET_PARAM, true, "run experiment using frequent set of p vertices and p edges");
 		options.addOption(CHANGEFILE_PARAMETER_TEXT, true, "run experiment using changefiles instead of snapshots");
 		options.addOption(NO_REUSE_MATCHES_PARAMETER_TEXT, false, "run experiment without reusing matches between levels");
 		options.addOption("k0", false, "run experiment and generate tgfds for single-node patterns");
 		options.addOption("loader", true, "run experiment using specified loader");
-		options.addOption("path", true, "path to dataset");
+		options.addOption(PATH_PARAM, true, "path to dataset");
+		options.addOption("changefilePath", true, "path to changefiles");
 		options.addOption("skipK1", false, "run experiment and generate tgfds for k > 1");
-		options.addOption("validation", false, "run experiment to test effectiveness of using changefiles");
+		options.addOption("validation", false, "Run experiment without any pattern matching optimization. This is very slow. Only use for validation testing.");
 		options.addOption("simplifySuperVertex", true, "run experiment by collapsing super vertices");
 		options.addOption("simplifySuperVertexTypes", true, "run experiment by collapsing super vertex types");
 		options.addOption("dontStore", false, "run experiment without storing changefiles in memory, read from disk");
 		options.addOption(MAX_LIT_PARAM, true, "run experiment that outputs TGFDs with up n literals");
-		options.addOption("fast", false, "run experiment using fast matching");
+		options.addOption("slow", false, "run experiment without using fast matching");
 		options.addOption("incremental", false, "run experiment using incremental matching");
 		options.addOption("interestLabels", true, "run experiment using frequent sets of vertices and edges that contain labels of interest");
 		return options;
@@ -368,7 +387,7 @@ public class TgfdDiscovery {
 				, this.interestLabelsSet.size() > 0 ? "interestLabels" : ""
 				, (this.isFastMatching() ? "fast" : "")
 				, (this.isValidationSearch() ? "validation" : "")
-				, (this.useChangeFile() ? "changefile"+(this.isUseTypeChangeFile()?"Type":"All") : "")
+				, (this.useChangeFile() ? "changefile"+(this.isUseOptChangeFile()?"Type":"All") : "")
 				, (this.isIncremental() ? "incremental" : "")
 				, (!this.isStoreInMemory() ? "dontStore" : "")
 				, (!this.reUseMatches() ? "noMatchesReUsed" : "")
@@ -717,7 +736,7 @@ public class TgfdDiscovery {
 		if (this.useChangeFile() || this.isIncremental()) {
 			List<String> changefilePaths = new ArrayList<>();
 			for (int t = 1; t < this.getT(); t++) {
-				String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
+				String changeFilePath = this.changefilePath+"/changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
 				changefilePaths.add(changeFilePath);
 			}
 			histogram.computeHistogramUsingChangefilesAll(changefilePaths, this.isStoreInMemory(), superVertexDegree, this.isDissolveSuperVertexTypes());
@@ -1370,7 +1389,7 @@ public class TgfdDiscovery {
 
 	protected void loadChangeFilesIntoMemory() {
 		HashMap<String, org.json.simple.JSONArray> changeFilesMap = new HashMap<>();
-		if (this.isUseTypeChangeFile()) { // TODO: Deprecate type changefiles?
+		if (this.isUseOptChangeFile()) { // TODO: Deprecate type changefiles?
 			for (Map.Entry<String,Integer> frequentVertexTypeEntry : this.getVertexHistogram().entrySet()) {
 				for (int i = 0; i < this.getT() - 1; i++) {
 					System.out.println("-----------Snapshot (" + (i + 2) + ")-----------");
@@ -1877,12 +1896,12 @@ public class TgfdDiscovery {
 		this.experimentStartTimeAndDateStamp = experimentStartTimeAndDateStamp;
 	}
 
-	public boolean isUseTypeChangeFile() {
-		return useTypeChangeFile;
+	public boolean isUseOptChangeFile() {
+		return useOptChangeFile;
 	}
 
-	public void setUseTypeChangeFile(boolean useTypeChangeFile) {
-		this.useTypeChangeFile = useTypeChangeFile;
+	public void setUseOptChangeFile(boolean useOptChangeFile) {
+		this.useOptChangeFile = useOptChangeFile;
 	}
 
 	public List<Entry<String, Integer>> getSortedVertexHistogram() {
@@ -2767,7 +2786,7 @@ public class TgfdDiscovery {
 		GraphLoader graph = loadFirstSnapshot();
 		localizedVF2Matching.findMatchesInSnapshot(graph, 0);
 		for (int t = 1; t < this.getT(); t++) {
-			if (this.isUseTypeChangeFile())
+			if (this.isUseOptChangeFile())
 				updateGraphUsingChangefiles(graph, t, vertexSets);
 			else
 				updateGraphUsingChangefiles(graph, t, null);
@@ -2792,9 +2811,9 @@ public class TgfdDiscovery {
 
 	protected void updateGraphUsingChangefiles(GraphLoader graph, int t, Set<String> vertexSets) {
 		System.out.println("-----------Snapshot (" + (t + 1) + ")-----------");
-		String changeFilePath = "changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
+		String changeFilePath = this.changefilePath+"/changes_t" + t + "_t" + (t + 1) + "_" + this.getGraphSize() + ".json";
 		JSONArray jsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
-		updateGraphUsingChanges(new ChangeLoader(jsonArray, vertexSets, (this.isUseTypeChangeFile() ? this.getTypeChangeURIs() : null), true), graph);
+		updateGraphUsingChanges(new ChangeLoader(jsonArray, vertexSets, (this.isUseOptChangeFile() ? this.getTypeChangeURIs() : null), true), graph);
 	}
 
 	private void updateGraphUsingChanges(ChangeLoader jsonArray, GraphLoader graph) {
@@ -2873,7 +2892,7 @@ public class TgfdDiscovery {
 			String changeFilePath = "changes_t" + (i+1) + "_t" + (i + 2) + "_" + this.getGraphSize() + ".json";
 			JSONArray jsonArray = this.isStoreInMemory() ? this.getChangeFilesMap().get(changeFilePath) : readJsonArrayFromFile(changeFilePath);
 			Set<String> vertexSets = patternTreeNode.getGraph().vertexSet().stream().map(vertex -> vertex.getTypes().iterator().next()).collect(Collectors.toSet());
-			ChangeLoader changeLoader = new ChangeLoader(jsonArray, (this.isUseTypeChangeFile() ? vertexSets : null), (this.isUseTypeChangeFile() ? this.getTypeChangeURIs() : null), this.getCurrentVSpawnLevel() != 0);
+			ChangeLoader changeLoader = new ChangeLoader(jsonArray, (this.isUseOptChangeFile() ? vertexSets : null), (this.isUseOptChangeFile() ? this.getTypeChangeURIs() : null), this.getCurrentVSpawnLevel() != 0);
 
 			HashMap<Integer,HashSet<Change>> newChanges = changeLoader.getAllGroupedChanges();
 			System.out.println("Total number of changes in changefile: " + newChanges.size());
