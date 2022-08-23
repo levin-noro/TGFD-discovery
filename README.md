@@ -8,7 +8,7 @@
       * [Source](#source)
       * [Dataset preparation](#dataset-preparation)
     * [2.2. IMDB](#22-imdb)
-      * [Sources:](#sources-)
+      * [Sources](#sources)
       * [Dataset preparation](#dataset-preparation)
     * [2.3. Synthetic](#23-synthetic)
       * [Dataset preparation](#dataset-preparation)
